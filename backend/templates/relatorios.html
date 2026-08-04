@@ -1,0 +1,466 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-0 pb-8 animate-fade-in">
+    <div class="print-only print-report-heading">
+        <h1>Relatório de Impressões</h1>
+        <p>Período: {{ mes_atual }}/{{ ano_atual }}</p>
+    </div>
+    
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+        <div class="flex items-center gap-4">
+            <div class="p-4 bg-amber-500/10 rounded-[2rem] border border-amber-500/20 shadow-inner">
+                <svg class="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <div>
+                <h1 class="text-4xl font-black text-white tracking-tighter mb-1 uppercase italic">Relatórios <span class="text-amber-500">Analíticos</span></h1>
+                <p class="text-[10px] text-slate-500 font-black uppercase tracking-[0.3em]">Auditoria de Consumo e Custos Operacionais</p>
+            </div>
+        </div>
+        <div class="flex gap-3">
+            <a href="/api/relatorios/export?mes={{ mes_atual }}&ano={{ ano_atual }}" class="px-6 py-3 rounded-2xl bg-emerald-600/10 text-emerald-500 font-black text-[10px] uppercase tracking-widest border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Exportar CSV
+            </a>
+            <button onclick="window.print()" class="px-6 py-3 rounded-2xl bg-white/5 text-slate-400 font-black text-[10px] uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                Imprimir
+            </button>
+        </div>
+    </div>
+
+    <!-- Filtros Mensais -->
+    <div class="glass-panel rounded-[2.5rem] p-8 mb-12 border border-white/5 bg-slate-900/40 no-print">
+        <form id="relatorio-filtros" method="GET" action="/relatorios" class="grid grid-cols-1 md:grid-cols-6 gap-6 items-end">
+            <div>
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Mês de Referência</label>
+                <select name="mes" class="glass-input w-full px-4 py-3 rounded-xl text-white font-bold text-sm">
+                    <option value="01" {% if mes_atual == '01' %}selected{% endif %}>Janeiro</option>
+                    <option value="02" {% if mes_atual == '02' %}selected{% endif %}>Fevereiro</option>
+                    <option value="03" {% if mes_atual == '03' %}selected{% endif %}>Março</option>
+                    <option value="04" {% if mes_atual == '04' %}selected{% endif %}>Abril</option>
+                    <option value="05" {% if mes_atual == '05' %}selected{% endif %}>Maio</option>
+                    <option value="06" {% if mes_atual == '06' %}selected{% endif %}>Junho</option>
+                    <option value="07" {% if mes_atual == '07' %}selected{% endif %}>Julho</option>
+                    <option value="08" {% if mes_atual == '08' %}selected{% endif %}>Agosto</option>
+                    <option value="09" {% if mes_atual == '09' %}selected{% endif %}>Setembro</option>
+                    <option value="10" {% if mes_atual == '10' %}selected{% endif %}>Outubro</option>
+                    <option value="11" {% if mes_atual == '11' %}selected{% endif %}>Novembro</option>
+                    <option value="12" {% if mes_atual == '12' %}selected{% endif %}>Dezembro</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Ano</label>
+                <select name="ano" class="glass-input w-full px-4 py-3 rounded-xl text-white font-bold text-sm">
+                    <option value="2026" {% if ano_atual == '2026' %}selected{% endif %}>2026</option>
+                    <option value="2025" {% if ano_atual == '2025' %}selected{% endif %}>2025</option>
+                    <option value="2024" {% if ano_atual == '2024' %}selected{% endif %}>2024</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Usuário</label>
+                <select name="usuario" class="glass-input w-full px-4 py-3 rounded-xl text-white font-bold text-sm">
+                    <option value="">Todos</option>
+                    {% for item in usuarios_filtro %}<option value="{{ item }}" {% if filtro_usuario == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Impressora</label>
+                <select name="impressora_id" class="glass-input w-full px-4 py-3 rounded-xl text-white font-bold text-sm">
+                    <option value="">Todas</option>
+                    {% for item in impressoras_filtro %}<option value="{{ item.id }}" {% if filtro_impressora_id|string == item.id|string %}selected{% endif %}>{{ item.nome }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Tipo</label>
+                <select name="tipo" class="glass-input w-full px-4 py-3 rounded-xl text-white font-bold text-sm">
+                    <option value="">Todos</option>
+                    <option value="Fisica" {% if filtro_tipo == 'Fisica' %}selected{% endif %}>Física</option>
+                    <option value="Digital" {% if filtro_tipo == 'Digital' %}selected{% endif %}>Digital</option>
+                </select>
+            </div>
+            <button id="btn-gerar-relatorio" type="submit" class="px-8 py-3.5 rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20">
+                Gerar Relatório
+            </button>
+        </form>
+    </div>
+
+    <!-- Gráfico de Evolução -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+        <div class="glass-panel rounded-[2.5rem] p-8 border border-indigo-500/20 bg-indigo-900/10">
+            <p class="text-[10px] text-indigo-400 font-black uppercase tracking-[0.25em]">Impressões Físicas</p>
+            <div class="grid grid-cols-2 gap-6 mt-5">
+                <div><span class="text-3xl font-black text-white">{{ resumo_fisico.trabalhos }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Trabalhos</p></div>
+                <div><span class="text-3xl font-black text-white">{{ resumo_fisico.paginas }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Páginas</p></div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-[2.5rem] p-8 border border-cyan-500/20 bg-cyan-900/10">
+            <p class="text-[10px] text-cyan-400 font-black uppercase tracking-[0.25em]">Papel Digital</p>
+            <div class="grid grid-cols-3 gap-4 mt-5">
+                <div><span class="text-3xl font-black text-white">{{ resumo_digital.trabalhos }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Trabalhos</p></div>
+                <div><span class="text-3xl font-black text-white">{{ resumo_digital.paginas }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Páginas</p></div>
+                <div><span class="text-3xl font-black text-cyan-400">R$ 0,00</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Custo</p></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-[3rem] p-8 mb-12 border border-white/5 bg-slate-900/40">
+        <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8 text-center italic">Evolução do Volume de Impressão Diária</h3>
+        <div class="h-64">
+            <canvas id="evolucao-chart"></canvas>
+        </div>
+    </div>
+
+    <!-- Resumos por Impressora e Usuário -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+        <div class="glass-panel rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl">
+            <div class="px-8 py-6 border-b border-white/5 bg-cyan-900/20">
+                <h2 class="text-xl font-black text-white tracking-tighter uppercase italic">Por Equipamento</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-950/20 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-white/5">
+                            <th class="px-8 py-4">Equipamento</th>
+                            <th class="px-8 py-4 text-center">Páginas</th>
+                            <th class="px-8 py-4 text-right">Custo</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for i in resumo_impressoras %}
+                        <tr class="hover:bg-white/[0.02] transition-all">
+                            <td class="px-8 py-4">
+                                <span class="text-sm font-black text-white uppercase tracking-tight">{{ i.nome }}</span>
+                            </td>
+                            <td class="px-8 py-4 text-center">
+                                <span class="text-base font-black text-white">{{ i.paginas }}</span>
+                            </td>
+                            <td class="px-8 py-4 text-right">
+                                <span class="text-sm font-black text-emerald-500">R$ {{ "{:.2f}".format(i.valor or 0).replace(".", ",") }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl">
+            <div class="px-8 py-6 border-b border-white/5 bg-indigo-900/20">
+                <h2 class="text-xl font-black text-white tracking-tighter uppercase italic">Por Colaborador</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-950/20 text-slate-500 text-[9px] font-black uppercase tracking-widest border-b border-white/5">
+                            <th class="px-8 py-4">Usuário</th>
+                            <th class="px-8 py-4 text-center">Páginas</th>
+                            <th class="px-8 py-4 text-right">Custo</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for u in resumo_usuarios %}
+                        <tr class="hover:bg-white/[0.02] transition-all">
+                            <td class="px-8 py-4">
+                                <span class="text-sm font-black text-white uppercase tracking-tight">{{ u.nome }}</span>
+                            </td>
+                            <td class="px-8 py-4 text-center">
+                                <span class="text-base font-black text-white">{{ u.paginas }}</span>
+                            </td>
+                            <td class="px-8 py-4 text-right">
+                                <span class="text-sm font-black text-emerald-500">R$ {{ "{:.2f}".format(u.valor or 0).replace(".", ",") }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventário TI -->
+    <div class="glass-panel rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl mb-12 no-print inventario-ti-relatorios">
+        <div class="p-8 border-b border-white/5 bg-emerald-900/20 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h2 class="text-2xl font-black text-white tracking-tighter uppercase italic">Inventário de TI</h2>
+                <p class="text-[9px] text-slate-500 font-black tracking-[0.3em] uppercase mt-1">Nome do computador exibido junto ao colaborador</p>
+            </div>
+            <div class="flex gap-3 flex-wrap">
+                <div class="px-4 py-3 rounded-2xl bg-white/5 border border-white/10">
+                    <p class="text-[9px] text-slate-500 font-black uppercase tracking-widest">Total</p>
+                    <p class="text-xl font-black text-white mt-1">{{ total_equipamentos_ti }}</p>
+                </div>
+                <div class="px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                    <p class="text-[9px] text-amber-400 font-black uppercase tracking-widest">Sem nome</p>
+                    <p class="text-xl font-black text-amber-400 mt-1">{{ equipamentos_sem_nome }}</p>
+                </div>
+                {% for tipo, count in contagem_por_tipo.items() %}
+                <div class="px-4 py-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                    <p class="text-[9px] text-indigo-400 font-black uppercase tracking-widest">{{ tipo }}</p>
+                    <p class="text-xl font-black text-indigo-400 mt-1">{{ count }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% for tipo, eqs in equipamentos_por_tipo.items() %}
+        <div class="px-8 py-4 bg-slate-900/50 border-b border-white/5 flex items-center justify-between">
+            <h3 class="text-sm font-black text-white uppercase tracking-widest">{{ tipo }}</h3>
+            <span class="px-3 py-1 rounded-full bg-white/5 text-[10px] font-bold text-slate-400">{{ eqs|length }} itens</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-950/20 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-white/5">
+                        <th class="px-8 py-5">Colaborador</th>
+                        <th class="px-8 py-5">Nome do Equipamento</th>
+                        <th class="px-8 py-5">Setor</th>
+                        <th class="px-8 py-5">Patrimônio</th>
+                        <th class="px-8 py-5 text-right">Registro</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for eq in eqs %}
+                    <tr class="hover:bg-white/[0.02] transition-all group">
+                        <td class="px-8 py-6">
+                            <span class="text-sm font-black text-white uppercase tracking-tight">{{ eq.colaborador }}</span>
+                        </td>
+                        <td class="px-8 py-6">
+                            <span class="text-sm font-bold {% if eq.nome_computador_display == 'Não informado' %}text-amber-400{% else %}text-cyan-400{% endif %} uppercase tracking-tight">
+                                {{ eq.nome_computador_display or eq.nome_computador or 'Não informado' }}
+                            </span>
+                        </td>
+                        <td class="px-8 py-6">
+                            <span class="text-sm font-bold text-slate-300 uppercase tracking-tight">{{ eq.setor }}</span>
+                        </td>
+                        <td class="px-8 py-6">
+                            <span class="text-sm font-bold text-slate-300 font-mono uppercase tracking-tight">{{ eq.patrimonio or '---' }}</span>
+                        </td>
+                        <td class="px-8 py-6 text-right">
+                            <span class="text-xs font-bold text-slate-400 font-mono">{{ eq.data_registro or '--' }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Auditoria Detalhada -->
+    <div class="glass-panel rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl">
+        <div class="p-8 border-b border-white/5 bg-slate-900/40">
+            <h2 class="text-2xl font-black text-white tracking-tighter uppercase italic">Histórico Detalhado</h2>
+            <p class="text-[9px] text-slate-500 font-black tracking-[0.3em] uppercase mt-1">Logs de Auditoria para o período selecionado</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-950/20 text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-white/5">
+                        <th class="px-8 py-5">Data / Hora</th>
+                        <th class="px-8 py-5">Tipo</th>
+                        <th class="px-8 py-5">Documento</th>
+                        <th class="px-8 py-5">Usuário</th>
+                        <th class="px-8 py-5 text-center">Págs</th>
+                        <th class="px-8 py-5 text-right">Valor</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for imp in atividades %}
+                    <tr class="hover:bg-white/[0.02] transition-all group">
+                        <td class="px-8 py-6">
+                            <span class="text-xs font-bold text-slate-400 font-mono">{{ imp.data_hora_str }}</span>
+                        </td>
+                        <td class="px-8 py-6">
+                            <span class="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest 
+                                {% if imp.tipo_documento == 'PDF' %}bg-rose-500/10 text-rose-500 border border-rose-500/20
+                                {% elif imp.tipo_documento == 'Word' %}bg-blue-500/10 text-blue-500 border border-blue-500/20
+                                {% elif imp.tipo_documento == 'Excel' %}bg-emerald-500/10 text-emerald-500 border border-emerald-500/20
+                                {% else %}bg-slate-500/10 text-slate-500 border border-slate-500/20{% endif %}">
+                                {{ imp.tipo_documento }}
+                            </span>
+                        </td>
+                        <td class="px-8 py-6 max-w-xs">
+                            <span class="text-sm font-bold text-white tracking-tight truncate block">{{ imp.documento }}</span>
+                        </td>
+                        <td class="px-8 py-6">
+                            <span class="text-sm font-black text-white uppercase tracking-tight">{{ imp.usuario }}</span>
+                        </td>
+                        <td class="px-8 py-6 text-center">
+                            <span class="text-base font-black text-white">{{ imp.paginas }}</span>
+                        </td>
+                        <td class="px-8 py-6 text-right">
+                            <span class="text-sm font-black text-emerald-500">R$ {{ imp.valor_fmt }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+        <div class="glass-panel rounded-[2.5rem] p-8 border border-indigo-500/20 bg-indigo-900/10">
+            <p class="text-[10px] text-indigo-400 font-black uppercase tracking-[0.25em]">Impressões Físicas</p>
+            <div class="grid grid-cols-2 gap-6 mt-5">
+                <div><span class="text-3xl font-black text-white">{{ resumo_fisico.trabalhos }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Trabalhos</p></div>
+                <div><span class="text-3xl font-black text-white">{{ resumo_fisico.paginas }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Páginas</p></div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-[2.5rem] p-8 border border-cyan-500/20 bg-cyan-900/10">
+            <p class="text-[10px] text-cyan-400 font-black uppercase tracking-[0.25em]">Papel Digital</p>
+            <div class="grid grid-cols-3 gap-4 mt-5">
+                <div><span class="text-3xl font-black text-white">{{ resumo_digital.trabalhos }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Trabalhos</p></div>
+                <div><span class="text-3xl font-black text-white">{{ resumo_digital.paginas }}</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Páginas</p></div>
+                <div><span class="text-3xl font-black text-cyan-400">R$ 0,00</span><p class="text-[10px] text-slate-500 uppercase font-bold mt-1">Custo</p></div>
+            </div>
+        </div>
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('evolucao-chart').getContext('2d');
+    const evoluData = {{ evolucao | tojson }};
+    
+    const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+    gradient.addColorStop(0, 'rgba(99, 102, 241, 0.3)');
+    gradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: evoluData.map(d => d.data),
+            datasets: [{
+                label: 'Páginas Impressas',
+                data: evoluData.map(d => d.paginas),
+                borderColor: '#6366f1',
+                backgroundColor: gradient,
+                fill: true,
+                tension: 0.4,
+                borderWidth: 4,
+                pointBackgroundColor: '#6366f1',
+                pointRadius: 4,
+                pointHoverRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10, weight: 'bold' } } },
+                x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 10, weight: 'bold' } } }
+            }
+        }
+    });
+</script>
+
+<script>
+    document.getElementById('relatorio-filtros')?.addEventListener('submit', function () {
+        const botao = document.getElementById('btn-gerar-relatorio');
+        if (!botao) return;
+        botao.disabled = true;
+        botao.textContent = 'Gerando...';
+        botao.classList.add('opacity-70', 'cursor-wait');
+    });
+</script>
+
+<style>
+    .print-only { display: none; }
+    .inventario-ti-relatorios { display: none !important; }
+    .summary-before-filter { display: none !important; }
+    .max-w-7xl > .grid:has(+ script) { display: none !important; }
+    .glass-panel {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+    }
+    .glass-input {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.3s;
+    }
+    .glass-input:focus {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(99, 102, 241, 0.4);
+        outline: none;
+    }
+    select.glass-input,
+    select.glass-input option {
+        background-color: #0f172a !important;
+        color: #f8fafc !important;
+    }
+    select.glass-input option:checked,
+    select.glass-input option:hover {
+        background-color: #312e81 !important;
+        color: #ffffff !important;
+    }
+    @media print {
+        @page { size: A4 landscape; margin: 10mm; }
+        html, body {
+            background: #fff !important;
+            color: #111827 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        body * {
+            box-shadow: none !important;
+            text-shadow: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        nav, button, a[href*="/api/relatorios/export"], .period-btn, .glass-input, script, .no-print,
+        #guardiao-assistant, .guardiao-avatar, .guardiao-bubble, #profile-dropdown-container {
+            display: none !important;
+        }
+        .print-only { display: block !important; }
+        .print-report-heading { text-align: center; margin: 0 0 18px 0; color: #111827 !important; }
+        .print-report-heading h1 { font-size: 22px; font-weight: 800; margin: 0; }
+        .print-report-heading p { font-size: 11px; margin: 4px 0 0; }
+        .max-w-7xl {
+            max-width: 100% !important;
+            padding: 0 !important;
+        }
+        .glass-panel {
+            background: #fff !important;
+            color: #111827 !important;
+            border: 1px solid #d1d5db !important;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        .glass-panel h1,
+        .glass-panel h2,
+        .glass-panel h3,
+        .glass-panel p,
+        .glass-panel span,
+        .glass-panel th,
+        .glass-panel td {
+            color: #111827 !important;
+        }
+        .glass-panel table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+        }
+        .glass-panel tr,
+        .glass-panel thead,
+        .glass-panel tbody {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+        #evolucao-chart { max-height: 240px !important; }
+        #pie-legend,
+        #ranking-users,
+        #forecast-list {
+            max-height: none !important;
+            overflow: visible !important;
+        }
+        .grid {
+            gap: 12px !important;
+        }
+        .mb-12, .mb-10, .mb-8, .mb-6 {
+            margin-bottom: 12px !important;
+        }
+    }
+</style>
+{% endblock %}

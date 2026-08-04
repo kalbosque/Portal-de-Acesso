@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block content %}
+<link rel="stylesheet" href="/static/css/monitor.css">
+
+<div class="mb-8">
+    <h2 class="text-3xl font-black text-white mb-1 uppercase tracking-tighter italic">Configuração do WhatsApp</h2>
+    <p class="text-slate-500 font-bold uppercase tracking-[0.3em] text-[10px]">Conexão e Autenticação (Evolution API)</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
+    
+    <!-- Coluna 1: Informações e Status -->
+    <div class="lg:col-span-1 space-y-6">
+        <div class="glass-panel p-8 rounded-[2.5rem] border border-white/5 bg-slate-900/40 relative overflow-hidden">
+            <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl"></div>
+            
+            <h3 class="text-lg font-black text-white mb-6 uppercase tracking-tight flex items-center gap-2 italic relative z-10">
+                <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Status da Conexão
+            </h3>
+            
+            <div class="space-y-6 relative z-10">
+                <div class="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
+                    <div id="status-icon-container" class="w-12 h-12 rounded-xl flex items-center justify-center text-slate-500 border border-slate-500/20 bg-slate-500/10 shadow-lg">
+                        <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] text-slate-500 font-black uppercase tracking-widest">Estado Atual</span>
+                        <span id="status-text" class="block text-sm font-black text-white uppercase tracking-tight">Verificando...</span>
+                    </div>
+                </div>
+
+                <div class="p-5 rounded-2xl bg-slate-950/40 border border-white/5 space-y-3">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-500 font-bold">Instância:</span>
+                        <span class="text-white font-black font-mono">printdash</span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-500 font-bold">Servidor:</span>
+                        <span id="config-server" class="text-white font-bold truncate max-w-[150px] font-mono">Carregando...</span>
+                    </div>
+                </div>
+
+                <div id="action-area" class="pt-2">
+                    <!-- Botões de Ação Dinâmicos -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Instruções de Conexão -->
+        <div class="glass-panel p-8 rounded-[2.5rem] border border-white/5 bg-slate-900/40">
+            <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                📖 Como Conectar?
+            </h3>
+            <ol class="space-y-4 text-xs font-bold text-slate-500 list-decimal pl-4">
+                <li>Abra o **WhatsApp** no seu aparelho celular.</li>
+                <li>Toque em **Mais Opções** (três pontos) ou **Configurações** e selecione **Aparelhos Conectados**.</li>
+                <li>Toque em **Conectar um aparelho**.</li>
+                <li>Aponte a câmera do seu celular para o **QR Code** ao lado para ler e sincronizar.</li>
+                <li>Mantenha o aparelho conectado à internet para sincronização em tempo real.</li>
+            </ol>
+        </div>
+    </div>
+    
+    <!-- Coluna 2 e 3: Display do QR Code / Estado de Sucesso -->
+    <div class="lg:col-span-2">
+        <div class="glass-panel p-10 rounded-[3rem] border border-white/5 bg-slate-900/40 h-full flex flex-col items-center justify-center min-h-[450px] relative overflow-hidden">
+            <div class="absolute -left-16 -bottom-16 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
+            
+            <div id="qrcode-display-area" class="text-center relative z-10 space-y-6">
+                <!-- Estado Inicial / QR Code / Sucesso Renderizado via JS -->
+                <div class="w-16 h-16 mx-auto bg-slate-500/10 rounded-full flex items-center justify-center text-slate-500 animate-spin border border-slate-500/20">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </div>
+                <h4 class="text-slate-400 font-bold uppercase tracking-wider text-xs">Carregando Informações da Instância...</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let checkStatusInterval = null;
+    let isPolling = false;
+    let isConnecting = false;
+
+    async function fetchStatus() {
+        try {
+            const res = await fetch('/api/whatsapp/status');
+            const data = await res.json();
+            
+            const serverSpan = document.getElementById('config-server');
+            serverSpan.innerText = data.status === 'configured' || data.status === 'error' ? 'Conectado' : 'Não Configurado';
+            
+            if (data.status === 'unconfigured') {
+                isConnecting = false;
+                renderUnconfigured();
+                stopPolling();
+            } else if (data.status === 'configured') {
+                if (data.state === 'open') {
+                    isConnecting = false;
+                    renderConnected();
+                    stopPolling();
+                } else if (data.state === 'connecting') {
+                    isConnecting = true;
+                    renderConnectingState();
+                    startPolling();
+                } else {
+                    // Estado da Evolution é 'close' ou 'disconnected'
+                    if (isConnecting) {
+                        // Continuamos mostrando o estado de conexão/QR Code
+                        updateStatusIndicator('connecting', 'Aguardando Leitura...');
+                    } else {
+                        renderDisconnected();
+                        stopPolling();
+                    }
+                }
+            } else {
+                isConnecting = false;
+                renderError(data.message || 'Erro desconhecido na API.');
+                stopPolling();
+            }
+        } catch (e) {
+            isConnecting = false;
+            renderError('Falha ao se comunicar com o backend.');
+            stopPolling();
+        }
+    }
+
+    function startPolling() {
+        if (!isPolling) {
+            isPolling = true;
+            if (checkStatusInterval) clearInterval(checkStatusInterval);
+            checkStatusInterval = setInterval(fetchStatus, 3000);
+        }
+    }
+
+    function stopPolling() {
+        isPolling = false;
+        if (checkStatusInterval) {
+            clearInterval(checkStatusInterval);
+            checkStatusInterval = null;
+        }
+    }
+
+    // --- Renderizadores de Estados ---
+
+    function renderUnconfigured() {
+        updateStatusIndicator('unconfigured', 'Não Configurado');
+        
+        const qrcodeArea = document.getElementById('qrcode-display-area');
+        qrcodeArea.innerHTML = `
+            <div class="w-20 h-20 mx-auto bg-amber-500/10 rounded-full flex items-center justify-center text-amber-500 border border-amber-500/20 mb-4">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-xl font-black text-white uppercase italic mb-2">Evolution API não configurada</h3>
+            <p class="text-slate-500 text-xs font-bold max-w-md mx-auto mb-6">Você precisa configurar a URL do Webhook do WhatsApp e o Token de Autorização nas Configurações do Sistema para poder conectar.</p>
+            <a href="/configuracoes" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg inline-block">Configurações do Sistema</a>
+        `;
+        
+        const actionArea = document.getElementById('action-area');
+        actionArea.innerHTML = '';
+    }
+
+    function renderDisconnected() {
+        updateStatusIndicator('disconnected', 'Desconectado');
+        
+        const qrcodeArea = document.getElementById('qrcode-display-area');
+        qrcodeArea.innerHTML = `
+            <div class="w-20 h-20 mx-auto bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 border border-indigo-500/20 mb-4">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h3 class="text-xl font-black text-white uppercase italic mb-2">WhatsApp Pronto para Conexão</h3>
+            <p class="text-slate-500 text-xs font-bold max-w-sm mx-auto mb-6">Gere um QR Code temporário para fazer a leitura com o seu aplicativo de celular do WhatsApp.</p>
+            <button onclick="generateQRCode()" class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg inline-block active:scale-95">Gerar QR Code</button>
+        `;
+        
+        const actionArea = document.getElementById('action-area');
+        actionArea.innerHTML = `
+            <button onclick="generateQRCode()" class="w-full py-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 text-xs font-black uppercase tracking-wider rounded-xl transition-all">Conectar Instância</button>
+        `;
+    }
+
+    function renderConnectingState() {
+        updateStatusIndicator('connecting', 'Conectando...');
+        loadQRCodeImage();
+    }
+
+    async function loadQRCodeImage() {
+        const qrcodeArea = document.getElementById('qrcode-display-area');
+        qrcodeArea.innerHTML = `
+            <div class="space-y-4">
+                <div class="w-12 h-12 mx-auto text-indigo-400 animate-spin flex items-center justify-center">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </div>
+                <h4 class="text-white font-bold text-xs uppercase tracking-wider">Obtendo QR Code da Evolution API...</h4>
+            </div>
+        `;
+        
+        try {
+            const res = await fetch('/api/whatsapp/qrcode');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.base64) {
+                    qrcodeArea.innerHTML = `
+                        <div class="p-6 bg-white rounded-3xl inline-block shadow-2xl mb-4 border border-slate-100">
+                            <img src="${data.base64}" alt="QR Code WhatsApp" class="w-64 h-64 mx-auto select-none pointer-events-none">
+                        </div>
+                        <h3 class="text-lg font-black text-white uppercase tracking-tight mb-1">Escaneie o QR Code</h3>
+                        <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest animate-pulse text-indigo-400">Aguardando leitura do celular...</p>
+                    `;
+                } else if (data.code) {
+                    qrcodeArea.innerHTML = `
+                        <p class="text-slate-400 text-xs font-bold mb-4">Código de pareamento obtido:</p>
+                        <div class="px-6 py-4 bg-slate-950/80 rounded-xl border border-white/5 font-mono text-2xl font-black tracking-widest text-indigo-400 mb-6">${data.code}</div>
+                        <p class="text-[10px] text-slate-500 uppercase tracking-widest animate-pulse">Digite este código no seu WhatsApp do celular.</p>
+                    `;
+                } else {
+                    qrcodeArea.innerHTML = `
+                        <p class="text-rose-400 text-xs font-bold">Falha ao decodificar resposta da API.</p>
+                        <button onclick="generateQRCode()" class="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold">Tentar novamente</button>
+                    `;
+                }
+            } else {
+                qrcodeArea.innerHTML = `
+                    <p class="text-rose-400 text-xs font-bold">A API não pôde gerar o QR Code no momento.</p>
+                    <button onclick="generateQRCode()" class="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold">Tentar novamente</button>
+                `;
+            }
+        } catch (e) {
+            qrcodeArea.innerHTML = `
+                <p class="text-rose-400 text-xs font-bold">Erro de rede ao buscar QR Code.</p>
+                <button onclick="generateQRCode()" class="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold">Tentar novamente</button>
+            `;
+        }
+    }
+
+    function renderConnected() {
+        updateStatusIndicator('open', 'Conectado');
+        
+        const qrcodeArea = document.getElementById('qrcode-display-area');
+        qrcodeArea.innerHTML = `
+            <div class="w-20 h-20 mx-auto bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-500 border border-emerald-500/20 mb-4 shadow-lg shadow-emerald-500/10">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h3 class="text-xl font-black text-emerald-400 uppercase italic mb-2">WhatsApp Conectado com Sucesso!</h3>
+            <p class="text-slate-500 text-xs font-bold max-w-sm mx-auto mb-6">A instância está ativa e pronta para receber e enviar mensagens em tempo real no módulo Atendimento.</p>
+            <div class="flex gap-4 justify-center">
+                <a href="/atendimento" class="px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg">Ir para Atendimento</a>
+                <button onclick="disconnectWhatsApp()" class="px-6 py-3 bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 font-black text-xs uppercase tracking-widest rounded-xl transition-all">Desconectar</button>
+            </div>
+        `;
+        
+        const actionArea = document.getElementById('action-area');
+        actionArea.innerHTML = `
+            <button onclick="disconnectWhatsApp()" class="w-full py-3 bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-black uppercase tracking-wider rounded-xl transition-all">Desconectar Aparelho</button>
+        `;
+    }
+
+    function renderError(msg) {
+        updateStatusIndicator('error', 'Erro');
+        
+        const qrcodeArea = document.getElementById('qrcode-display-area');
+        qrcodeArea.innerHTML = `
+            <div class="w-20 h-20 mx-auto bg-rose-500/10 rounded-full flex items-center justify-center text-rose-500 border border-rose-500/20 mb-4">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 class="text-lg font-black text-white uppercase italic mb-2">Erro de Conexão com Evolution API</h3>
+            <p class="text-slate-500 text-xs font-bold max-w-sm mx-auto mb-6">${msg}</p>
+            <button onclick="fetchStatus()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg">Recarregar Status</button>
+        `;
+        
+        const actionArea = document.getElementById('action-area');
+        actionArea.innerHTML = `
+            <button onclick="fetchStatus()" class="w-full py-3 bg-white/5 hover:bg-white/10 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all">Tentar Conectar Novamente</button>
+        `;
+    }
+
+    function updateStatusIndicator(state, label) {
+        const textSpan = document.getElementById('status-text');
+        textSpan.innerText = label;
+        
+        const iconDiv = document.getElementById('status-icon-container');
+        
+        // Remove classes antigas
+        iconDiv.className = 'w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ';
+        
+        if (state === 'open') {
+            iconDiv.className += 'text-emerald-500 border border-emerald-500/20 bg-emerald-500/10';
+            iconDiv.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        } else if (state === 'connecting') {
+            iconDiv.className += 'text-amber-500 border border-amber-500/20 bg-amber-500/10';
+            iconDiv.innerHTML = '<svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>';
+        } else if (state === 'unconfigured' || state === 'error') {
+            iconDiv.className += 'text-rose-500 border border-rose-500/20 bg-rose-500/10';
+            iconDiv.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>';
+        } else {
+            iconDiv.className += 'text-indigo-400 border border-indigo-500/20 bg-indigo-500/10';
+            iconDiv.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        }
+    }
+
+    async function generateQRCode() {
+        isConnecting = true;
+        updateStatusIndicator('connecting', 'Iniciando Conexão...');
+        
+        // Garante que o status é verificado primeiro (cria a instância se não existir)
+        const qrcodeArea = document.getElementById('qrcode-display-area');
+        qrcodeArea.innerHTML = `
+            <div class="space-y-4">
+                <div class="w-12 h-12 mx-auto text-indigo-400 animate-spin flex items-center justify-center">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </div>
+                <h4 class="text-white font-bold text-xs uppercase tracking-wider">Preparando instância...</h4>
+            </div>
+        `;
+        
+        try {
+            // 1. Chama /status para garantir que a instância existe (ela é criada automaticamente se não existir)
+            await fetch('/api/whatsapp/status');
+        } catch(e) {
+            console.warn('[WhatsApp] Aviso ao verificar status antes de gerar QR:', e);
+        }
+        
+        // 2. Agora busca o QR Code (o backend já cuida de criar a instância se necessário)
+        await loadQRCodeImage();
+        startPolling();
+    }
+
+    async function disconnectWhatsApp() {
+        if (!confirm('Tem certeza de que deseja desconectar o WhatsApp do painel? Será necessário ler o QR Code novamente para reconectar.')) return;
+        
+        try {
+            const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+            if (res.ok) {
+                mostrarToast('WhatsApp desconectado!');
+                fetchStatus();
+            } else {
+                alert('Erro ao desconectar.');
+            }
+        } catch(e) {
+            alert('Falha na rede ao tentar desconectar.');
+        }
+    }
+
+    // Inicialização
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchStatus();
+    });
+</script>
+{% endblock %}

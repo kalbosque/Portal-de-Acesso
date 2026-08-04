@@ -1,0 +1,38 @@
+services:
+  # ─── Serviço Web (FastAPI) ───────────────────────────────────────────────────
+  - type: web
+    name: sistema-impressao
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: sistema-impressao-db
+          property: host
+      - key: DB_NAME
+        fromDatabase:
+          name: sistema-impressao-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: sistema-impressao-db
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: sistema-impressao-db
+          property: password
+      - key: TZ
+        value: America/Porto_Velho
+      - key: AGENT_API_KEY
+        generateValue: true
+      - key: SECRET_KEY
+        generateValue: true
+
+  # ─── Banco de Dados PostgreSQL ───────────────────────────────────────────────
+databases:
+  - name: sistema-impressao-db
+    plan: free
+    databaseName: sistema_impressao
+    user: printdash

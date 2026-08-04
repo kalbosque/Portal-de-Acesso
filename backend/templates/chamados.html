@@ -1,0 +1,1339 @@
+{% extends "base.html" %}
+
+{% macro card(c, is_admin) %}
+<div class="ticket-card glass-card-magnetic glass-panel p-7 rounded-[2rem] border transition-all duration-500 group relative flex flex-col h-full shadow-lg {{ 'priority-alta-glow border-rose-500/20' if c.prioridade == 'Alta' else 'border-white/10' }}" 
+     id="ticket-{{ c.id }}"
+     {% if is_admin %}draggable="true" ondragstart="dragStart(event, {{ c.id }})" ondragend="dragEnd(event)"{% endif %}
+     data-title="{{ c.titulo|lower }}" 
+     data-user="{{ c.usuario|lower }}" 
+     data-desc="{{ c.descricao|lower }}"
+     data-priority="{{ c.prioridade }}"
+     data-category="{{ c.categoria }}">
+    
+    <!-- Barra de Progresso Visual (Stepper) -->
+    <div class="flex items-center mb-5 {{ 'text-emerald-500' if c.status == 'Resolvido' else ('text-amber-500' if c.status == 'Em Atendimento' else 'text-blue-500') }}">
+        <div class="stepper-dot active"></div>
+        <div class="stepper-line {{ 'active' if c.status in ['Em Atendimento', 'Resolvido'] else '' }}"></div>
+        <div class="stepper-dot {{ 'active' if c.status in ['Em Atendimento', 'Resolvido'] else '' }}"></div>
+        <div class="stepper-line {{ 'active' if c.status == 'Resolvido' else '' }}"></div>
+        <div class="stepper-dot {{ 'active' if c.status == 'Resolvido' else '' }}"></div>
+        <span class="ml-3 text-[8px] font-black uppercase tracking-[0.2em] italic">{{ c.status }}</span>
+    </div>
+
+    <div class="flex justify-between items-start mb-4">
+        <span class="px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border border-white/10 bg-slate-900/60 {{ 'text-rose-400' if c.prioridade == 'Alta' else ('text-amber-400' if c.prioridade == 'Media' else 'text-blue-400') }}">
+            <span class="mr-1.5">●</span> {{ c.prioridade }}
+        </span>
+        <div class="flex items-center gap-2">
+            {% if c.anexo_url %}
+                <a href="{{ c.anexo_url }}" target="_blank" class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 hover:bg-indigo-500 hover:text-white transition-all shadow-lg" title="Ver Anexo">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.414a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                </a>
+            {% endif %}
+            <div class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg flex items-center gap-1.5 sla-timer transition-colors" 
+                 data-start="{{ c.data_abertura }}" 
+                 data-vencimento="{{ c.vencimento_sla.isoformat() if c.vencimento_sla else '' }}" 
+                 data-status="{{ c.status }}">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>Calculando...</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="flex items-center gap-2 mb-3">
+        {% set catIcon = '🛠️' %}
+        {% if c.categoria == 'Impressora' %}{% set catIcon = '🖨️' %}
+        {% elif c.categoria == 'Rede/Internet' %}{% set catIcon = '🌐' %}
+        {% elif c.categoria == 'Computador/Hardware' %}{% set catIcon = '💻' %}{% endif %}
+        <span class="text-xs">{{ catIcon }}</span>
+        <span class="text-[9px] font-black text-indigo-400 uppercase tracking-[0.2em]">{{ c.categoria }}</span>
+        {% if c.equipamento_id %}
+            <span class="text-[8px] font-black text-slate-500 uppercase tracking-widest border-l border-white/10 pl-2">EQ-{{ c.equipamento_id }}</span>
+        {% endif %}
+    </div>
+
+    <h5 class="text-white font-bold text-base mb-3 uppercase tracking-tight group-hover:text-indigo-400 transition-colors leading-tight break-words" style="font-size:17px">#{{ c.id }} - {{ c.titulo }}</h5>
+    <p class="text-slate-400 text-[13px] leading-relaxed line-clamp-3 mb-4 font-medium flex-grow break-words whitespace-pre-wrap overflow-hidden">{{ c.descricao }}</p>
+    
+    {% if c.status == 'Resolvido' and c.nota_tecnica %}
+        <div class="mt-4 p-4 rounded-[1.5rem] bg-indigo-500/5 border border-indigo-500/10 mb-6 group-hover:bg-indigo-500/10 transition-colors">
+            <div class="text-[8px] text-indigo-400 font-black uppercase tracking-widest mb-1.5 italic flex items-center gap-2">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                SOLUÇÃO FINAL:
+            </div>
+            <div class="text-[10px] text-slate-300 font-medium italic leading-relaxed font-sans">{{ c.nota_tecnica }}</div>
+            
+            {% if not is_admin %}
+                {% if c.avaliacao_estrelas %}
+                    <div class="mt-3 pt-3 border-t border-indigo-500/10 flex items-center justify-between">
+                        <span class="text-[8px] text-emerald-400 font-black uppercase tracking-widest">Sua Avaliação</span>
+                        <div class="flex text-amber-400">
+                            {% for _ in range(c.avaliacao_estrelas) %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>{% endfor %}
+                        </div>
+                    </div>
+                {% else %}
+                    <button onclick="openNPSModal({{ c.id }})" class="mt-3 w-full py-2 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl text-white font-black text-[9px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg flex items-center justify-center gap-2">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                        Avaliar Atendimento
+                    </button>
+                {% endif %}
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <div class="flex items-center justify-between pt-5 border-t border-white/5 mt-auto">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center text-indigo-400 border border-white/5 shadow-inner text-xs font-black">
+                {{ c.usuario[0]|upper }}
+            </div>
+            <div class="flex flex-col">
+                <span class="text-[9px] text-slate-500 font-black uppercase tracking-widest">Aberto por</span>
+                <span class="text-[10px] text-white font-bold tracking-wide leading-none">{{ c.usuario }}</span>
+            </div>
+        </div>
+        
+        <div class="flex gap-2 items-center">
+            <button onclick='openMuralModal({{ c.id }}, {{ c.titulo | tojson }}, {{ c.usuario | tojson }}, {{ c.anexo_url | tojson }})' class="w-9 h-9 rounded-xl bg-slate-800/40 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center border border-indigo-500/20 shadow-lg group relative" title="Abrir Chat em Tempo Real">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path></svg>
+                {% set unread = c.unread_admin if is_admin else c.unread_user %}
+                {% if unread and unread > 0 %}
+                    <span class="absolute -top-2 -right-2 w-5 h-5 bg-rose-500 text-[10px] font-black text-white rounded-full flex items-center justify-center border-2 border-slate-900 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.5)] unread-badge-{{ c.id }}">{{ unread }}</span>
+                {% endif %}
+            </button>
+
+            {% if is_admin %}
+                {% if c.status == 'Aberto' %}
+                    <button onclick="atenderChamado({{ c.id }})" class="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center border border-indigo-500/20 shadow-lg" title="Assumir Ticket"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></button>
+                {% endif %}
+                {% if c.status != 'Resolvido' %}
+                    <button onclick="openSolutionModal({{ c.id }})" class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center border border-emerald-500/20 shadow-lg" title="Finalizar e Registrar Solução"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<style>
+    .glass-card-magnetic { position: relative; overflow: hidden; }
+    .glass-card-magnetic::before {
+        content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(400px circle at var(--mouse-x) var(--mouse-y), rgba(99, 102, 241, 0.15), transparent 40%);
+        z-index: 0; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+    }
+    .glass-card-magnetic:hover::before { opacity: 1; }
+    .kanban-col { min-height: 400px; padding: 10px; border-radius: 20px; background: rgba(255,255,255,0.02); }
+    .status-indicator { width: 8px; height: 8px; border-radius: 50%; }
+    .stepper-line { height: 2px; flex-grow: 1; background: rgba(255,255,255,0.1); margin: 0 4px; border-radius: 2px; }
+    .stepper-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.2); }
+    .stepper-dot.active { background: currentColor; box-shadow: 0 0 8px currentColor; }
+    .stepper-line.active { background: currentColor; }
+    .priority-alta-glow { box-shadow: 0 0 20px rgba(244, 63, 94, 0.15); border-color: rgba(244, 63, 94, 0.4) !important; }
+    .search-focus:focus-within { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1); }
+    .problem-node { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid rgba(255,255,255,0.05); }
+    .problem-node:hover { transform: translateY(-5px); background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.3); }
+    .problem-node.selected { background: #6366f1 !important; border-color: #818cf8 !important; box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.4); }
+    .problem-node.selected span { color: white !important; }
+    .wizard-step { transition: all 0.4s ease; }
+    .step-inactive { opacity: 0; pointer-events: none; transform: translateX(20px); position: absolute; width: 100%; }
+    .step-active { opacity: 1; pointer-events: auto; transform: translateX(0); position: relative; }
+    #live-toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+    .live-toast { 
+        pointer-events: auto; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1.25rem; padding: 1rem 1.5rem; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 12px; min-width: 300px;
+        animation: toastSlideIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+    @keyframes toastSlideIn { from { opacity:0; transform: translateX(100px); } to { opacity:1; transform: translateX(0); } }
+    .toast-exit { animation: toastSlideOut 0.4s ease forwards; }
+    @keyframes toastSlideOut { to { opacity:0; transform: translateX(100px); } }
+    .side-panel {
+        position: fixed; top: 100px; right: 20px; bottom: 20px; width: calc(100% - 40px); max-width: 380px; z-index: 9000;
+        background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 2.5rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; transform: translateX(calc(100% + 40px));
+        transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden;
+    }
+    .side-panel.open { transform: translateX(0); }
+    .side-panel-overlay { position: fixed; inset: 0; background: transparent; z-index: 8999; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+    .side-panel-overlay.open { opacity: 1; pointer-events: auto; }
+    .msg-bubble-me { background: #6366f1; color: white; }
+    .msg-bubble-other { background: rgba(255,255,255,0.05); color: white; border: 1px solid rgba(255,255,255,0.1); }
+    .kanban-col { transition: background 0.3s ease; }
+    .kanban-drag-over { background: rgba(99, 102, 241, 0.15) !important; border: 2px dashed #6366f1; }
+    .dragging { opacity: 0.5; }
+    
+    /* NPS Stars */
+    .nps-star { cursor: pointer; color: #334155; transition: color 0.2s; }
+    .nps-star:hover, .nps-star.active { color: #f59e0b; }
+</style>
+
+<div id="live-toast-container"></div>
+<audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
+
+<div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+    <div class="flex items-center gap-4 flex-grow">
+        <div class="p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20 shadow-inner hidden sm:block">
+            <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+        </div>
+        <div>
+            <h2 class="text-3xl font-black text-[var(--text-primary)] mb-1 tracking-tighter uppercase italic">Central de Suporte</h2>
+            <p class="text-[var(--text-secondary)] font-bold uppercase tracking-[0.3em] text-[10px] opacity-70">Gestao Visual e Inteligencia de Atendimento</p>
+        </div>
+    </div>
+    
+    <div class="flex flex-wrap lg:flex-nowrap gap-4 w-full lg:w-auto">
+        <!-- Pendentes -->
+        <div class="flex-1 min-w-[140px] glass-panel p-5 rounded-[2rem] border border-blue-500/10 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 w-16 h-16 bg-blue-500/10 rounded-full blur-xl"></div>
+            <div class="flex items-center gap-4 relative z-10">
+                <div class="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20 shadow-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <div>
+                    <span class="block text-[24px] font-black text-white leading-none mb-1">{{ estatisticas_tickets.abertos }}</span>
+                    <span class="block text-[8px] text-blue-400 font-black uppercase tracking-[0.2em]">Pendentes</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Em Atendimento -->
+        <div class="flex-1 min-w-[140px] glass-panel p-5 rounded-[2rem] border border-amber-500/10 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 w-16 h-16 bg-amber-500/10 rounded-full blur-xl"></div>
+            <div class="flex items-center gap-4 relative z-10">
+                <div class="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20 shadow-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+                <div>
+                    <span class="block text-[24px] font-black text-white leading-none mb-1">{{ estatisticas_tickets.atendimento }}</span>
+                    <span class="block text-[8px] text-amber-400 font-black uppercase tracking-[0.2em]">Em Curso</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resolvidos -->
+        <div class="flex-1 min-w-[140px] glass-panel p-5 rounded-[2rem] border border-emerald-500/10 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl"></div>
+            <div class="flex items-center gap-4 relative z-10">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20 shadow-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+                <div>
+                    <span class="block text-[24px] font-black text-white leading-none mb-1">{{ estatisticas_tickets.resolvidos }}</span>
+                    <span class="block text-[8px] text-emerald-400 font-black uppercase tracking-[0.2em]">Resolvidos</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Saúde do Sistema -->
+        <div class="flex-grow lg:flex-grow-0 min-w-[180px] bg-slate-900/40 p-6 rounded-[2.5rem] border border-white/5 backdrop-blur-md flex flex-col justify-center gap-3">
+            <div class="flex justify-between items-center px-1">
+                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Taxa de Saúde</span>
+                <span class="text-[12px] font-black text-indigo-400">{{ estatisticas_tickets.saude }}%</span>
+            </div>
+            <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all duration-1000" style="width: {{ estatisticas_tickets.saude }}%"></div>
+            </div>
+            {% if estatisticas_tickets.urgentes > 0 %}
+                <div class="flex items-center gap-2 text-rose-500 animate-pulse">
+                    <div class="w-1.5 h-1.5 rounded-full bg-rose-500"></div>
+                    <span class="text-[8px] font-black uppercase tracking-widest">{{ estatisticas_tickets.urgentes }} Tickets Críticos</span>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- CARROSSEL DE AVISOS (DINAMICO) -->
+<div class="mb-8">
+    <div class="glass-panel p-6 rounded-[2.5rem] border border-white/10 shadow-2xl bg-slate-900/60 relative overflow-hidden">
+        <div class="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="flex items-center justify-between mb-5 relative z-10">
+            <div class="flex items-center gap-3">
+                <span class="p-2 bg-indigo-500/20 rounded-xl text-indigo-400">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </span>
+                <h3 class="text-[12px] font-black text-indigo-400 uppercase tracking-widest">Painel de Avisos &amp; Dicas</h3>
+            </div>
+            {% if is_admin %}
+            <button onclick="openAvisosModal()" id="btn-gerenciar-avisos" class="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-xl text-indigo-400 text-[9px] font-black uppercase tracking-widest transition-all group">
+                <svg class="w-4 h-4 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                Gerenciar Avisos
+            </button>
+            {% endif %}
+        </div>
+        <div class="relative h-28 z-10" id="tips-carousel">
+            <div class="carousel-item absolute inset-0 flex flex-col justify-center">
+                <h4 class="text-slate-500 font-bold text-base mb-1">Carregando avisos...</h4>
+            </div>
+        </div>
+        <div class="flex gap-2 justify-center mt-3 relative z-10" id="carousel-dots-container"></div>
+    </div>
+</div>
+
+{% if is_admin %}
+<div id="avisosModal" class="hidden fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4">
+    <div class="glass-panel w-full max-w-2xl p-10 rounded-[3rem] border border-white/10 shadow-2xl relative overflow-y-auto" style="max-height: 90vh">
+        <button onclick="closeAvisosModal()" class="absolute top-8 right-8 text-slate-500 hover:text-white hover:rotate-90 transition-all">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+        <div class="mb-8">
+            <h3 class="text-3xl font-black text-white mb-1 uppercase italic">Gerenciar Avisos</h3>
+            <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">Conteudo exibido no painel de avisos para todos os usuarios</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+                <h4 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Avisos Ativos</h4>
+                <div id="avisos-list" class="space-y-3 max-h-[350px] overflow-y-auto pr-2">
+                    <div class="text-slate-600 text-xs text-center py-8">Carregando...</div>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <h4 class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Novo Aviso</h4>
+                <div id="aviso-preview" class="p-4 rounded-[1.5rem] border border-indigo-500/20 bg-indigo-500/5">
+                    <h4 id="preview-titulo" class="text-white font-bold text-base mb-1">Titulo do Aviso</h4>
+                    <p id="preview-mensagem" class="text-slate-400 text-sm">A mensagem aparecera aqui...</p>
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Icone</label>
+                    <div class="grid grid-cols-8 gap-1 p-3 bg-white/5 rounded-2xl mb-2" id="icone-picker-grid">
+                        {% for ic in ['📣','💡','🔥','⚠️','✅','🛠️','🌐','💻','🖨️','📢','❄️','🚨','📌','🎯','⚡','🔔'] %}
+                        <button type="button" class="icone-picker-btn text-xl hover:scale-125 transition-transform p-1 rounded-lg hover:bg-white/10">{{ ic }}</button>
+                        {% endfor %}
+                    </div>
+                    <input type="text" id="aviso-icone" value="📣" class="glass-input w-full p-3 rounded-xl text-center text-2xl" oninput="updateAvisoPreview()">
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Titulo</label>
+                    <input type="text" id="aviso-titulo" placeholder="Ex: Dica Rapida" class="glass-input w-full p-4 rounded-2xl text-sm font-bold" oninput="updateAvisoPreview()">
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Mensagem</label>
+                    <textarea id="aviso-mensagem" rows="3" placeholder="Descreva o aviso ou dica..." class="glass-input w-full p-4 rounded-2xl text-sm resize-none" oninput="updateAvisoPreview()"></textarea>
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Cor de Destaque</label>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="setAvisoCor('indigo')" class="cor-btn flex-1 py-2 rounded-xl bg-indigo-500/20 border-2 border-indigo-500 text-indigo-400 text-[9px] font-black uppercase" data-cor="indigo">Azul</button>
+                        <button type="button" onclick="setAvisoCor('amber')" class="cor-btn flex-1 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[9px] font-black uppercase" data-cor="amber">Amber</button>
+                        <button type="button" onclick="setAvisoCor('emerald')" class="cor-btn flex-1 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-black uppercase" data-cor="emerald">Verde</button>
+                        <button type="button" onclick="setAvisoCor('rose')" class="cor-btn flex-1 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[9px] font-black uppercase" data-cor="rose">Urgente</button>
+                    </div>
+                </div>
+                <input type="hidden" id="aviso-cor" value="indigo">
+                <button onclick="salvarAviso()" class="w-full py-4 bg-gradient-to-br from-indigo-500 to-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all hover:shadow-lg flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    Publicar Aviso
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Filtros e Busca -->
+<div class="mb-8 flex flex-col md:flex-row gap-4 items-center justify-between">
+    <div class="relative w-full md:max-w-md search-focus bg-slate-900/40 rounded-2xl border border-white/10 p-1 flex items-center transition-all shadow-inner">
+        <div class="pl-4 text-slate-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <input type="text" id="ticketSearch" onkeyup="filterTickets()" placeholder="Pesquisar por titulo, usuario ou descricao..." 
+               class="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-white px-4 py-3 placeholder-slate-600">
+    </div>
+    
+    <div class="flex flex-wrap gap-2 justify-center">
+        <button onclick="setFilter('Todos')" class="px-4 py-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all filter-btn active-filter shadow-lg" data-filter="Todos">Todos</button>
+        <button onclick="setFilter('Alta')" class="px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all filter-btn shadow-lg" data-filter="Alta">Urgente</button>
+        <button onclick="setFilter('Impressora')" class="px-4 py-2.5 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all filter-btn shadow-lg" data-filter="Impressora">Impressão</button>
+        <button onclick="setFilter('Rede/Internet')" class="px-4 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all filter-btn shadow-lg" data-filter="Rede/Internet">Rede</button>
+    </div>
+</div>
+
+{% if message %}
+    <div class="mb-8 p-5 text-sm font-bold rounded-2xl border relative z-10 backdrop-blur-md shadow-2xl animate-[slideIn_0.3s_ease-out]
+        {{ 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' if tipo_msg == 'success' else 'bg-rose-500/10 text-rose-400 border-rose-500/20' }}">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 rounded-full {{ 'bg-emerald-500/20' if tipo_msg == 'success' else 'bg-rose-500/20' }} flex items-center justify-center">
+                <svg class="w-5 h-5 font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            {{ message }}
+        </div>
+    </div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-12">
+    <!-- Wizard de Abertura -->
+    <div class="lg:col-span-1">
+        <div class="glass-panel rounded-[2.5rem] border border-white/10 shadow-2xl sticky top-24 overflow-hidden bg-slate-900/40">
+            <div class="h-1.5 w-full bg-white/5 flex">
+                <div id="wizard_progress" class="h-full bg-indigo-500 transition-all duration-500 shadow-[0_0_10px_#6366f1]" style="width: 33%"></div>
+            </div>
+            <div class="p-8">
+                <div class="flex items-center justify-between mb-8">
+                    <h3 id="wizard_title" class="text-xl font-black text-white uppercase tracking-tight italic">O que houve?</h3>
+                    <span id="wizard_step_label" class="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">Passo 1/2</span>
+                </div>
+                
+                <form id="formChamado" action="/api/tickets/abrir" method="POST" enctype="multipart/form-data" onsubmit="return handleDoubleSubmit(this)">
+                    <input type="hidden" name="prioridade" id="input_prioridade" value="Media">
+                    <input type="hidden" name="categoria" id="input_categoria" value="Outros">
+                    <input type="hidden" name="titulo" id="input_titulo" value="">
+
+                    <div id="step_1" class="wizard-step step-active space-y-6">
+                        <div class="grid grid-cols-2 gap-3">
+                            {% for ap in atalhos %}
+                                <div onclick='selectProblem(this, {{ ap.label | tojson }}, {{ ap.titulo_padrao | tojson }}, {{ ap.categoria | tojson }}, {{ ap.prioridade_padrao | tojson }})' class="problem-node p-5 bg-white/5 rounded-3xl text-center group active:scale-95">
+                                    <span class="block text-3xl mb-2">{{ ap.icone }}</span>
+                                    <span class="block text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-white">{{ ap.label }}</span>
+                                </div>
+                            {% endfor %}
+                            <div onclick="selectProblem(this, 'Outro Problema', '', 'Outros', 'Media')" class="problem-node col-span-2 p-4 bg-white/5 rounded-3xl text-center flex items-center justify-center gap-3 group active:scale-95">
+                                <span class="text-2xl">🛠️</span>
+                                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-white">Outra Situação</span>
+                            </div>
+                        </div>
+                        {% if is_admin %}
+                            <div class="text-center">
+                                <button type="button" onclick="openAdminAtalhos()" class="text-[8px] font-black text-indigo-400 hover:text-white uppercase tracking-widest opacity-60">+ Configurar Opções</button>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div id="step_2" class="wizard-step step-inactive space-y-5">
+                        <div id="field_titulo_custom" class="hidden">
+                            <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Assunto Específico</label>
+                            <input type="text" name="titulo_custom" id="titulo_custom" class="glass-input w-full px-5 py-3.5 rounded-2xl text-white font-bold text-sm" placeholder="Ex: Monitor piscando">
+                        </div>
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Descrição do Ocorrido</label>
+                            <textarea name="descricao" id="input_descricao" required rows="3" class="glass-input w-full px-5 py-4 rounded-2xl text-white text-sm font-medium resize-none" placeholder="Conte-nos o que houve..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Selecione o Equipamento</label>
+                            <select name="equipamento_id" class="glass-input w-full px-5 py-3.5 rounded-2xl text-white font-bold text-xs appearance-none cursor-pointer">
+                                <option value="">Não sei identificar / Outro</option>
+                                {% for imp in impressoras %}
+                                    <option value="{{ imp.id }}">{{ imp.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div id="dropzone" class="relative group p-6 bg-white/5 rounded-3xl border-2 border-dashed border-white/5 hover:border-indigo-500/40 transition-all text-center cursor-pointer">
+                            <input type="file" name="anexo" id="anexo_file" accept="image/*" class="hidden">
+                            <div id="anexo_preview" class="hidden mb-3"><img id="img_preview" class="h-16 mx-auto rounded-xl shadow-2xl border border-white/10"></div>
+                            <div id="dropzone_prompt">
+                                <svg class="w-7 h-7 text-indigo-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                                <span class="block text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-white">Anexar ou Cole (Ctrl+V)</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <button type="button" onclick="prevStep()" class="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-all">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button type="submit" class="flex-grow bg-gradient-to-br from-indigo-500 to-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl hover:shadow-indigo-500/20 transition-all active:scale-95 border border-white/10 flex items-center justify-center gap-3">
+                                <span>Enviar Agora</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kanban / Lista -->
+    <div class="lg:col-span-3">
+        {% if is_admin %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Pendentes -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between px-4 py-3 bg-slate-900/40 rounded-2xl border border-white/5 mb-2 shadow-inner">
+                        <h4 class="text-[11px] font-black text-rose-400 uppercase tracking-widest">Pendente ({{ estatisticas_tickets['abertos'] }})</h4>
+                        <div class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></div>
+                    </div>
+                    <div class="space-y-4 kanban-col shadow-inner" data-status="Aberto" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'Aberto')">
+                        {% for c in chamados if c.status == 'Aberto' %}{{ card(c, True) }}{% endfor %}
+                    </div>
+                </div>
+                <!-- Em Atendimento -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between px-4 py-3 bg-slate-900/40 rounded-2xl border border-white/5 mb-2 shadow-inner">
+                        <h4 class="text-[11px] font-black text-amber-400 uppercase tracking-widest">Em Curso ({{ estatisticas_tickets['atendimento'] }})</h4>
+                        <div class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-bounce"></div>
+                    </div>
+                    <div class="space-y-4 kanban-col shadow-inner" data-status="Em Atendimento" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'Em Atendimento')">
+                        {% for c in chamados if c.status == 'Em Atendimento' %}{{ card(c, True) }}{% endfor %}
+                    </div>
+                </div>
+                <!-- Concluídos -->
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between px-4 py-3 bg-slate-900/40 rounded-2xl border border-white/5 mb-2 shadow-inner">
+                        <h4 class="text-[11px] font-black text-emerald-400 uppercase tracking-widest">Finalizado ({{ estatisticas_tickets['resolvidos'] }})</h4>
+                        <div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                    </div>
+                    <div class="space-y-4 kanban-col shadow-inner" data-status="Resolvido" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event, 'Resolvido')">
+                        {% for c in chamados if c.status == 'Resolvido' %}{{ card(c, True) }}{% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="glass-panel rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl bg-slate-900/20">
+                <div class="px-8 py-6 border-b border-white/5 bg-slate-800/10 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <h3 class="text-sm font-black text-white uppercase tracking-[0.2em] italic">Meus Chamados</h3>
+                    <div class="flex bg-slate-950/40 p-1 rounded-xl border border-white/5 shadow-inner">
+                        <button onclick="setStatusFilter('Ativos')" class="status-tab px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all bg-indigo-600 text-white shadow-lg" data-status="Ativos">Ativos</button>
+                        <button onclick="setStatusFilter('Resolvido')" class="status-tab px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all" data-status="Resolvido">Finalizados</button>
+                        <button onclick="setStatusFilter('Todos')" class="status-tab px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-all" data-status="Todos">Todos</button>
+                    </div>
+                </div>
+                <div class="p-8">
+                    <div id="user-ticket-list" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {% for c in chamados %}
+                            <div class="user-ticket-item" data-status="{{ c.status }}">{{ card(c, False) }}</div>
+                        {% endfor %}
+                        {% if not chamados %}
+                            <div class="col-span-full py-20 text-center opacity-50">
+                                <div class="text-5xl mb-4">📭</div>
+                                <p class="text-xs font-black text-slate-500 uppercase tracking-widest">Nenhum chamado registrado.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // CARROSSEL DINAMICO - carrega da API
+    // ==========================================
+    let currentCarouselIndex = 0;
+    let carouselData = [];
+    let carouselInterval;
+    const COR_MAP = {
+        indigo:  { title: 'text-indigo-400',  dot: 'bg-indigo-500' },
+        amber:   { title: 'text-amber-400',   dot: 'bg-amber-500'  },
+        emerald: { title: 'text-emerald-400', dot: 'bg-emerald-500'},
+        rose:    { title: 'text-rose-400',    dot: 'bg-rose-500'   },
+    };
+
+    async function loadCarousel() {
+        try {
+            const res = await fetch('/api/avisos');
+            const avisos = await res.json();
+            carouselData = avisos;
+
+            const container = document.getElementById('tips-carousel');
+            const dotsContainer = document.getElementById('carousel-dots-container');
+            container.innerHTML = '';
+            dotsContainer.innerHTML = '';
+
+            if (!avisos.length) {
+                container.innerHTML = '<div class="absolute inset-0 flex flex-col justify-center"><h4 class="text-slate-600 font-bold text-base">Nenhum aviso cadastrado.</h4></div>';
+                return;
+            }
+
+            avisos.forEach((av, i) => {
+                const cores = COR_MAP[av.cor] || COR_MAP.indigo;
+                const slide = document.createElement('div');
+                slide.className = 'carousel-item absolute inset-0 transition-opacity duration-700 flex flex-col justify-center ' + (i === 0 ? 'opacity-100' : 'opacity-0 pointer-events-none');
+                slide.innerHTML = `<h4 class="font-bold text-lg mb-1 flex items-center gap-2 ${cores.title}">${av.icone} ${av.titulo}</h4><p class="text-slate-400 text-sm font-medium">${av.mensagem}</p>`;
+                container.appendChild(slide);
+
+                const dot = document.createElement('button');
+                dot.className = 'w-2 h-2 rounded-full transition-all ' + (i === 0 ? (COR_MAP[av.cor] || COR_MAP.indigo).dot : 'bg-white/20');
+                dot.onclick = () => showCarouselItem(i);
+                dotsContainer.appendChild(dot);
+            });
+
+            showCarouselItem(0);
+            startCarousel();
+        } catch(e) {
+            console.error('Erro ao carregar avisos:', e);
+        }
+    }
+
+    function showCarouselItem(index) {
+        const items = document.querySelectorAll('#tips-carousel .carousel-item');
+        const dots  = document.querySelectorAll('#carousel-dots-container button');
+        if (!items.length) return;
+
+        items.forEach((item, i) => {
+            if (i === index) {
+                item.classList.remove('opacity-0', 'pointer-events-none');
+                item.classList.add('opacity-100');
+                if (dots[i]) {
+                    const cor = (COR_MAP[carouselData[i]?.cor] || COR_MAP.indigo).dot;
+                    dots[i].className = 'w-2 h-2 rounded-full transition-all ' + cor;
+                }
+            } else {
+                item.classList.add('opacity-0', 'pointer-events-none');
+                item.classList.remove('opacity-100');
+                if (dots[i]) dots[i].className = 'w-2 h-2 rounded-full transition-all bg-white/20';
+            }
+        });
+        currentCarouselIndex = index;
+    }
+
+    function nextCarouselItem() {
+        const items = document.querySelectorAll('#tips-carousel .carousel-item');
+        if (!items.length) return;
+        showCarouselItem((currentCarouselIndex + 1) % items.length);
+    }
+
+    function startCarousel() {
+        if (carouselInterval) clearInterval(carouselInterval);
+        carouselInterval = setInterval(nextCarouselItem, 6000);
+    }
+
+    // Pausa ao hover
+    document.getElementById('tips-carousel')?.addEventListener('mouseenter', () => clearInterval(carouselInterval));
+    document.getElementById('tips-carousel')?.addEventListener('mouseleave', startCarousel);
+
+    // ==========================================
+    // MODAL DE GERENCIAMENTO DE AVISOS (ADMIN)
+    // ==========================================
+    function openAvisosModal() {
+        document.getElementById('avisosModal').classList.remove('hidden');
+        refreshAvisosList();
+    }
+    function closeAvisosModal() {
+        document.getElementById('avisosModal').classList.add('hidden');
+    }
+
+    async function refreshAvisosList() {
+        const list = document.getElementById('avisos-list');
+        list.innerHTML = '<div class="text-slate-600 text-xs text-center py-8">Carregando...</div>';
+        const res = await fetch('/api/avisos');
+        const avisos = await res.json();
+        if (!avisos.length) {
+            list.innerHTML = '<div class="text-slate-600 text-xs text-center py-8">Nenhum aviso cadastrado.</div>';
+            return;
+        }
+        list.innerHTML = avisos.map(av => `
+            <div class="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-all">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">${av.icone}</span>
+                    <div>
+                        <span class="block text-xs font-black text-white">${av.titulo}</span>
+                        <span class="block text-[9px] text-slate-500 line-clamp-1 max-w-[160px]">${av.mensagem}</span>
+                    </div>
+                </div>
+                <button onclick="deletarAviso(${av.id})" class="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    async function salvarAviso() {
+        const icone = document.getElementById('aviso-icone').value.trim();
+        const titulo = document.getElementById('aviso-titulo').value.trim();
+        const mensagem = document.getElementById('aviso-mensagem').value.trim();
+        const cor = document.getElementById('aviso-cor').value;
+
+        if (!titulo || !mensagem) {
+            mostrarToast('Preencha o titulo e a mensagem do aviso.');
+            return;
+        }
+
+        const form = new FormData();
+        form.append('icone', icone || '📣');
+        form.append('titulo', titulo);
+        form.append('mensagem', mensagem);
+        form.append('cor', cor);
+
+        const res = await fetch('/api/avisos', { method: 'POST', body: form });
+        if (res.ok) {
+            mostrarToast('Aviso publicado com sucesso!');
+            document.getElementById('aviso-titulo').value = '';
+            document.getElementById('aviso-mensagem').value = '';
+            document.getElementById('aviso-icone').value = '📣';
+            refreshAvisosList();
+            loadCarousel();
+        } else {
+            mostrarToast('Erro ao publicar aviso.');
+        }
+    }
+
+    async function deletarAviso(id) {
+        const res = await fetch('/api/avisos/' + id, { method: 'DELETE' });
+        if (res.ok) {
+            mostrarToast('Aviso removido.');
+            refreshAvisosList();
+            loadCarousel();
+        }
+    }
+
+    function setAvisoIcon(ic) {
+        document.getElementById('aviso-icone').value = ic;
+        updateAvisoPreview();
+    }
+    function setAvisoCor(cor) {
+        document.getElementById('aviso-cor').value = cor;
+        document.querySelectorAll('.cor-btn').forEach(btn => {
+            const isActive = btn.dataset.cor === cor;
+            btn.style.borderWidth = isActive ? '2px' : '1px';
+            btn.style.opacity = isActive ? '1' : '0.5';
+        });
+    }
+    function updateAvisoPreview() {
+        const icone = document.getElementById('aviso-icone').value;
+        const titulo = document.getElementById('aviso-titulo').value || 'Titulo do Aviso';
+        const mensagem = document.getElementById('aviso-mensagem').value || 'A mensagem aparecera aqui...';
+        document.getElementById('preview-titulo').textContent = icone + ' ' + titulo;
+        document.getElementById('preview-mensagem').textContent = mensagem;
+    }
+
+    // Delegacao de evento para os botoes de icone
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('icone-picker-grid')?.addEventListener('click', e => {
+            const btn = e.target.closest('.icone-picker-btn');
+            if (btn) setAvisoIcon(btn.textContent.trim());
+        });
+        loadCarousel();
+    });
+
+    function focarNovoChamado() {
+        const panel = document.getElementById('wizard_title');
+        if (panel) {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const formContainer = panel.closest('.glass-panel');
+            if (formContainer) {
+                formContainer.classList.add('shadow-[0_0_30px_rgba(99,102,241,0.6)]', 'border-indigo-400');
+                setTimeout(() => formContainer.classList.remove('shadow-[0_0_30px_rgba(99,102,241,0.6)]', 'border-indigo-400'), 1500);
+            }
+        } else { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    }
+    function scrollToNewestTicket() { focarNovoChamado(); }
+</script>
+
+<!-- Modal Mural -->
+<div id="muralOverlay" class="side-panel-overlay" onclick="closeMuralModal()"></div>
+<div id="muralModal" class="side-panel">
+    <div class="p-8 border-b border-white/5 bg-slate-900/60 flex-shrink-0">
+        <div class="flex items-center justify-between mb-3">
+            <div class="flex flex-col">
+                <h3 id="mural_titulo" class="text-xl font-black text-white uppercase tracking-tighter italic leading-none mb-1">Mural</h3>
+                <span id="mural_autor" class="text-[9px] text-slate-500 font-black uppercase tracking-widest">Iniciando conversa...</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                    <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span class="text-[8px] text-emerald-400 font-black uppercase tracking-widest">Ao Vivo</span>
+                </div>
+                <button onclick="closeMuralModal()" class="text-slate-500 hover:text-white transition-all hover:rotate-90 duration-300">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="flex-grow flex flex-col relative min-h-0">
+        <div id="mural_timeline" class="flex-grow overflow-y-auto p-7 space-y-5"></div>
+        <div id="mural_typing_bar" class="hidden px-7 pb-2">
+            <div class="flex items-center gap-2 bg-slate-800/40 px-4 py-2.5 rounded-2xl border border-white/5 w-fit">
+                <div class="flex gap-1"><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce"></span><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:150ms"></span><span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay:300ms"></span></div>
+                <span id="mural_typing_text" class="text-[9px] text-indigo-400 font-black uppercase tracking-widest italic"></span>
+            </div>
+        </div>
+        <div class="p-6 border-t border-white/5 bg-slate-900/60 relative">
+            <div id="emoji_picker" class="hidden absolute bottom-24 left-6 z-50 bg-slate-900 border border-white/10 rounded-[2rem] p-5 shadow-2xl backdrop-blur-2xl w-[290px]">
+                <div class="flex items-center justify-between mb-3 px-1"><span class="text-[9px] font-black text-slate-500 uppercase tracking-widest italic">Emojis</span><button onclick="toggleEmojiPicker()" class="text-slate-600 hover:text-white">✕</button></div>
+                <div id="emoji_grid" class="grid grid-cols-6 gap-2 max-h-[180px] overflow-y-auto"></div>
+            </div>
+            <div class="flex gap-3 items-end">
+                <button type="button" onclick="toggleEmojiPicker()" class="w-12 h-12 flex items-center justify-center text-slate-500 hover:text-indigo-400 rounded-2xl transition-all mb-1"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
+                <textarea id="mural_msg" rows="1" class="glass-input flex-grow px-5 py-4 rounded-2xl text-white text-sm resize-none overflow-hidden" placeholder="Escreva algo..."></textarea>
+                <button id="mural_send_btn" onclick="chatSendMessage()" class="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center hover:bg-indigo-500 transition-all mb-1 shadow-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Admin Atalhos -->
+<div id="adminAtalhosModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4">
+    <div class="glass-panel w-full max-w-2xl p-10 rounded-[3rem] border border-white/10 shadow-2xl relative overflow-y-auto" style="max-height: 90vh">
+        <button onclick="closeAdminAtalhos()" class="absolute top-8 right-8 text-slate-500 hover:text-white hover:rotate-90 transition-all"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        <div class="mb-10"><h3 class="text-3xl font-black text-white mb-2 uppercase italic">Gerenciar Atalhos</h3><p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">Personalize a experiência do usuário</p></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div class="space-y-4">
+                <h4 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Atalhos Ativos</h4>
+                <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    {% for ap in atalhos %}
+                        <div class="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-all">
+                            <div class="flex items-center gap-4"><span class="text-2xl">{{ ap.icone }}</span><div><span class="block text-xs font-black text-white uppercase">{{ ap.label }}</span><span class="block text-[8px] text-indigo-400 font-bold uppercase tracking-widest">{{ ap.categoria }}</span></div></div>
+                            <div class="flex items-center gap-1">
+                                <button onclick='editAtalho({{ ap | tojson }})' class="p-2 text-indigo-400 hover:bg-indigo-500/10 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
+                                <button onclick="deleteAtalho({{ ap.id }})" class="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="space-y-6">
+                <h4 id="atalho_form_title" class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Criar Novo</h4>
+                <div class="p-6 rounded-[2rem] border border-dashed border-indigo-500/30 bg-indigo-500/5 text-center">
+                    <div id="btn_preview" class="problem-node p-5 bg-white/10 rounded-3xl mx-auto w-32 border border-white/10">
+                        <span id="preview_icon" class="block text-3xl mb-2">🛠️</span>
+                        <span id="preview_label" class="block text-[9px] font-black text-slate-400 uppercase tracking-widest">Novo Botão</span>
+                    </div>
+                </div>
+                <form id="form_gerenciar_atalho" class="space-y-4">
+                    <input type="hidden" id="atalho_edit_id">
+                    <div class="grid grid-cols-6 gap-2 p-3 bg-white/5 rounded-2xl">
+                        {% for ic in ['🌑','📄','🌐','🐌','💻','🖱️','⌨️','🖥️','🔌','📶','🖨️','🛠️','⚠️','🔥','❄️','📢','📱','🔒','☁️'] %}
+                            <button type="button" onclick="setPickerIcon('{{ ic }}')" class="text-xl hover:scale-125 transition-transform p-1">{{ ic }}</button>
+                        {% endfor %}
+                    </div>
+                    <input type="text" id="input_picker_icon" value="🛠️" class="glass-input w-full p-4 rounded-2xl text-center text-2xl" onkeyup="updatePreview()">
+                    <input type="text" id="input_picker_label" placeholder="Nome no Botão" class="glass-input w-full p-4 rounded-2xl text-sm font-bold" onkeyup="updatePreview()">
+                    <input type="text" id="input_picker_titulo" placeholder="Assunto automático" class="glass-input w-full p-4 rounded-2xl text-xs font-medium">
+                    <div class="grid grid-cols-2 gap-3">
+                        <select id="input_picker_cat" class="glass-input p-4 rounded-2xl text-xs font-bold appearance-none"><option value="Impressora">Impressora</option><option value="Rede/Internet">Rede</option><option value="Computador/Hardware">Máquina</option><option value="Outros">Outros</option></select>
+                        <select id="input_picker_pri" class="glass-input p-4 rounded-2xl text-xs font-bold appearance-none"><option value="Baixa">Baixa</option><option value="Media" selected>Média</option><option value="Alta">Alta</option></select>
+                    </div>
+                    <button type="button" id="atalho_submit_btn" onclick="saveAtalho()" class="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all">Salvar Atalho</button>
+                    <button type="button" id="cancel_edit_btn" onclick="cancelEditAtalho()" class="hidden w-full py-5 bg-white/5 text-slate-400 rounded-2xl">Cancelar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Solução -->
+<div id="solutionModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4">
+    <div class="glass-panel w-full max-w-lg p-10 rounded-[3rem] border border-white/10 shadow-2xl relative">
+        <button onclick="closeSolutionModal()" class="absolute top-8 right-8 text-slate-500 hover:text-white"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        <div class="mb-8"><h3 class="text-3xl font-black text-white mb-2 uppercase tracking-tight italic">Solução Técnica</h3></div>
+        <form onsubmit="registrarSolucao(event)" class="space-y-8">
+            <input type="hidden" id="modal_chamado_id">
+            <textarea id="nota_tecnica" required rows="5" class="glass-input w-full px-8 py-6 rounded-[2rem] text-white text-sm" placeholder="O que foi realizado..."></textarea>
+            <button type="submit" class="w-full bg-emerald-600 text-white font-black text-xs uppercase py-6 rounded-2xl">Finalizar Ticket</button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Avaliação (NPS) -->
+<div id="npsModal" class="hidden fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/90 p-4">
+    <div class="glass-panel w-full max-w-sm p-8 rounded-[3rem] border border-amber-500/20 shadow-[0_0_50px_rgba(245,158,11,0.15)] relative text-center">
+        <button onclick="closeNPSModal()" class="absolute top-6 right-6 text-slate-500 hover:text-white hover:rotate-90 transition-all duration-300"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        <div class="w-16 h-16 mx-auto bg-amber-500/10 rounded-full flex items-center justify-center text-amber-400 mb-4 border border-amber-500/20 shadow-lg">
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+        </div>
+        <h3 class="text-xl font-black text-white mb-1 uppercase tracking-tight italic">Avalie o Atendimento</h3>
+        <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Sua opinião nos ajuda a melhorar sempre</p>
+        <div class="flex justify-center gap-2 mb-3" id="nps-stars-row">
+            <svg class="w-10 h-10 nps-star" data-val="1" onclick="setStars(1)" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+            <svg class="w-10 h-10 nps-star" data-val="2" onclick="setStars(2)" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+            <svg class="w-10 h-10 nps-star" data-val="3" onclick="setStars(3)" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+            <svg class="w-10 h-10 nps-star" data-val="4" onclick="setStars(4)" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+            <svg class="w-10 h-10 nps-star" data-val="5" onclick="setStars(5)" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+        </div>
+        <p id="nps-label" class="text-sm font-black text-slate-500 mb-5 h-5">Toque em uma estrela</p>
+        <textarea id="nps_comentario" rows="3" class="glass-input w-full px-5 py-4 rounded-[1.5rem] text-white text-xs font-medium resize-none mb-4" placeholder="Opcional: deixe um comentário..."></textarea>
+        <input type="hidden" id="nps_chamado_id">
+        <input type="hidden" id="nps_estrelas" value="0">
+        <button onclick="enviarNPS()" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black text-xs uppercase py-4 rounded-2xl shadow-lg hover:scale-105 transition-all">⭐ Enviar Avaliação</button>
+    </div>
+</div>
+
+<script>
+    const is_admin = {{ 'true' if is_admin else 'false' }};
+    const currentUser = "{{ request.cookies.get('user_name') }}";
+    let currentFilter = 'Todos';
+    let currentStatusFilter = 'Ativos';
+    let chatChamadoId = null;
+    let chatLastId = 0;
+    let chatPollTimer = null;
+    let chatTypingTimer = null;
+
+    // ========= KANBAN DRAG AND DROP =========
+    let draggedTicketId = null;
+    let draggedEl = null;
+
+    function dragStart(event, ticketId) {
+        draggedTicketId = ticketId;
+        draggedEl = event.currentTarget;
+        setTimeout(() => draggedEl.classList.add('dragging'), 0);
+        event.dataTransfer.effectAllowed = 'move';
+    }
+
+    function dragEnd(event) {
+        if (draggedEl) draggedEl.classList.remove('dragging');
+    }
+
+    function dragOver(event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        event.currentTarget.classList.add('kanban-drag-over');
+    }
+
+    function dragLeave(event) {
+        event.currentTarget.classList.remove('kanban-drag-over');
+    }
+
+    async function drop(event, newStatus) {
+        event.preventDefault();
+        event.currentTarget.classList.remove('kanban-drag-over');
+        if (!draggedTicketId) return;
+
+        const ticketId = draggedTicketId;
+        draggedTicketId = null;
+
+        // Se o destino é "Resolvido", pedir nota técnica primeiro
+        if (newStatus === 'Resolvido') {
+            openSolutionModal(ticketId);
+            return;
+        }
+
+        // Caso contrário: atender ou reabrir
+        let url = '';
+        if (newStatus === 'Em Atendimento') url = `/api/tickets/atender/${ticketId}`;
+        else if (newStatus === 'Aberto') url = `/api/tickets/reabrir/${ticketId}`;
+
+        try {
+            const res = await fetch(url, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                // Mover o card visualmente sem reload
+                const col = document.querySelector(`.kanban-col[data-status="${newStatus}"]`);
+                const card = document.getElementById(`ticket-${ticketId}`);
+                if (col && card) {
+                    card.dataset.status = newStatus;
+                    const wrapper = card.closest('.user-ticket-item') || card;
+                    col.prepend(wrapper);
+                    // Atualizar SLA timer data-status
+                    const slaTimer = card.querySelector('.sla-timer');
+                    if (slaTimer) slaTimer.dataset.status = newStatus;
+                    updateSLA();
+                }
+                mostrarToast(`Chamado #${ticketId} movido para ${newStatus}!`);
+            }
+        } catch(e) {
+            console.error('Erro ao mover chamado:', e);
+        }
+    }
+
+    // ========= NPS AVALIAÇÃO =========
+    const npsLabels = ['', 'Muito Ruim 😞', 'Ruim 😕', 'Regular 😐', 'Bom 😊', 'Excelente! 🤩'];
+
+    function openNPSModal(ticketId) {
+        document.getElementById('nps_chamado_id').value = ticketId;
+        document.getElementById('nps_estrelas').value = 0;
+        document.getElementById('nps_comentario').value = '';
+        document.getElementById('nps-label').innerText = 'Toque em uma estrela';
+        document.querySelectorAll('.nps-star').forEach(s => s.classList.remove('active'));
+        document.getElementById('npsModal').classList.remove('hidden');
+    }
+
+    function closeNPSModal() {
+        document.getElementById('npsModal').classList.add('hidden');
+    }
+
+    function setStars(val) {
+        document.getElementById('nps_estrelas').value = val;
+        document.getElementById('nps-label').innerText = npsLabels[val];
+        document.querySelectorAll('.nps-star').forEach(s => {
+            s.classList.toggle('active', parseInt(s.dataset.val) <= val);
+        });
+    }
+
+    async function enviarNPS() {
+        const id = document.getElementById('nps_chamado_id').value;
+        const estrelas = document.getElementById('nps_estrelas').value;
+        const comentario = document.getElementById('nps_comentario').value;
+        if (!estrelas || estrelas == 0) {
+            alert('Por favor, selecione pelo menos uma estrela!'); return;
+        }
+        const form = new FormData();
+        form.append('estrelas', estrelas);
+        form.append('comentario', comentario);
+        try {
+            const res = await fetch(`/api/tickets/avaliar/${id}`, { method: 'POST', body: form });
+            const data = await res.json();
+            if (data.success) {
+                closeNPSModal();
+                mostrarToast('Avaliação enviada! Obrigado 🌟');
+                setTimeout(() => location.reload(), 1200);
+            }
+        } catch(e) { alert('Erro ao enviar avaliação.'); }
+    }
+
+    function mostrarToast(msg) {
+        const container = document.getElementById('live-toast-container');
+        if (!container) return;
+        const el = document.createElement('div');
+        el.className = 'live-toast';
+        el.innerHTML = `<div class="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-base flex-shrink-0">✓</div><span class="text-sm font-bold text-white">${msg}</span>`;
+        container.appendChild(el);
+        setTimeout(() => { el.classList.add('toast-exit'); setTimeout(() => el.remove(), 400); }, 3000);
+    }
+
+    const emojis = ['😊','😂','😉','😍','🤔','🙄','😎','😴','👍','👎','👌','🤝','✅','❌','⚠️','💡','🚀','💻','🖥️','🖨️','📄','🛠️','⚙️','🔌','🌐','⚡','🔥','✨','📦','📅','⏰'];
+
+    function updateSLA() {
+        document.querySelectorAll('.sla-timer').forEach(timer => {
+            const status = timer.dataset.status;
+            const textSpan = timer.querySelector('span');
+            
+            if (status === 'Resolvido') {
+                timer.className = "text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg flex items-center gap-1.5 sla-timer bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+                textSpan.innerText = "SLA Concluído";
+                return;
+            }
+
+            const vencStr = timer.dataset.vencimento;
+            if (!vencStr) {
+                // Backward compatibility ou sem SLA
+                const start = new Date(timer.dataset.start);
+                const now = new Date();
+                const diff = Math.floor((now - start) / 1000 / 60);
+                timer.className = "text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg flex items-center gap-1.5 sla-timer bg-white/5 text-slate-500";
+                textSpan.innerText = `Aberto há ${Math.floor(diff/60)}h ${diff%60}m`;
+                return;
+            }
+
+            const venc = new Date(vencStr);
+            const now = new Date();
+            const diffMs = venc - now;
+            const diffMin = Math.floor(Math.abs(diffMs) / 1000 / 60);
+            
+            const card = timer.closest('.ticket-card');
+
+            if (diffMs < 0) {
+                // Venceu!
+                timer.className = "text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg flex items-center gap-1.5 sla-timer bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse";
+                textSpan.innerText = `SLA Estourado (-${Math.floor(diffMin/60)}h ${diffMin%60}m)`;
+                if (card) {
+                    card.classList.remove('border-white/10');
+                    card.classList.add('border-rose-500/40', 'shadow-[0_0_15px_rgba(244,63,94,0.15)]');
+                }
+            } else {
+                // No prazo
+                const hrs = Math.floor(diffMin/60);
+                if (hrs < 2) {
+                    // Quase vencendo (Amarelo)
+                    timer.className = "text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg flex items-center gap-1.5 sla-timer bg-amber-500/10 text-amber-400 border border-amber-500/20";
+                } else {
+                    // Tranquilo (Azul)
+                    timer.className = "text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg flex items-center gap-1.5 sla-timer bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
+                }
+                textSpan.innerText = `SLA: Restam ${hrs}h ${diffMin%60}m`;
+                if (card) {
+                    card.classList.remove('border-rose-500/40', 'shadow-[0_0_15px_rgba(244,63,94,0.15)]');
+                }
+            }
+        });
+    }
+    setInterval(updateSLA, 60000);
+    updateSLA();
+
+    function selectProblem(el, label, tituloPadrao, cat, pri) {
+        document.querySelectorAll('.problem-node').forEach(n => n.classList.remove('selected'));
+        el.classList.add('selected');
+        document.getElementById('input_titulo').value = label;
+        document.getElementById('input_prioridade').value = pri;
+        document.getElementById('input_categoria').value = cat;
+        document.getElementById('input_descricao').value = tituloPadrao;
+        
+        nextStep();
+        if (label === 'Outro Problema') {
+            document.getElementById('field_titulo_custom').classList.remove('hidden');
+            document.getElementById('titulo_custom').required = true;
+            document.getElementById('input_descricao').value = '';
+            document.getElementById('wizard_title').textContent = 'O que está ocorrendo?';
+        } else {
+            document.getElementById('field_titulo_custom').classList.add('hidden');
+            document.getElementById('titulo_custom').required = false;
+            document.getElementById('wizard_title').textContent = 'Quase lá...';
+        }
+    }
+
+    function nextStep() {
+        document.getElementById('step_1').classList.replace('step-active', 'step-inactive');
+        document.getElementById('step_2').classList.replace('step-inactive', 'step-active');
+        document.getElementById('wizard_progress').style.width = '100%';
+        document.getElementById('wizard_step_label').textContent = 'Passo 2/2';
+        document.getElementById('wizard_step_label').classList.replace('bg-indigo-500/10', 'bg-emerald-500/10');
+        document.getElementById('wizard_step_label').classList.replace('text-indigo-400', 'text-emerald-400');
+    }
+
+    function prevStep() {
+        document.getElementById('step_2').classList.replace('step-active', 'step-inactive');
+        document.getElementById('step_1').classList.replace('step-inactive', 'step-active');
+        document.getElementById('wizard_progress').style.width = '33%';
+        document.getElementById('wizard_step_label').textContent = 'Passo 1/2';
+        document.getElementById('wizard_step_label').classList.replace('bg-emerald-500/10', 'bg-indigo-500/10');
+        document.getElementById('wizard_step_label').classList.replace('text-emerald-400', 'text-indigo-400');
+    }
+
+    document.addEventListener('paste', e => {
+        if (!document.getElementById('step_2').classList.contains('step-active')) return;
+        const item = Array.from(e.clipboardData.items).find(i => i.type.includes('image'));
+        if (item) {
+            const blob = item.getAsFile();
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(blob);
+            document.getElementById('anexo_file').files = dataTransfer.files;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                document.getElementById('img_preview').src = ev.target.result;
+                document.getElementById('anexo_preview').classList.remove('hidden');
+            };
+            reader.readAsDataURL(blob);
+        }
+    });
+
+    function setFilter(f) {
+        currentFilter = f;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active-filter', b.dataset.filter === f));
+        filterTickets();
+    }
+
+    function setStatusFilter(s) {
+        currentStatusFilter = s;
+        document.querySelectorAll('.status-tab').forEach(t => t.classList.toggle('bg-indigo-600', t.dataset.status === s));
+        filterTickets();
+    }
+
+    function filterTickets() {
+        const query = document.getElementById('ticketSearch').value.toLowerCase();
+        document.querySelectorAll('.ticket-card').forEach(card => {
+            const matchesSearch = card.dataset.title.includes(query) || card.dataset.user.includes(query) || card.dataset.desc.includes(query);
+            const matchesFilter = currentFilter === 'Todos' || card.dataset.priority === currentFilter || card.dataset.category === currentFilter;
+            
+            let matchesStatus = true;
+            if (!is_admin) {
+                const status = card.closest('.user-ticket-item').dataset.status;
+                if (currentStatusFilter === 'Ativos') matchesStatus = (status !== 'Resolvido');
+                else if (currentStatusFilter !== 'Todos') matchesStatus = (status === currentStatusFilter);
+            }
+
+            card.classList.toggle('hidden', !(matchesSearch && matchesFilter && matchesStatus));
+            if (card.closest('.user-ticket-item')) card.closest('.user-ticket-item').classList.toggle('hidden', !(matchesSearch && matchesFilter && matchesStatus));
+        });
+    }
+
+    async function atenderChamado(id) {
+        const res = await fetch(`/api/tickets/atender/${id}`, { method: 'POST' });
+        if (res.ok) location.reload();
+    }
+
+    function openSolutionModal(id) {
+        document.getElementById('modal_chamado_id').value = id;
+        document.getElementById('solutionModal').classList.remove('hidden');
+    }
+
+    function closeSolutionModal() { document.getElementById('solutionModal').classList.add('hidden'); }
+
+    async function registrarSolucao(e) {
+        e.preventDefault();
+        const id = document.getElementById('modal_chamado_id').value;
+        const nota = document.getElementById('nota_tecnica').value;
+        const botao = e.submitter || e.target.querySelector('button[type="submit"]');
+        if (botao) { botao.disabled = true; botao.textContent = 'Finalizando...'; }
+        try {
+            const res = await fetch('/api/tickets/finalizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: Number(id), nota_tecnica: nota })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) {
+                throw new Error(data.detail || 'Não foi possível finalizar o chamado.');
+            }
+            window.location.href = '/chamados?success=resolved';
+        } catch (err) {
+            console.error('Erro ao finalizar chamado:', err);
+            alert(err.message || 'Erro ao finalizar chamado.');
+            if (botao) { botao.disabled = false; botao.textContent = 'Finalizar Ticket'; }
+        }
+    }
+
+    function toggleEmojiPicker() {
+        const p = document.getElementById('emoji_picker');
+        p.classList.toggle('hidden');
+        if (!p.classList.contains('hidden') && !document.getElementById('emoji_grid').children.length) {
+            emojis.forEach(e => {
+                const b = document.createElement('button');
+                b.className = 'w-10 h-10 text-xl hover:bg-white/10 rounded-xl';
+                b.textContent = e;
+                b.onclick = () => {
+                    const t = document.getElementById('mural_msg');
+                    t.value += e;
+                    t.focus();
+                };
+                document.getElementById('emoji_grid').appendChild(b);
+            });
+        }
+    }
+
+    async function chatSendMessage() {
+        const t = document.getElementById('mural_msg');
+        const msg = t.value.trim();
+        if (!msg || !chatChamadoId) return;
+        t.value = '';
+        const form = new FormData();
+        form.append('mensagem', msg);
+        const res = await fetch(`/api/tickets/chat/send?chamado_id=${chatChamadoId}`, { method: 'POST', body: form });
+        const data = await res.json();
+        if (data.ok) renderMsg(data.message);
+    }
+
+    function renderMsg(m) {
+        const tl = document.getElementById('mural_timeline');
+        const isMe = m.usuario === currentUser;
+        const div = document.createElement('div');
+        div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+        div.innerHTML = `
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-[9px] font-black uppercase tracking-widest ${isMe ? 'text-indigo-400' : 'text-slate-400'}">${m.usuario}</span>
+                <span class="text-[8px] text-slate-600 font-bold">${m.data_hora.split(' ')[1].slice(0,5)}</span>
+            </div>
+            <div class="max-w-[85%] px-5 py-3 rounded-2xl break-words ${isMe ? 'msg-bubble-me rounded-tr-none' : 'msg-bubble-other rounded-tl-none'}">
+                <p class="text-[13px] leading-relaxed font-medium whitespace-pre-wrap">${m.mensagem}</p>
+            </div>
+        `;
+        tl.appendChild(div);
+        tl.scrollTop = tl.scrollHeight;
+        chatLastId = m.id;
+    }
+
+    async function openMuralModal(id, titulo, autor, anexo) {
+        chatChamadoId = id;
+        chatLastId = 0;
+        document.getElementById('mural_titulo').textContent = titulo;
+        document.getElementById('mural_autor').textContent = 'Por: ' + autor;
+        document.getElementById('mural_timeline').innerHTML = '';
+        if (anexo && anexo !== 'None') {
+            const div = document.createElement('div');
+            div.className = 'mb-6 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20';
+            div.innerHTML = `<img src="${anexo}" class="w-full h-auto rounded-xl">`;
+            document.getElementById('mural_timeline').appendChild(div);
+        }
+        document.getElementById('muralModal').classList.add('open');
+        document.getElementById('muralOverlay').classList.add('open');
+        
+        // Zerar badge de mensagens não lidas no banco e na UI
+        fetch(`/api/tickets/chat/mark_read?chamado_id=${id}`, { method: 'POST' });
+        const badge = document.querySelector(`.unread-badge-${id}`);
+        if (badge) badge.remove();
+        
+        chatPoll();
+        chatPollTimer = setInterval(chatPoll, 10000);
+    }
+
+
+    function closeMuralModal() {
+        document.getElementById('muralModal').classList.remove('open');
+        document.getElementById('muralOverlay').classList.remove('open');
+        clearInterval(chatPollTimer);
+        chatChamadoId = null;
+    }
+
+    async function chatPoll() {
+        if (!chatChamadoId) return;
+        const res = await fetch(`/api/tickets/chat?chamado_id=${chatChamadoId}&since_id=${chatLastId}`);
+        const data = await res.json();
+        if (data.ok) data.messages.forEach(renderMsg);
+        
+        const resT = await fetch(`/api/tickets/chat/get_typing?chamado_id=${chatChamadoId}`);
+        const dataT = await resT.json();
+        if (dataT.typing.length) {
+            document.getElementById('mural_typing_text').textContent = dataT.typing.join(', ') + ' digitando...';
+            document.getElementById('mural_typing_bar').classList.remove('hidden');
+        } else {
+            document.getElementById('mural_typing_bar').classList.add('hidden');
+        }
+    }
+
+    document.getElementById('mural_msg')?.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = this.scrollHeight + 'px';
+        fetch(`/api/tickets/chat/typing?chamado_id=${chatChamadoId}`, { method: 'POST' });
+    });
+
+    document.getElementById('mural_msg')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSendMessage(); }
+    });
+
+    function openAdminAtalhos() { document.getElementById('adminAtalhosModal').classList.remove('hidden'); }
+    function closeAdminAtalhos() { document.getElementById('adminAtalhosModal').classList.add('hidden'); }
+    function setPickerIcon(i) { document.getElementById('input_picker_icon').value = i; updatePreview(); }
+    function updatePreview() {
+        document.getElementById('preview_icon').textContent = document.getElementById('input_picker_icon').value;
+        document.getElementById('preview_label').textContent = document.getElementById('input_picker_label').value || 'Novo Botão';
+    }
+
+    async function saveAtalho() {
+        const id = document.getElementById('atalho_edit_id').value;
+        const form = new FormData();
+        form.append('icone', document.getElementById('input_picker_icon').value);
+        form.append('label', document.getElementById('input_picker_label').value);
+        form.append('titulo_padrao', document.getElementById('input_picker_titulo').value);
+        form.append('categoria', document.getElementById('input_picker_cat').value);
+        form.append('prioridade', document.getElementById('input_picker_pri').value);
+        
+        const url = id ? `/api/tickets/atalhos/edit/${id}` : '/api/tickets/atalhos/add';
+        const res = await fetch(url, { method: 'POST', body: form });
+        if (res.ok) location.reload();
+    }
+
+    function editAtalho(a) {
+        document.getElementById('atalho_edit_id').value = a.id;
+        document.getElementById('input_picker_icon').value = a.icone;
+        document.getElementById('input_picker_label').value = a.label;
+        document.getElementById('input_picker_titulo').value = a.titulo_padrao;
+        document.getElementById('input_picker_cat').value = a.categoria;
+        document.getElementById('input_picker_pri').value = a.prioridade_padrao;
+        document.getElementById('cancel_edit_btn').classList.remove('hidden');
+        updatePreview();
+    }
+
+    async function deleteAtalho(id) {
+        if (confirm('Deseja excluir?')) {
+            const res = await fetch(`/api/tickets/atalhos/${id}`, { method: 'DELETE' });
+            if (res.ok) location.reload();
+        }
+    }
+
+    function cancelEditAtalho() {
+        document.getElementById('form_gerenciar_atalho').reset();
+        document.getElementById('atalho_edit_id').value = '';
+        document.getElementById('cancel_edit_btn').classList.add('hidden');
+        updatePreview();
+    }
+
+    function handleDoubleSubmit(f) {
+        const b = f.querySelector('button[type="submit"]');
+        b.disabled = true;
+        b.innerHTML = 'Enviando...';
+        return true;
+    }
+
+    // Polling de Notificações
+    async function checkGlobal() {
+        const res = await fetch('/api/tickets/status_global');
+        const data = await res.json();
+        // Lógica de Toasts e Badges (simulado aqui)
+        if (data.unread_list) {
+            for (const id in data.unread_list) {
+                const b = document.querySelector('.unread-badge-' + id);
+                if (b) b.textContent = data.unread_list[id];
+            }
+        }
+    }
+    setInterval(checkGlobal, 10000);
+
+    // Magnetic cards
+    document.addEventListener('DOMContentLoaded', () => {
+        const cards = document.querySelectorAll('.glass-card-magnetic');
+        cards.forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                card.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+                card.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+            });
+        });
+    });
+</script>
+{% endblock %}

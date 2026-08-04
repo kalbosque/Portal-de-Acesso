@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ativar Sistema | PrintDash AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 24px; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+    
+    <div class="max-w-md w-full glass-card p-10 shadow-2xl">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-black text-indigo-400 tracking-tighter mb-2">PRINTDASH <span class="text-white">AI</span></h1>
+            <p class="text-slate-400 text-sm font-medium">Sua licença expirou ou não foi ativada.</p>
+        </div>
+
+        {% if error %}
+        <div class="bg-rose-500/10 border border-rose-500/20 text-rose-500 p-4 rounded-xl text-xs font-bold mb-6 text-center">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form action="/ativar" method="post" class="space-y-6">
+            <div>
+                <label class="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Token de Ativação (30 Dias)</label>
+                <input type="text" name="token" required placeholder="PD-XXXX-XXXX-XXXX" 
+                    class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-4 text-white focus:outline-none focus:border-indigo-500 transition-colors placeholder:text-slate-600 font-mono">
+            </div>
+
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-indigo-500/20 uppercase text-xs tracking-widest">
+                Ativar Sistema
+            </button>
+        </form>
+
+        <div class="mt-8 pt-8 border-t border-white/5 text-center">
+            <p class="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">ID do Hardware:</p>
+            <code class="text-indigo-400 text-xs font-mono font-bold">{{ hardware_id }}</code>
+            <p class="text-[10px] text-slate-600 mt-4 leading-relaxed font-medium">Informe este ID ao suporte para gerar o seu token de aluguel.</p>
+        </div>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+    "APP_NAME": "Atual Contabilidade",
+    "APP_TAGLINE": "Core System",
+    "APP_LOGO_URL": "uploads/logo_customizada.jpg",
+    "APP_COLOR": "#142ef5",
+    "APP_PRICE_BW": 0.5,
+    "APP_PRICE_COLOR": 1.0,
+    "MODULO_IMPRESSAO": true,
+    "MODULO_SUPORTE": true,
+    "MODULO_ATENDIMENTO": true,
+    "URL_ATENDIMENTO": "http://192.168.1.236:3000",
+    "GUIA_SUPORTE_URL": "uploads/guia_suporte_usuario.pdf",
+    "WHATSAPP_WEBHOOK_URL": "http://evolution-api:8080",
+    "WHATSAPP_WEBHOOK_TOKEN": ""
+}

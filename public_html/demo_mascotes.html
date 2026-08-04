@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Escolha seu Mascote - Portal de Acesso</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Outfit:wght@700;900&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a1020;
+    color: #f1f5f9;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-family: 'Outfit', sans-serif;
+    text-align: center;
+    font-size: 2rem;
+    background: linear-gradient(135deg, #38bdf8, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-bottom: 40px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .card {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 24px;
+    padding: 32px 24px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 24px;
+    border: 2px solid transparent;
+    transition: all 0.3s;
+  }
+  .card:hover { transform: translateY(-6px); }
+  .card:hover::before { border-color: rgba(56,189,248,0.5); }
+  .card:hover { box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 30px rgba(56,189,248,0.08); }
+  
+  .card h3 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.15rem;
+    margin: 16px 0 6px;
+    color: #f1f5f9;
+  }
+  .card p {
+    font-size: 0.8rem;
+    color: #64748b;
+    line-height: 1.5;
+    font-weight: 600;
+  }
+  .badge {
+    display: inline-block;
+    background: rgba(56,189,248,0.1);
+    border: 1px solid rgba(56,189,248,0.3);
+    color: #38bdf8;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-top: 12px;
+  }
+
+  /* Preview no canto */
+  .corner-preview {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  .bubble {
+    background: rgba(10,18,40,0.97);
+    border: 1px solid rgba(56,189,248,0.5);
+    color: #e2e8f0;
+    padding: 12px 16px;
+    border-radius: 14px 14px 4px 14px;
+    font-size: 0.82rem;
+    max-width: 210px;
+    line-height: 1.5;
+    position: relative;
+    animation: popIn 0.4s ease;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+  }
+  .bubble strong { color: #38bdf8; display: block; font-size: 0.7rem; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:4px; }
+  .bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px; right: 18px;
+    border-width: 8px 8px 0 0;
+    border-style: solid;
+    border-color: rgba(10,18,40,0.97) transparent transparent transparent;
+  }
+
+  /* ===================== SVG MASCOTES ===================== */
+  .mascote-wrap {
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 1 - Contador com Óculos */
+  .contador svg { animation: float 3s ease-in-out infinite; }
+  .olho { animation: piscar 4s ease-in-out infinite; transform-origin: center; }
+
+  /* 2 - Calculadora Fofa */
+  .calc-display { animation: blink-calc 2s steps(1) infinite; }
+  .calc-body { animation: float 3.5s ease-in-out infinite; }
+
+  /* 3 - Moeda com Rosto */
+  .moeda-body { animation: giro 4s ease-in-out infinite; transform-origin: center; }
+  .moeda-brilho { animation: brilho 2s ease-in-out infinite; }
+
+  /* 4 - Robô Contador */
+  .robo-body { animation: float 3s ease-in-out infinite; }
+  .robo-olho { animation: scanline 3s linear infinite; }
+  .antena { animation: antena-blink 1.5s ease-in-out infinite; }
+
+  /* Animações dos Membros - Contador (Novo) */
+  .contador-head { animation: head-bob 3s ease-in-out infinite; transform-origin: 65px 92px; }
+  .contador-arm-l { animation: arm-swing-l 3s ease-in-out infinite; transform-origin: 43px 90px; }
+  .contador-arm-r { animation: arm-swing-r 3s ease-in-out infinite; transform-origin: 87px 90px; }
+  .contador-leg-l { animation: leg-swing-l 3s ease-in-out infinite; transform-origin: 55px 118px; }
+  .contador-leg-r { animation: leg-swing-r 3s ease-in-out infinite; transform-origin: 75px 118px; }
+
+  @keyframes head-bob {
+    0%, 100% { transform: rotate(0deg) translateY(0); }
+    50% { transform: rotate(4deg) translateY(-3px); }
+  }
+  @keyframes arm-swing-l {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-20deg); }
+  }
+  @keyframes arm-swing-r {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(20deg); }
+  }
+  @keyframes leg-swing-l {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(15deg); }
+  }
+  @keyframes leg-swing-r {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-15deg); }
+  }
+
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+  }
+  @keyframes piscar {
+    0%,94%,100% { transform: scaleY(1); }
+    96%          { transform: scaleY(0.1); }
+  }
+  @keyframes blink-calc {
+    0%,49%  { opacity: 1; }
+    50%,100% { opacity: 0.3; }
+  }
+  @keyframes giro {
+    0%,40%,100% { transform: scaleX(1); }
+    50%          { transform: scaleX(0.15); }
+    60%          { transform: scaleX(1); }
+  }
+  @keyframes brilho {
+    0%,100% { opacity: 0.8; }
+    50%      { opacity: 0.2; }
+  }
+  @keyframes scanline {
+    0%    { transform: translateX(-6px); }
+    50%   { transform: translateX(6px); }
+    100%  { transform: translateX(-6px); }
+  }
+  @keyframes antena-blink {
+    0%,100% { fill: #f87171; filter: drop-shadow(0 0 4px #f87171); }
+    50%      { fill: #fbbf24; filter: drop-shadow(0 0 6px #fbbf24); }
+  }
+  @keyframes popIn {
+    from { opacity:0; transform:translateY(10px) scale(0.9); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<h1>🛡️ Escolha seu Mascote</h1>
+<p class="subtitle">Clique em um mascote para ver a prévia no canto da tela</p>
+
+<div class="grid">
+
+  <!-- 1: CONTADOR COM ÓCULOS -->
+  <div class="card" onclick="preview(1)">
+    <div class="mascote-wrap contador">
+      <svg width="130" height="150" viewBox="0 0 130 150">
+        <!-- Sombra no chão -->
+        <ellipse cx="65" cy="145" rx="30" ry="8" fill="rgba(56,189,248,0.15)" />
+        
+        <!-- Pernas (agora em grupos separados) -->
+        <g class="contador-leg-l">
+          <rect x="48" y="118" width="14" height="20" rx="6" fill="#1e3a5f"/>
+          <ellipse cx="55" cy="140" rx="10" ry="5" fill="#1e293b"/>
+        </g>
+        <g class="contador-leg-r">
+          <rect x="68" y="118" width="14" height="20" rx="6" fill="#1e3a5f"/>
+          <ellipse cx="75" cy="140" rx="10" ry="5" fill="#1e293b"/>
+        </g>
+        
+        <!-- Braço Esquerdo -->
+        <g class="contador-arm-l">
+          <rect x="15" y="85" width="28" height="10" rx="5" fill="#1e3a5f"/>
+          <!-- Pasta/livro na mão esquerda -->
+          <rect x="8" y="78" width="20" height="25" rx="4" fill="#f59e0b" />
+          <line x1="11" y1="84" x2="25" y2="84" stroke="#fbbf24" stroke-width="1.5"/>
+          <line x1="11" y1="88" x2="25" y2="88" stroke="#fbbf24" stroke-width="1.5"/>
+          <line x1="11" y1="92" x2="20" y2="92" stroke="#fbbf24" stroke-width="1.5"/>
+        </g>
+
+        <!-- Tronco -->
+        <rect x="42" y="82" width="46" height="40" rx="10" fill="#1e3a5f" />
+        <!-- Gravata -->
+        <polygon points="65,85 69,88 65,100 61,88" fill="#f87171" />
+
+        <!-- Braço Direito -->
+        <g class="contador-arm-r">
+          <rect x="87" y="85" width="28" height="10" rx="5" fill="#1e3a5f"/>
+          <!-- Calculadora na mão direita -->
+          <rect x="100" y="78" width="22" height="28" rx="4" fill="#334155"/>
+          <rect x="103" y="81" width="16" height="6" rx="2" fill="#38bdf8" opacity="0.8"/>
+          <rect x="103" y="90" width="4" height="4" rx="1" fill="#94a3b8"/>
+          <rect x="109" y="90" width="4" height="4" rx="1" fill="#94a3b8"/>
+          <rect x="115" y="90" width="4" height="4" rx="1" fill="#94a3b8"/>
+          <rect x="103" y="96" width="4" height="4" rx="1" fill="#94a3b8"/>
+          <rect x="109" y="96" width="4" height="4" rx="1" fill="#10b981"/>
+          <rect x="115" y="96" width="4" height="4" rx="1" fill="#f87171"/>
+        </g>
+
+        <!-- Cabeça e Pescoço agrupados -->
+        <g class="contador-head">
+          <rect x="48" y="76" width="34" height="15" rx="5" fill="#1e3a5f" opacity="0.8"/> <!-- Pescoço -->
+          <rect x="36" y="42" width="58" height="50" rx="20" fill="#2563eb" />
+          <!-- Rosto mais claro -->
+          <rect x="42" y="50" width="46" height="38" rx="15" fill="#3b82f6" />
+          <!-- Óculos -->
+          <circle cx="53" cy="65" r="10" fill="none" stroke="#93c5fd" stroke-width="3"/>
+          <circle cx="77" cy="65" r="10" fill="none" stroke="#93c5fd" stroke-width="3"/>
+          <line x1="63" y1="65" x2="67" y2="65" stroke="#93c5fd" stroke-width="2"/>
+          <!-- Olhos (dentro dos óculos) -->
+          <circle class="olho" cx="53" cy="65" r="5" fill="#0f172a" />
+          <circle class="olho" cx="77" cy="65" r="5" fill="#0f172a" />
+          <!-- Brilho olhos -->
+          <circle cx="55" cy="63" r="2" fill="white" opacity="0.8"/>
+          <circle cx="79" cy="63" r="2" fill="white" opacity="0.8"/>
+          <!-- Sorriso -->
+          <path d="M57 76 Q65 82 73 76" stroke="#bfdbfe" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </g>
+      </svg>
+    </div>
+    <h3>Contador Amigo</h3>
+    <p>Contador clássico com óculos, gravata e calculadora. Profissional e acolhedor.</p>
+    <span class="badge">⭐ Recomendado</span>
+  </div>
+
+  <!-- 2: CALCULADORA FOFA -->
+  <div class="card" onclick="preview(2)">
+    <div class="mascote-wrap">
+      <svg class="calc-body" width="120" height="150" viewBox="0 0 120 150">
+        <!-- Sombra -->
+        <ellipse cx="60" cy="145" rx="30" ry="6" fill="rgba(56,189,248,0.1)" />
+        <!-- Corpo calculadora -->
+        <rect x="15" y="20" width="90" height="115" rx="18" fill="#1e293b" />
+        <rect x="15" y="20" width="90" height="115" rx="18" fill="none" stroke="#38bdf8" stroke-width="2" opacity="0.6"/>
+        <!-- Display -->
+        <rect x="22" y="30" width="76" height="28" rx="8" fill="#0f172a"/>
+        <rect class="calc-display" x="25" y="33" width="70" height="22" rx="6" fill="#10b981" opacity="0.2"/>
+        <text x="60" y="49" text-anchor="middle" font-size="14" fill="#10b981" font-family="monospace" font-weight="bold">R$ 0,00</text>
+        <!-- Olhos -->
+        <circle cx="40" cy="74" r="9" fill="#0f172a" />
+        <circle cx="80" cy="74" r="9" fill="#0f172a" />
+        <circle cx="43" cy="71" r="3.5" fill="white" opacity="0.9"/>
+        <circle cx="83" cy="71" r="3.5" fill="white" opacity="0.9"/>
+        <!-- Pupilas -->
+        <circle cx="41" cy="74" r="4" fill="#38bdf8"/>
+        <circle cx="81" cy="74" r="4" fill="#38bdf8"/>
+        <!-- Sorriso -->
+        <path d="M45 86 Q60 96 75 86" stroke="#38bdf8" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <!-- Bochechas -->
+        <circle cx="30" cy="84" r="8" fill="#f87171" opacity="0.3"/>
+        <circle cx="90" cy="84" r="8" fill="#f87171" opacity="0.3"/>
+        <!-- Botões decorativos -->
+        <rect x="22" y="100" width="16" height="10" rx="4" fill="#334155"/>
+        <rect x="42" y="100" width="16" height="10" rx="4" fill="#334155"/>
+        <rect x="62" y="100" width="16" height="10" rx="4" fill="#334155"/>
+        <rect x="82" y="100" width="16" height="10" rx="4" fill="#10b981"/>
+        <rect x="22" y="114" width="76" height="10" rx="4" fill="#2563eb" opacity="0.6"/>
+        <!-- Braços curvos -->
+        <path d="M15 80 Q0 75 5 60" stroke="#1e293b" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <path d="M105 80 Q120 75 115 60" stroke="#1e293b" stroke-width="10" fill="none" stroke-linecap="round"/>
+        <!-- Mãos -->
+        <circle cx="5" cy="60" r="7" fill="#334155"/>
+        <circle cx="115" cy="60" r="7" fill="#334155"/>
+      </svg>
+    </div>
+    <h3>Calcinha a Calculadora</h3>
+    <p>Uma calculadora animada e fofa com display de valores. Temática perfeita para contabilidade.</p>
+    <span class="badge">💰 Temático</span>
+  </div>
+
+  <!-- 3: MOEDA DOURADA -->
+  <div class="card" onclick="preview(3)">
+    <div class="mascote-wrap">
+      <svg width="130" height="150" viewBox="0 0 130 150">
+        <!-- Sombra -->
+        <ellipse cx="65" cy="145" rx="28" ry="6" fill="rgba(251,191,36,0.15)" />
+        <!-- Moeda - corpo -->
+        <g class="moeda-body">
+          <circle cx="65" cy="75" r="50" fill="url(#goldGrad)" />
+          <circle cx="65" cy="75" r="42" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="8 4" opacity="0.5"/>
+          <!-- Brilhos borda -->
+          <circle cx="65" cy="75" r="50" fill="none" stroke="#fef3c7" stroke-width="2" opacity="0.6"/>
+          <!-- Brilho topo -->
+          <ellipse class="moeda-brilho" cx="50" cy="48" rx="16" ry="8" fill="white" opacity="0.25" transform="rotate(-30,50,48)"/>
+          <!-- Olhos -->
+          <circle cx="50" cy="70" r="9" fill="#92400e"/>
+          <circle cx="80" cy="70" r="9" fill="#92400e"/>
+          <circle cx="53" cy="67" r="4" fill="white" opacity="0.9"/>
+          <circle cx="83" cy="67" r="4" fill="white" opacity="0.9"/>
+          <circle cx="51" cy="70" r="5" fill="#1c1917"/>
+          <circle cx="81" cy="70" r="5" fill="#1c1917"/>
+          <!-- Sorriso -->
+          <path d="M48 85 Q65 97 82 85" stroke="#92400e" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+          <!-- R$ no centro -->
+          <text x="65" y="65" text-anchor="middle" font-size="11" fill="#92400e" font-weight="900" font-family="Outfit,sans-serif" opacity="0.4">R$</text>
+          <!-- Bochechas -->
+          <circle cx="35" cy="82" r="8" fill="#f87171" opacity="0.35"/>
+          <circle cx="95" cy="82" r="8" fill="#f87171" opacity="0.35"/>
+        </g>
+        <defs>
+          <radialGradient id="goldGrad" cx="40%" cy="35%">
+            <stop offset="0%" stop-color="#fde68a"/>
+            <stop offset="50%" stop-color="#f59e0b"/>
+            <stop offset="100%" stop-color="#b45309"/>
+          </radialGradient>
+        </defs>
+        <!-- Braços curvos -->
+        <path d="M18 80 Q5 70 12 55" stroke="#f59e0b" stroke-width="8" fill="none" stroke-linecap="round"/>
+        <path d="M112 80 Q125 70 118 55" stroke="#f59e0b" stroke-width="8" fill="none" stroke-linecap="round"/>
+        <circle cx="12" cy="54" r="7" fill="#fbbf24"/>
+        <circle cx="118" cy="54" r="7" fill="#fbbf24"/>
+        <!-- Perninha -->
+        <ellipse cx="52" cy="130" rx="12" ry="6" fill="#f59e0b" opacity="0.8"/>
+        <ellipse cx="78" cy="130" rx="12" ry="6" fill="#f59e0b" opacity="0.8"/>
+      </svg>
+    </div>
+    <h3>Moedin</h3>
+    <p>Uma moedinha dourada animada com rosinho simpático. Direto ao tema do escritório financeiro!</p>
+    <span class="badge">🪙 Original</span>
+  </div>
+
+  <!-- 4: ROBÔ CONTÁBIL -->
+  <div class="card" onclick="preview(4)">
+    <div class="mascote-wrap">
+      <svg class="robo-body" width="120" height="150" viewBox="0 0 120 150">
+        <!-- Sombra -->
+        <ellipse cx="60" cy="148" rx="28" ry="5" fill="rgba(99,102,241,0.2)" />
+        <!-- Antena -->
+        <line x1="60" y1="12" x2="60" y2="26" stroke="#6366f1" stroke-width="3" stroke-linecap="round"/>
+        <circle class="antena" cx="60" cy="10" r="5" fill="#f87171"/>
+        <!-- Cabeça -->
+        <rect x="25" y="26" width="70" height="55" rx="16" fill="#1e1b4b"/>
+        <rect x="25" y="26" width="70" height="55" rx="16" fill="none" stroke="#6366f1" stroke-width="2" opacity="0.7"/>
+        <!-- Visor/olhos escaneando -->
+        <rect x="32" y="38" width="56" height="18" rx="8" fill="#0f172a"/>
+        <rect class="robo-olho" x="34" y="40" width="22" height="14" rx="6" fill="#6366f1" opacity="0.9"/>
+        <rect class="robo-olho" x="62" y="40" width="22" height="14" rx="6" fill="#6366f1" opacity="0.9"/>
+        <!-- Reflexo olho -->
+        <rect x="37" y="42" width="8" height="4" rx="2" fill="white" opacity="0.6"/>
+        <rect x="65" y="42" width="8" height="4" rx="2" fill="white" opacity="0.6"/>
+        <!-- Boca/display -->
+        <rect x="35" y="62" width="50" height="12" rx="5" fill="#0f172a"/>
+        <text x="60" y="72" text-anchor="middle" font-size="8" fill="#10b981" font-family="monospace">10110 01001</text>
+        <!-- Corpo -->
+        <rect x="20" y="84" width="80" height="52" rx="14" fill="#1e1b4b"/>
+        <rect x="20" y="84" width="80" height="52" rx="14" fill="none" stroke="#6366f1" stroke-width="2" opacity="0.5"/>
+        <!-- Detalhe peito - símbolo % -->
+        <circle cx="60" cy="105" r="16" fill="#0f172a"/>
+        <circle cx="60" cy="105" r="16" fill="none" stroke="#6366f1" stroke-width="2"/>
+        <text x="60" y="111" text-anchor="middle" font-size="18" fill="#818cf8" font-weight="900" font-family="Outfit,sans-serif">%</text>
+        <!-- Luzes laterais -->
+        <circle cx="30" cy="98" r="4" fill="#10b981" opacity="0.8"/>
+        <circle cx="90" cy="98" r="4" fill="#f87171" opacity="0.8"/>
+        <!-- Braços -->
+        <rect x="0" y="86" width="22" height="12" rx="6" fill="#1e1b4b"/>
+        <rect x="98" y="86" width="22" height="12" rx="6" fill="#1e1b4b"/>
+        <!-- Mãos -->
+        <circle cx="5" cy="92" r="7" fill="#312e81"/>
+        <circle cx="115" cy="92" r="7" fill="#312e81"/>
+        <!-- Pernas -->
+        <rect x="32" y="134" width="20" height="14" rx="6" fill="#1e1b4b"/>
+        <rect x="68" y="134" width="20" height="14" rx="6" fill="#1e1b4b"/>
+        <!-- Pés -->
+        <rect x="26" y="144" width="28" height="8" rx="4" fill="#312e81"/>
+        <rect x="66" y="144" width="28" height="8" rx="4" fill="#312e81"/>
+      </svg>
+    </div>
+    <h3>Robo Fiscal</h3>
+    <p>Robô contábil com visor de escaneamento e símbolo de porcentagem no peito. High-tech!</p>
+    <span class="badge">🤖 Futurista</span>
+  </div>
+
+</div>
+
+<!-- Preview no canto (fixo) -->
+<div class="corner-preview" id="corner-preview" style="display:none">
+  <div class="bubble" id="corner-bubble">
+    <strong id="bubble-name">Contador</strong>
+    <span id="bubble-msg">Olá! Posso ajudar com algo?</span>
+  </div>
+  <div id="corner-avatar" style="cursor:pointer" onclick="this.parentElement.style.display='none'"></div>
+</div>
+
+<script>
+const mascotes = {
+  1: {
+    name: '🕵️ Contador Amigo',
+    msg: 'Olá! Sou o Contador do Portal. Precisa de ajuda com os documentos?',
+    svgSmall: `<svg width="60" height="60" viewBox="0 0 130 150">
+      <g class="contador-leg-l"><rect x="48" y="118" width="14" height="20" rx="6" fill="#1e3a5f"/><ellipse cx="55" cy="140" rx="10" ry="5" fill="#1e293b"/></g>
+      <g class="contador-leg-r"><rect x="68" y="118" width="14" height="20" rx="6" fill="#1e3a5f"/><ellipse cx="75" cy="140" rx="10" ry="5" fill="#1e293b"/></g>
+      <g class="contador-arm-l"><rect x="15" y="85" width="28" height="10" rx="5" fill="#1e3a5f"/></g>
+      <rect x="42" y="82" width="46" height="40" rx="10" fill="#1e3a5f" />
+      <polygon points="65,85 69,88 65,100 61,88" fill="#f87171" />
+      <g class="contador-arm-r"><rect x="87" y="85" width="28" height="10" rx="5" fill="#1e3a5f"/></g>
+      <g class="contador-head">
+        <rect x="36" y="42" width="58" height="50" rx="20" fill="#2563eb"/>
+        <rect x="42" y="50" width="46" height="38" rx="15" fill="#3b82f6"/>
+        <circle cx="53" cy="65" r="10" fill="none" stroke="#93c5fd" stroke-width="3"/>
+        <circle cx="77" cy="65" r="10" fill="none" stroke="#93c5fd" stroke-width="3"/>
+        <line x1="63" y1="65" x2="67" y2="65" stroke="#93c5fd" stroke-width="2"/>
+        <circle cx="53" cy="65" r="5" fill="#0f172a"/>
+        <circle cx="77" cy="65" r="5" fill="#0f172a"/>
+        <circle cx="55" cy="63" r="2" fill="white"/>
+        <circle cx="79" cy="63" r="2" fill="white"/>
+        <path d="M57 76 Q65 82 73 76" stroke="#bfdbfe" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </g>
+    </svg>`,
+    color: '#3b82f6'
+  },
+  2: {
+    name: '🧮 Calcinha',
+    msg: 'Bip bip! Vamos calcular juntos? Estou aqui para ajudar!',
+    svgSmall: `<svg width="60" height="60" viewBox="0 0 120 150">
+      <rect x="15" y="20" width="90" height="115" rx="18" fill="#1e293b"/>
+      <rect x="15" y="20" width="90" height="115" rx="18" fill="none" stroke="#38bdf8" stroke-width="2"/>
+      <rect x="22" y="30" width="76" height="28" rx="8" fill="#0f172a"/>
+      <text x="60" y="49" text-anchor="middle" font-size="14" fill="#10b981" font-family="monospace" font-weight="bold">R$</text>
+      <circle cx="40" cy="74" r="9" fill="#0f172a"/>
+      <circle cx="80" cy="74" r="9" fill="#0f172a"/>
+      <circle cx="43" cy="71" r="3.5" fill="white"/>
+      <circle cx="83" cy="71" r="3.5" fill="white"/>
+      <path d="M45 86 Q60 96 75 86" stroke="#38bdf8" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </svg>`,
+    color: '#10b981'
+  },
+  3: {
+    name: '🪙 Moedin',
+    msg: 'Oi! Sou o Moedin! Posso te ajudar a organizar suas finanças!',
+    svgSmall: `<svg width="60" height="60" viewBox="0 0 130 150">
+      <circle cx="65" cy="75" r="50" fill="url(#g2)"/>
+      <circle cx="50" cy="70" r="9" fill="#92400e"/>
+      <circle cx="80" cy="70" r="9" fill="#92400e"/>
+      <circle cx="53" cy="67" r="4" fill="white"/>
+      <circle cx="83" cy="67" r="4" fill="white"/>
+      <path d="M48 85 Q65 97 82 85" stroke="#92400e" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <defs><radialGradient id="g2" cx="40%" cy="35%"><stop offset="0%" stop-color="#fde68a"/><stop offset="100%" stop-color="#b45309"/></radialGradient></defs>
+    </svg>`,
+    color: '#f59e0b'
+  },
+  4: {
+    name: '🤖 Robo Fiscal',
+    msg: 'SISTEMA ATIVO. Olá! Robo Fiscal online e pronto para ajudar!',
+    svgSmall: `<svg width="60" height="60" viewBox="0 0 120 150">
+      <rect x="25" y="26" width="70" height="55" rx="16" fill="#1e1b4b"/>
+      <rect x="25" y="26" width="70" height="55" rx="16" fill="none" stroke="#6366f1" stroke-width="2"/>
+      <rect x="32" y="38" width="56" height="18" rx="8" fill="#0f172a"/>
+      <rect x="34" y="40" width="22" height="14" rx="6" fill="#6366f1"/>
+      <rect x="62" y="40" width="22" height="14" rx="6" fill="#6366f1"/>
+      <rect x="35" y="62" width="50" height="12" rx="5" fill="#0f172a"/>
+      <rect x="20" y="84" width="80" height="45" rx="14" fill="#1e1b4b"/>
+      <text x="60" y="115" text-anchor="middle" font-size="18" fill="#818cf8" font-weight="900" font-family="sans-serif">%</text>
+    </svg>`,
+    color: '#6366f1'
+  }
+};
+
+function preview(id) {
+  const m = mascotes[id];
+  const el = document.getElementById('corner-preview');
+  document.getElementById('bubble-name').textContent = m.name;
+  document.getElementById('bubble-msg').textContent = m.msg;
+  document.getElementById('corner-avatar').innerHTML = `
+    <div style="width:65px;height:65px;background:linear-gradient(145deg,#0d1b2e,#162035);border:2px solid ${m.color};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px ${m.color}55;animation:floatAnim 3s ease-in-out infinite;overflow:hidden;">
+      ${m.svgSmall}
+    </div>`;
+  el.style.display = 'flex';
+  // Destacar card selecionado
+  document.querySelectorAll('.card').forEach(c => c.style.borderColor = '');
+  document.querySelectorAll('.card')[id-1].style.boxShadow = `0 0 0 2px ${m.color}, 0 20px 40px rgba(0,0,0,0.4)`;
+}
+
+// Estilo da animação do canto
+const st = document.createElement('style');
+st.textContent = `@keyframes floatAnim { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }`;
+document.head.appendChild(st);
+
+// Mostrar o primeiro por padrão
+setTimeout(()=>preview(1), 500);
+</script>
+</body>
+</html>

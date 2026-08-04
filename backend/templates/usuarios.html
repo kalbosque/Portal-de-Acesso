@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12 animate-fade-in">
+    
+    <!-- Header Executivo Modernizado -->
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 mb-12">
+        <div class="flex items-center gap-6">
+            <div class="relative group">
+                <div class="absolute -inset-1 bg-gradient-to-r from-fuchsia-500 to-indigo-500 rounded-[2.5rem] blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                <div class="relative p-5 bg-slate-900 rounded-[2.2rem] border border-white/10 shadow-2xl">
+                    <svg class="w-10 h-10 text-fuchsia-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                </div>
+            </div>
+            <div>
+                <h1 class="text-5xl font-black text-white tracking-tighter mb-2 uppercase italic leading-none">Gestão <span class="text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-indigo-400">Usuários</span></h1>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 px-3 py-1 bg-fuchsia-500/10 rounded-full border border-fuchsia-500/20">
+                        <span class="w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse shadow-[0_0_10px_#d946ef]"></span>
+                        <span class="text-[9px] font-black text-fuchsia-500 uppercase tracking-widest">{{ usuarios|length }} Colaboradores Ativos</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <button onclick="openCreateModal()" class="px-8 py-4 rounded-2xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all border border-indigo-500">
+            Cadastrar Novo Acesso
+        </button>
+    </div>
+
+    <!-- Grid de Usuários Premium -->
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+        {% for u in usuarios %}
+        <div class="glass-panel p-8 rounded-[3rem] border border-white/5 relative group overflow-hidden hover:border-indigo-500/30 transition-all duration-500 bg-slate-900/40 backdrop-blur-3xl shadow-2xl">
+            <!-- Background Decoration -->
+            <div class="absolute -top-12 -right-12 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl group-hover:bg-indigo-500/10 transition-colors"></div>
+            
+            <div class="flex items-start justify-between mb-8">
+                <div class="flex items-center gap-5">
+                    <div class="w-16 h-16 rounded-[1.5rem] bg-gradient-to-br from-indigo-500 to-fuchsia-600 flex items-center justify-center text-white font-black text-xl shadow-2xl border border-white/10 group-hover:rotate-6 transition-transform">
+                        {{ (u.nome or u.username)[:2]|upper }}
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-black text-white tracking-tight leading-none mb-2">{{ u.nome or 'Sem Nome' }}</h3>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">@{{ u.username }}</span>
+                            <span class="w-1 h-1 rounded-full bg-slate-700"></span>
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">{{ u.role }}</span>
+                        </div>
+                    </div>
+                </div>
+                <span class="px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                    {{ u.status_conta }}
+                </span>
+            </div>
+
+            <!-- Dados de Contato -->
+            <div class="space-y-4 mb-8">
+                <div class="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    <span class="text-xs text-slate-300 font-bold truncate">{{ u.email or 'E-mail não cadastrado' }}</span>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    <span class="text-xs text-slate-300 font-bold">Acesso via: <span class="text-indigo-400 italic">portal_ti_{{ u.username }}</span></span>
+                </div>
+            </div>
+
+            <!-- Regras de Acesso (Mini-Tags) -->
+            <div class="mb-8">
+                <p class="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] mb-3">Módulos Autorizados</p>
+                <div class="flex flex-wrap gap-2">
+                    {% set perms = u.permissoes_list or [] %}
+                    {% if u.role == 'admin' %}
+                        <span class="px-2 py-1 rounded-md text-[7px] font-black uppercase tracking-widest bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20">Acesso Total</span>
+                    {% else %}
+                        {% for p in perms %}
+                            <span class="px-2 py-1 rounded-md text-[7px] font-black uppercase tracking-widest bg-slate-800 text-slate-400 border border-white/5">{{ p }}</span>
+                        {% endfor %}
+                        {% if not perms %}<span class="text-[7px] text-slate-700 font-black uppercase italic">Sem Regras</span>{% endif %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Ações Rápidas -->
+            <div class="flex items-center gap-3 pt-6 border-t border-white/5">
+                <button onclick="handleEditClick(this)" data-user='{{ u|tojson|safe }}' class="flex-grow py-2.5 rounded-xl bg-white/5 text-slate-400 text-[9px] font-black uppercase tracking-widest hover:text-white hover:bg-white/10 border border-white/5 transition-all">Editar Cadastro</button>
+                <button onclick="openPassModal({{ u.id }}, '{{ u.username }}')" class="w-12 h-10 flex items-center justify-center rounded-xl bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/20 transition-all shadow-lg" title="Resetar Senha">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </button>
+                <button onclick="deleteUser({{ u.id }}, '{{ u.username }}')" class="w-12 h-10 flex items-center justify-center rounded-xl bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-500/20 transition-all shadow-lg" title="Excluir">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Modal Unificado: Criar / Editar -->
+<div id="modal-user" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md hidden animate-fade-in">
+    <div class="glass-panel w-full max-w-xl rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
+        <div class="p-8 border-b border-white/5 bg-slate-900/50 flex justify-between items-center">
+            <h3 id="modal-title" class="text-2xl font-black text-white uppercase italic tracking-tighter">Gerenciar Acesso</h3>
+            <button onclick="closeModal('modal-user')" class="text-slate-500 hover:text-white transition-colors">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <form id="form-user" class="p-10 space-y-8">
+            <input type="hidden" name="user_id" id="field-uid">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Identificação Real</label>
+                    <input type="text" name="nome" placeholder="Nome Completo" required class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Endereço de E-mail</label>
+                    <input type="email" name="email" placeholder="email@empresa.com" required class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
+                </div>
+            </div>
+
+            <div id="auth-fields" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Login de Cadastro</label>
+                    <input type="text" name="username" placeholder="ex: jose.silva" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Senha Privada</label>
+                    <div class="relative">
+                        <input type="password" name="password" id="field-pass" placeholder="••••••••" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
+                        <button type="button" onclick="generatePass()" class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-400 uppercase hover:text-white transition-colors">Gerar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="md:col-span-1">
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Nível Hierárquico</label>
+                    <select name="role" id="field-role" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none">
+                        <option value="operator">Operador</option>
+                        <option value="admin">Administrador</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 italic">Módulos do Sistema (Regras)</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {% for mod in ['Dashboard', 'Equipamentos', 'Relatórios', 'Suporte', 'Usuários', 'Ajustes'] %}
+                        <div class="relative">
+                            <input type="checkbox" name="perms" value="{{ mod }}" id="cb-{{ mod }}" class="hidden peer">
+                            <label for="cb-{{ mod }}" class="flex items-center justify-center p-2 rounded-xl bg-white/5 border border-white/10 text-[8px] font-black text-slate-500 uppercase tracking-tighter cursor-pointer peer-checked:bg-indigo-600 peer-checked:text-white peer-checked:border-indigo-500 transition-all">
+                                {{ mod }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="w-full py-5 bg-gradient-to-r from-indigo-600 to-indigo-800 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-[1.02] active:scale-95 transition-all border border-indigo-500">
+                Finalizar e Salvar Credenciais
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Reset Senha -->
+<div id="modal-pass" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-xl hidden animate-fade-in">
+    <div class="glass-panel w-full max-w-md rounded-[3rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
+        <div class="p-8 border-b border-white/5 bg-slate-900/50 flex justify-between items-center">
+            <h3 class="text-xl font-black text-white uppercase italic tracking-tighter">🔒 Nova Senha</h3>
+            <button onclick="closeModal('modal-pass')" class="text-slate-500 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <form id="form-pass" class="p-10 space-y-8">
+            <input type="hidden" name="user_id" id="pass-uid">
+            <div>
+                <p id="pass-target" class="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-6 italic"></p>
+                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Defina a Nova Chave</label>
+                <input type="password" name="new_password" required minlength="6" placeholder="Mínimo 6 caracteres" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
+            </div>
+            <button type="submit" class="w-full py-4 bg-cyan-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-cyan-500 transition-all">Atualizar Acesso</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    function closeOnBg(e, id) { if (e.target === e.currentTarget) closeModal(id); }
+
+    function handleEditClick(btn) {
+        try {
+            const userData = JSON.parse(btn.getAttribute('data-user'));
+            openEditModal(userData);
+        } catch(e) {
+            console.error('Erro ao ler dados do usuário:', e);
+            alert('Erro ao carregar dados para edição.');
+        }
+    }
+
+    function openCreateModal() {
+        document.getElementById('modal-title').innerText = '➕ Novo Acesso';
+        document.getElementById('form-user').reset();
+        document.getElementById('field-uid').value = '';
+        document.getElementById('auth-fields').classList.remove('hidden');
+        document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+        openModal('modal-user');
+    }
+
+    function openEditModal(u) {
+        document.getElementById('modal-title').innerText = '✏️ Editar Acesso';
+        document.getElementById('field-uid').value = u.id;
+        document.getElementById('form-user').nome.value = u.nome || '';
+        document.getElementById('form-user').email.value = u.email || '';
+        document.getElementById('field-role').value = u.role || 'operator';
+        document.getElementById('auth-fields').classList.add('hidden'); // Esconde login/senha na edição rápida
+        
+        // Carrega permissões
+        document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+        try {
+            const perms = JSON.parse(u.permissoes || '[]');
+            perms.forEach(p => {
+                const cb = document.getElementById('cb-' + p);
+                if(cb) cb.checked = true;
+            });
+        } catch(e) {}
+        
+        openModal('modal-user');
+    }
+
+    function openPassModal(uid, user) {
+        document.getElementById('pass-uid').value = uid;
+        document.getElementById('pass-target').innerText = 'Alterando senha de @' + user;
+        openModal('modal-pass');
+    }
+
+    function generatePass() {
+        const pass = Math.random().toString(36).slice(-8).toUpperCase();
+        document.getElementById('field-pass').value = pass;
+        document.getElementById('field-pass').type = 'text';
+        setTimeout(() => { document.getElementById('field-pass').type = 'password'; }, 3000);
+    }
+
+    document.getElementById('form-user').onsubmit = async (e) => {
+        e.preventDefault();
+        const uid = document.getElementById('field-uid').value;
+        const endpoint = uid ? '/api/usuarios/edit_perms' : '/api/usuarios/create';
+        const fd = new FormData(e.target);
+        
+        // Debug: Ver quais permissões estão sendo enviadas
+        const perms = [];
+        document.querySelectorAll('input[name="perms"]:checked').forEach(cb => perms.push(cb.value));
+        console.log('Enviando permissões:', perms);
+        
+        try {
+            const res = await fetch(endpoint, { method: 'POST', body: fd }).then(r => r.json());
+            if(res.success) {
+                alert('Configurações salvas com sucesso!');
+                window.location.reload();
+            } else {
+                alert(res.detail || 'Erro ao processar as alterações');
+            }
+        } catch(err) {
+            console.error('Erro no envio:', err);
+            alert('Falha na comunicação com o servidor');
+        }
+    };
+
+    document.getElementById('form-pass').onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const res = await fetch('/api/usuarios/edit_pass', { method: 'POST', body: fd }).then(r => r.json());
+        if(res.success) { alert('Senha alterada!'); closeModal('modal-pass'); } else alert(res.detail || 'Erro ao alterar');
+    };
+
+    async function deleteUser(id, user) {
+        if(!confirm(`Excluir acesso de @${user} permanentemente?`)) return;
+        const fd = new FormData(); fd.append('user_id', id);
+        const res = await fetch('/api/usuarios/delete', { method: 'POST', body: fd }).then(r => r.json());
+        if(res.success) window.location.reload(); else alert(res.detail || 'Erro ao excluir');
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,126 @@
+<!-- WIDGET DE USUARIOS - Coloque este código em index.php onde desejar -->
+<div class="glass-panel rounded-2xl p-6 border border-slate-700/50 hover-card" id="usuarios-widget">
+    <div class="flex items-start justify-between mb-4">
+        <div>
+            <h3 class="text-lg font-black text-white">Usuários na Rede</h3>
+            <p class="text-sm text-slate-400">Status em tempo real</p>
+        </div>
+        <a href="monitor_usuarios.php" class="text-indigo-400 hover:text-indigo-300 transition-colors" title="Abrir Monitor Completo">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4m4-6h.01m0 0V6a2 2 0 00-2-2h-4.5M16 6v12"></path>
+            </svg>
+        </a>
+    </div>
+
+    <div id="widget-loading" class="text-center py-4">
+        <div class="inline-block animate-spin">
+            <svg class="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+            </svg>
+        </div>
+        <p class="text-slate-400 text-sm mt-2">Carregando dados...</p>
+    </div>
+
+    <div id="widget-content" class="hidden">
+        <!-- Progress bar -->
+        <div class="mb-4">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-sm text-slate-400">Máquinas Online</span>
+                <span class="text-sm font-semibold text-white" id="widget-status-text">0/0</span>
+            </div>
+            <div class="w-full bg-slate-800/50 rounded-full h-2 border border-slate-700/30">
+                <div id="widget-progress" class="bg-gradient-to-r from-emerald-500 to-emerald-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="grid grid-cols-3 gap-2 mb-4">
+            <div class="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20">
+                <p class="text-xs text-slate-500 mb-1">Online</p>
+                <p class="text-2xl font-black text-emerald-400" id="widget-online">0</p>
+            </div>
+            <div class="bg-red-500/10 rounded-lg p-3 border border-red-500/20">
+                <p class="text-xs text-slate-500 mb-1">Offline</p>
+                <p class="text-2xl font-black text-red-400" id="widget-offline">0</p>
+            </div>
+            <div class="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20">
+                <p class="text-xs text-slate-500 mb-1">Usuários</p>
+                <p class="text-2xl font-black text-amber-400" id="widget-usuarios">0</p>
+            </div>
+        </div>
+
+        <!-- Info -->
+        <div class="text-xs text-slate-500 flex items-center justify-between">
+            <span id="widget-updated">Atualizado agora</span>
+            <a href="monitor_usuarios.php" class="text-indigo-400 hover:text-indigo-300 transition-colors">Ver detalhes →</a>
+        </div>
+    </div>
+
+    <div id="widget-error" class="hidden">
+        <div class="text-center py-4 text-slate-400">
+            <p class="text-sm mb-2">⚠️ Sem dados disponível</p>
+            <p class="text-xs text-slate-500 mb-3">Execute no PowerShell:</p>
+            <code class="text-xs bg-black/30 p-2 rounded block text-slate-300">.\monitor_usuarios.ps1 -Acao monitorar</code>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function carregarWidgetUsuarios() {
+        try {
+            const response = await fetch('/public_html/api/usuarios_widget.php');
+            const dados = await response.json();
+
+            const loading = document.getElementById('widget-loading');
+            const content = document.getElementById('widget-content');
+            const error = document.getElementById('widget-error');
+
+            if (dados.success && dados.data) {
+                loading.classList.add('hidden');
+                error.classList.add('hidden');
+                content.classList.remove('hidden');
+
+                // Atualizar valores
+                const total = dados.data.total_maquinas;
+                const online = dados.data.maquinas_online;
+                const offline = total - online;
+                const usuarios = dados.data.usuarios_ativos;
+                const pct = dados.data.status_pct;
+
+                document.getElementById('widget-status-text').textContent = `${online}/${total}`;
+                document.getElementById('widget-progress').style.width = pct + '%';
+                document.getElementById('widget-online').textContent = online;
+                document.getElementById('widget-offline').textContent = offline;
+                document.getElementById('widget-usuarios').textContent = usuarios;
+
+                // Tempo atualizado
+                const dataCaptura = new Date(dados.data.data_captura.replace(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/, '$3-$2-$1T$4:$5:$6'));
+                const agora = new Date();
+                const diff = Math.floor((agora - dataCaptura) / 1000);
+
+                if (diff < 60) {
+                    document.getElementById('widget-updated').textContent = 'Atualizado agora';
+                } else if (diff < 3600) {
+                    document.getElementById('widget-updated').textContent = 'Atualizado há ' + Math.floor(diff / 60) + 'm';
+                } else {
+                    document.getElementById('widget-updated').textContent = 'Atualizado às ' + dados.data.data_captura.split(' ')[1];
+                }
+            } else {
+                loading.classList.add('hidden');
+                content.classList.add('hidden');
+                error.classList.remove('hidden');
+            }
+        } catch (error) {
+            console.error('Erro ao carregar widget:', error);
+            document.getElementById('widget-loading').classList.add('hidden');
+            document.getElementById('widget-content').classList.add('hidden');
+            document.getElementById('widget-error').classList.remove('hidden');
+        }
+    }
+
+    // Carregamento inicial
+    carregarWidgetUsuarios();
+
+    // Recarregar a cada 30 segundos
+    setInterval(carregarWidgetUsuarios, 30000);
+</script>

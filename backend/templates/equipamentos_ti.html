@@ -1,0 +1,697 @@
+{% extends "base.html" %}
+
+{% block title %}Inventário de TI | {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<div class="px-4 py-8 animate-scale-in">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 relative z-10">
+        <div>
+            <h2 class="text-4xl font-black text-white tracking-tighter uppercase italic html-light:text-slate-900 drop-shadow-lg">
+                Inventário de TI
+            </h2>
+            <p class="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em] mt-2">
+                Gestão de Equipamentos e Ativos
+            </p>
+            <div class="mt-4 flex flex-wrap gap-3 items-center">
+                <div class="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest">
+                    <span>{{ equipamentos_sem_nome }}</span>
+                    <span>equipamento(s) sem nome do computador</span>
+                </div>
+                <div class="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest">
+                    <span>{{ total_equipamentos_ti - equipamentos_sem_nome }}</span>
+                    <span>equipamento(s) com nome cadastrado</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-3 flex-wrap">
+            <button onclick="exportarExcel()" class="px-4 py-3 rounded-2xl bg-emerald-600/20 text-emerald-400 font-black text-[10px] uppercase tracking-widest border border-emerald-500/30 hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Exportar Excel
+            </button>
+            <button onclick="exportarPDF()" class="px-4 py-3 rounded-2xl bg-rose-600/20 text-rose-400 font-black text-[10px] uppercase tracking-widest border border-rose-500/30 hover:bg-rose-600 hover:text-white transition-all flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                Imprimir PDF
+            </button>
+            <button onclick="openModal('modal-add-equipamento')" class="group relative px-6 py-3 rounded-2xl bg-indigo-600/20 text-indigo-400 font-black text-[10px] uppercase tracking-widest border border-indigo-500/30 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 hover:shadow-[0_0_30px_rgba(79,70,229,0.3)] transition-all duration-300 overflow-hidden backdrop-blur-md">
+                <div class="absolute inset-0 bg-gradient-to-r from-indigo-600/0 via-white/20 to-indigo-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                <span class="relative flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Registrar Equipamento
+                </span>
+            </button>
+        </div>
+    </div>
+
+    {% if equipamentos_load_error %}
+    <div class="mb-6 relative z-10">
+        <div class="glass-panel rounded-[1.5rem] p-4 border border-amber-500/20 bg-amber-500/10 text-amber-300 text-xs font-bold uppercase tracking-widest">
+            {{ equipamentos_load_error }}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mb-6 relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div class="flex-1 w-full grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Buscar colaborador</label>
+                <div class="relative">
+                    <input
+                        type="text"
+                        id="buscaEquipamento"
+                        class="glass-input w-full px-5 py-4 rounded-2xl text-white font-bold text-sm pl-12"
+                        placeholder="Nome ou computador..."
+                        oninput="filtrarEquipamentos()"
+                    >
+                    <svg class="w-5 h-5 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35m1.35-5.15a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Filtrar por Setor</label>
+                <div class="relative">
+                    <select id="filtroSetor" onchange="filtrarEquipamentos()" class="glass-input w-full px-5 py-4 rounded-2xl text-white font-bold text-sm [&>option]:bg-slate-900 appearance-none cursor-pointer">
+                        <option value="">Todos os setores</option>
+                    </select>
+                    <svg class="w-5 h-5 text-slate-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Filtrar por Tipo</label>
+                <div class="relative">
+                    <select id="filtroTipo" onchange="filtrarEquipamentos()" class="glass-input w-full px-5 py-4 rounded-2xl text-white font-bold text-sm [&>option]:bg-slate-900 appearance-none cursor-pointer">
+                        <option value="">Todos os tipos</option>
+                    </select>
+                    <svg class="w-5 h-5 text-slate-500 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel px-6 py-4 rounded-2xl border border-indigo-500/20 text-center flex-shrink-0 min-w-[140px]">
+            <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Equipamentos</p>
+            <p class="text-2xl font-black text-white" id="total_equipamentos">{{ equipamentos|length }}</p>
+        </div>
+    </div>
+
+    <div id="area-relatorio" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative z-10">
+        {% for e in equipamentos %}
+        {% set nome_display = e.nome_computador_display or e.nome_computador_bruto or e.nome_computador or 'Não informado' %}
+        {% set search_blob = (e.colaborador ~ ' ' ~ nome_display ~ ' ' ~ (e.setor or '') ~ ' ' ~ (e.tipo_equipamento or '')) | lower %}
+        <div class="glass-card-magnetic equipamento-card glass-panel p-5 rounded-[2rem] border transition-all duration-500 group relative flex flex-col shadow-lg border-white/10 hover:border-indigo-500/50 min-h-[200px] overflow-hidden" data-search="{{ search_blob }}" data-setor="{{ e.setor or '' }}" data-tipo="{{ e.tipo_equipamento or '' }}">
+            <div class="flex justify-between items-start mb-3">
+                <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20 shadow-inner group-hover:scale-110 transition-transform flex-shrink-0">
+                    {% if e.tipo_equipamento == 'Desktop' %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    {% elif e.tipo_equipamento == 'Notebook' %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    {% elif e.tipo_equipamento == 'Celular' %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    {% elif e.tipo_equipamento == 'Monitor' %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    {% elif e.tipo_equipamento == 'Impressora' %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                    {% else %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
+                    {% endif %}
+                </div>
+                <div class="flex gap-1.5 acoes-botoes flex-shrink-0">
+                    <button onclick='editEquipamento({{ e|tojson }})' class="p-1.5 bg-blue-500/10 text-blue-400 rounded-xl hover:bg-blue-500 hover:text-white transition-all" title="Editar">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    </button>
+                    <button onclick="deleteEquipamento({{ e.id }})" class="p-1.5 bg-rose-500/10 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all" title="Excluir">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <h3 class="text-base font-black text-white html-light:text-slate-900 mb-0.5 uppercase tracking-tight truncate" title="{{ e.colaborador }}">{{ e.colaborador }}</h3>
+            <p class="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-1 truncate" title="{{ nome_display }}">{{ nome_display }}</p>
+            {% if not e.nome_computador %}
+            <div class="mb-2 inline-flex items-center gap-2 px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-black uppercase tracking-widest">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                <span>Máquina disponível</span>
+            </div>
+            {% endif %}
+            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+                <span class="truncate">{{ e.tipo_equipamento }}</span>
+            </p>
+
+            <div class="grid grid-cols-2 gap-x-3 gap-y-2.5 flex-1">
+                {% if e.setor %}
+                <div class="col-span-2 flex flex-col">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">Setor</span>
+                    <span class="text-[11px] text-amber-400 font-bold truncate" title="{{ e.setor }}">{{ e.setor }}</span>
+                </div>
+                {% endif %}
+
+                {% if e.marca or e.modelo %}
+                <div class="col-span-2 flex flex-col">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">Modelo</span>
+                    <span class="text-[11px] text-slate-300 font-bold truncate" title="{{ e.marca }} {{ e.modelo }}">{{ e.marca }} {{ e.modelo }}</span>
+                </div>
+                {% endif %}
+
+                {% if e.modelo_monitor or e.quantidade_monitores %}
+                <div class="col-span-2 flex flex-col">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">Monitores</span>
+                    <span class="text-[11px] text-cyan-400 font-bold truncate" title="{{ e.modelo_monitor }}{% if e.quantidade_monitores %} - {{ e.quantidade_monitores }} unidade(s){% endif %}">
+                        {{ e.modelo_monitor or 'Modelo não informado' }}{% if e.quantidade_monitores %} · {{ e.quantidade_monitores }} unidade(s){% endif %}
+                    </span>
+                </div>
+                {% endif %}
+
+                {% if e.processador %}
+                <div class="flex flex-col">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">CPU</span>
+                    <span class="text-[11px] text-slate-300 font-bold truncate" title="{{ e.processador }}">{{ e.processador }}</span>
+                </div>
+                {% endif %}
+
+                {% if e.memoria_ram %}
+                <div class="flex flex-col">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">RAM</span>
+                    <span class="text-[11px] text-slate-300 font-bold truncate">{{ e.memoria_ram }}</span>
+                </div>
+                {% endif %}
+
+                {% if e.sistema_operacional %}
+                <div class="flex flex-col">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">Sistema</span>
+                    <span class="text-[11px] text-slate-300 font-bold truncate" title="{{ e.sistema_operacional }}">{{ e.sistema_operacional }}</span>
+                </div>
+                {% endif %}
+
+                {% if e.armazenamento %}
+                <div class="flex flex-col">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">Disco</span>
+                    <span class="text-[11px] text-slate-300 font-bold truncate">{{ e.armazenamento }}</span>
+                </div>
+                {% endif %}
+
+                {% if e.patrimonio %}
+                <div class="col-span-2 flex flex-col pt-1 border-t border-white/5">
+                    <span class="text-[8px] text-slate-600 uppercase tracking-widest font-black">Patrimônio</span>
+                    <span class="text-[11px] text-indigo-400 font-bold font-mono truncate">{{ e.patrimonio }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if e.observacoes %}
+            <div class="mt-3 pt-3 border-t border-white/5">
+                <p class="text-[10px] text-slate-500 italic line-clamp-2" title="{{ e.observacoes }}">{{ e.observacoes }}</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if not equipamentos %}
+        <div class="col-span-full py-20 flex flex-col items-center justify-center text-center opacity-50">
+            <svg class="w-24 h-24 text-slate-600 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+            <h3 class="text-2xl font-black text-white mb-2 uppercase tracking-tight">Nenhum equipamento</h3>
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Registre o primeiro computador ou ativo de TI.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="semResultadosBusca" class="hidden mt-6 relative z-10">
+        <div class="glass-panel rounded-[2rem] p-8 border border-white/5 text-center">
+            <h3 class="text-lg font-black text-white uppercase tracking-tight">Nenhum colaborador encontrado</h3>
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mt-2">Tente buscar por outro nome de colaborador ou computador.</p>
+        </div>
+    </div>
+</div>
+
+<div id="modal-add-equipamento" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-xl transition-opacity" id="modal-add-equipamento-backdrop" onclick="closeModal('modal-add-equipamento')"></div>
+    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0 relative z-10">
+        <div class="relative w-full max-w-3xl bg-slate-900 rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden transform transition-all text-left max-h-[90vh] overflow-y-auto" id="modal-add-equipamento-panel">
+            <div class="px-6 py-5 border-b border-white/5 flex justify-between items-center bg-white/5">
+                <h3 class="text-lg font-black text-white uppercase tracking-tight italic" id="modal-equip-title">Registrar Equipamento</h3>
+                <button onclick="closeModal('modal-add-equipamento')" class="text-slate-500 hover:text-white transition-colors bg-white/5 p-2 rounded-xl hover:bg-white/10">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <form id="formEquipamento" onsubmit="salvarEquipamento(event)" class="p-7 space-y-4 pb-24">
+                <input type="hidden" id="equip_id">
+
+                <div id="desktop-primary-fields" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Colaborador / Responsável</label>
+                        <input type="text" id="equip_colab" required class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: João Silva">
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-4">Nome do Computador</label>
+                        <input type="text" id="equip_nome_computador" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: PC-JOAO-01">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Setor / Departamento</label>
+                        <input type="text" id="equip_setor" required class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: RH, Financeiro, TI">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Tipo de Equipamento</label>
+                        <input type="text" id="equip_tipo" list="tipoList" oninput="syncFormByType()" required autocomplete="off" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-cyan-500/50 transition-all" placeholder="Selecione ou digite...">
+                        <datalist id="tipoList"></datalist>
+                    </div>
+                </div>
+
+                <div id="monitor-extra-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/5 pt-4">
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Modelo do Monitor</label>
+                        <input type="text" id="equip_modelo_monitor" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: LG 24MP400, Samsung T350">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Quantidade de Monitores</label>
+                        <input type="number" id="equip_qtd_monitores" min="1" step="1" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: 2">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/5 pt-4">
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Marca</label>
+                        <input type="text" id="equip_marca" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: Dell, HP, Lenovo">
+                    </div>
+                    <div>
+                        <label id="equip_modelo_label" class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Modelo do Equipamento</label>
+                        <input type="text" id="equip_modelo" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: OptiPlex 3080">
+                    </div>
+                </div>
+
+                <div id="desktop-detail-fields" class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-white/5 pt-4">
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Processador</label>
+                        <input type="text" id="equip_proc" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: Core i5 10ª">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Memória RAM</label>
+                        <input type="text" id="equip_ram" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: 16GB DDR4">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Armazenamento</label>
+                        <input type="text" id="equip_disk" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: SSD 512GB">
+                    </div>
+                </div>
+
+                <div id="desktop-os-field" class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/5 pt-4">
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Sistema Operacional</label>
+                        <input type="text" id="equip_os" class="glass-input w-full px-5 py-4 rounded-xl text-white font-bold text-sm" placeholder="Ex: Windows 11 Pro">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Nº Série / Patrimônio</label>
+                        <input type="text" id="equip_patrimonio" class="glass-input w-full px-5 py-4 rounded-xl text-indigo-400 font-bold text-sm font-mono" placeholder="Ex: PAT-2026-001">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 ml-1">Observações Gerais</label>
+                    <textarea id="equip_obs" class="glass-input w-full px-5 py-4 rounded-xl text-white text-sm" rows="2" placeholder="Garantia, estado de conservação, acessórios extras..."></textarea>
+                </div>
+
+                <div class="sticky bottom-0 -mx-7 px-7 py-4 border-t border-white/10 bg-slate-900/95 backdrop-blur-xl">
+                    <div class="flex justify-end gap-3">
+                        <button type="button" onclick="closeModal('modal-add-equipamento')" class="px-6 py-3 rounded-xl bg-white/5 text-white font-black text-xs uppercase tracking-widest hover:bg-white/10 transition-colors">Cancelar</button>
+                        <button type="submit" class="px-8 py-3 rounded-xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:bg-indigo-500 transition-colors border border-white/10">Salvar Dados</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const equipamentosDados = {{ equipamentos|tojson|safe }};
+
+    function exportarExcel() {
+        if (equipamentosDados.length === 0) return alert('Nenhum dado para exportar.');
+
+        const wb = XLSX.utils.book_new();
+
+        const tipos = {};
+        equipamentosDados.forEach(e => {
+            const tipo = (e.tipo_equipamento || 'Outros').trim();
+            if (!tipos[tipo]) tipos[tipo] = [];
+            tipos[tipo].push(e);
+        });
+
+        for (const [tipo, eqs] of Object.entries(tipos)) {
+            const exportData = eqs.map(e => ({
+                'Colaborador': e.colaborador,
+                'Nome do Equipamento': (e.nome_computador_display || e.nome_computador_bruto || e.nome_computador || 'Não informado'),
+                'Setor': e.setor,
+                'Tipo': e.tipo_equipamento,
+                'Modelo do Monitor': e.modelo_monitor,
+                'Qtd. Monitores': e.quantidade_monitores,
+                'Marca': e.marca,
+                'Modelo': e.modelo,
+                'Processador': e.processador,
+                'Memória RAM': e.memoria_ram,
+                'Sistema Operacional': e.sistema_operacional,
+                'Armazenamento': e.armazenamento,
+                'Patrimônio': e.patrimonio,
+                'Observações': e.observacoes
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(exportData);
+            // CORREÇÃO: regex correto para remover caracteres inválidos no nome da aba Excel
+            let sheetName = tipo.substring(0, 30).replace(/[\[\]\*\?\/\:\\]/g, '').trim() || 'Outros';
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        }
+
+        XLSX.writeFile(wb, "Inventario_TI.xlsx");
+    }
+
+    function exportarPDF() {
+        if (equipamentosDados.length === 0) return alert('Nenhum dado para exportar.');
+
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        const tipos = {};
+        equipamentosDados.forEach(e => {
+            const tipo = (e.tipo_equipamento || 'Outros').trim();
+            if (!tipos[tipo]) tipos[tipo] = [];
+            tipos[tipo].push(e);
+        });
+
+        let tablesHtml = '';
+        for (const [tipo, eqs] of Object.entries(tipos)) {
+            const rows = eqs.map(e => `
+                <tr>
+                    <td>${escapeHtml(e.colaborador)}</td>
+                    <td>${escapeHtml(e.nome_computador_display || e.nome_computador_bruto || e.nome_computador || 'Não informado')}</td>
+                    <td>${escapeHtml(e.setor)}</td>
+                    <td>${escapeHtml(e.tipo_equipamento)}</td>
+                    <td>${escapeHtml(e.marca)} ${escapeHtml(e.modelo)}</td>
+                    <td>${escapeHtml(e.processador)}</td>
+                    <td>${escapeHtml(e.memoria_ram)}</td>
+                    <td>${escapeHtml(e.sistema_operacional)}</td>
+                    <td>${escapeHtml(e.armazenamento)}</td>
+                    <td>${escapeHtml(e.patrimonio)}</td>
+                    <td>${escapeHtml(e.observacoes)}</td>
+                </tr>
+            `).join('');
+
+            tablesHtml += `
+                <h2 style="margin-top:30px;margin-bottom:10px;font-size:15px;color:#374151;border-bottom:2px solid #4f46e5;padding-bottom:6px;">${escapeHtml(tipo)} &mdash; ${eqs.length} item(ns)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Colaborador</th>
+                            <th>Nome do Equipamento</th>
+                            <th>Setor</th>
+                            <th>Tipo</th>
+                            <th>Marca / Modelo</th>
+                            <th>Processador</th>
+                            <th>RAM</th>
+                            <th>Sistema OS</th>
+                            <th>Armazenamento</th>
+                            <th>Patrimônio</th>
+                            <th>Observações</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        const htmlContent = `
+            <!doctype html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Inventário de TI</title>
+                <style>
+                    @page { size: A3 landscape; margin: 12mm; }
+                    body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 20px; background: #fff; }
+                    h1 { margin: 0 0 4px; font-size: 22px; font-weight: 900; text-transform: uppercase; letter-spacing: .08em; color: #1e1b4b; }
+                    .subtitle { margin: 0 0 20px; font-size: 11px; color: #6b7280; }
+                    table { width: 100%; border-collapse: collapse; font-size: 9px; page-break-inside: auto; margin-bottom: 10px; }
+                    tr { page-break-inside: avoid; page-break-after: auto; }
+                    th, td { border: 1px solid #d1d5db; padding: 7px 9px; vertical-align: top; }
+                    thead th { background: #e0e7ff; color: #1e1b4b; font-weight: 700; text-align: left; }
+                    tbody tr:nth-child(even) { background: #f9fafb; }
+                    h2 { margin-top:28px; margin-bottom:8px; font-size:13px; color:#374151; border-bottom:2px solid #4f46e5; padding-bottom:5px; }
+                </style>
+            </head>
+            <body>
+                <h1>Inventário de TI</h1>
+                <p class="subtitle">Total de Equipamentos: <strong>${equipamentosDados.length}</strong> &nbsp;|&nbsp; Gerado em: ${new Date().toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</p>
+                ${tablesHtml}
+            </body>
+            </html>
+        `;
+
+        // CORREÇÃO: usar iframe oculto em vez de window.open para evitar bloqueio de pop-up
+        let ifrPrint = document.getElementById('__printFrame');
+        if (!ifrPrint) {
+            ifrPrint = document.createElement('iframe');
+            ifrPrint.id = '__printFrame';
+            ifrPrint.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
+            document.body.appendChild(ifrPrint);
+        }
+
+        ifrPrint.onload = function () {
+            try {
+                ifrPrint.contentWindow.focus();
+                ifrPrint.contentWindow.print();
+            } catch(err) {
+                console.error('Erro ao imprimir:', err);
+                alert('Não foi possível abrir a impressão. Tente novamente.');
+            }
+        };
+
+        const doc = ifrPrint.contentDocument || ifrPrint.contentWindow.document;
+        doc.open();
+        doc.write(htmlContent);
+        doc.close();
+    }
+
+    async function salvarEquipamento(e) {
+        e.preventDefault();
+
+        const id = document.getElementById('equip_id').value;
+        const data = {
+            colaborador: document.getElementById('equip_colab').value,
+            nome_computador: document.getElementById('equip_nome_computador').value,
+            setor: document.getElementById('equip_setor').value,
+            tipo_equipamento: document.getElementById('equip_tipo').value,
+            modelo_monitor: document.getElementById('equip_modelo_monitor').value,
+            quantidade_monitores: document.getElementById('equip_qtd_monitores').value ? Number(document.getElementById('equip_qtd_monitores').value) : null,
+            marca: document.getElementById('equip_marca').value,
+            modelo: document.getElementById('equip_modelo').value,
+            processador: document.getElementById('equip_proc').value,
+            memoria_ram: document.getElementById('equip_ram').value,
+            sistema_operacional: document.getElementById('equip_os').value,
+            armazenamento: document.getElementById('equip_disk').value,
+            patrimonio: document.getElementById('equip_patrimonio').value,
+            observacoes: document.getElementById('equip_obs').value
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/equipamentos_ti/${id}` : `/api/equipamentos_ti/`;
+
+        try {
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                location.reload();
+            } else {
+                alert("Erro ao salvar o equipamento.");
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function editEquipamento(e) {
+        document.getElementById('equip_id').value = e.id;
+        document.getElementById('equip_colab').value = e.colaborador || '';
+        document.getElementById('equip_nome_computador').value = e.nome_computador_bruto || e.nome_computador || '';
+        document.getElementById('equip_setor').value = e.setor || '';
+        document.getElementById('equip_tipo').value = e.tipo_equipamento || 'Desktop';
+        document.getElementById('equip_modelo_monitor').value = e.modelo_monitor || '';
+        document.getElementById('equip_qtd_monitores').value = e.quantidade_monitores || '';
+        document.getElementById('equip_marca').value = e.marca || '';
+        document.getElementById('equip_modelo').value = e.modelo || '';
+        document.getElementById('equip_proc').value = e.processador || '';
+        document.getElementById('equip_ram').value = e.memoria_ram || '';
+        document.getElementById('equip_os').value = e.sistema_operacional || '';
+        document.getElementById('equip_disk').value = e.armazenamento || '';
+        document.getElementById('equip_patrimonio').value = e.patrimonio || '';
+        document.getElementById('equip_obs').value = e.observacoes || '';
+        syncFormByType();
+        document.getElementById('modal-equip-title').textContent = 'Editar Equipamento';
+        openModal('modal-add-equipamento');
+    }
+
+    async function deleteEquipamento(id) {
+        if (confirm('Tem certeza que deseja excluir este equipamento? Esta ação não pode ser desfeita.')) {
+            const res = await fetch(`/api/equipamentos_ti/${id}`, { method: 'DELETE' });
+            if (res.ok) location.reload();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const tipoSelect = document.getElementById('equip_tipo');
+
+        const backdrop = document.getElementById('modal-add-equipamento-backdrop');
+        if (backdrop) {
+            backdrop.addEventListener('click', () => {
+                document.getElementById('formEquipamento').reset();
+                document.getElementById('equip_id').value = '';
+                document.getElementById('modal-equip-title').textContent = 'Registrar Equipamento';
+                syncFormByType();
+            });
+        }
+
+        // Popular dropdown de setores
+        const setores = [...new Set(equipamentosDados.map(e => e.setor).filter(Boolean))].sort();
+        const selectSetor = document.getElementById('filtroSetor');
+        if (selectSetor) {
+            setores.forEach(setor => {
+                const opt = document.createElement('option');
+                opt.value = setor;
+                opt.textContent = setor;
+                selectSetor.appendChild(opt);
+            });
+
+            // Recuperar do localStorage
+            const savedSetor = localStorage.getItem('filtroSetorEquipamentos');
+            if (savedSetor && (setores.includes(savedSetor) || savedSetor === '')) {
+                selectSetor.value = savedSetor;
+            }
+        }
+
+        // Popular dropdown e datalist de tipos
+        const tiposFixos = ['Desktop', 'Notebook', 'Monitor', 'Celular', 'Impressora', 'Outros', 'Ar Condicionado'];
+        const tiposUsados = equipamentosDados.map(e => e.tipo_equipamento).filter(Boolean);
+        const tiposUnicos = [...new Set([...tiposFixos, ...tiposUsados])].sort((a,b) => a.localeCompare(b, 'pt-BR'));
+
+        const selectTipo = document.getElementById('filtroTipo');
+        if (selectTipo) {
+            selectTipo.innerHTML = '<option value="">Todos os tipos</option>' + 
+                tiposUnicos.map(t => `<option value="${t}">${t}</option>`).join('');
+            
+            const savedTipo = localStorage.getItem('filtroTipoEquipamentos');
+            if (savedTipo && (tiposUnicos.includes(savedTipo) || savedTipo === '')) {
+                selectTipo.value = savedTipo;
+            }
+        }
+
+        const tipoList = document.getElementById('tipoList');
+        if (tipoList) {
+            tipoList.innerHTML = tiposUnicos.map(t => `<option value="${t}"></option>`).join('');
+        }
+
+        syncFormByType();
+        filtrarEquipamentos();
+    });
+
+    function filtrarEquipamentos() {
+        const termo = (document.getElementById('buscaEquipamento')?.value || '').trim().toLowerCase();
+        const setorFiltro = document.getElementById('filtroSetor')?.value || '';
+        const tipoFiltro = document.getElementById('filtroTipo')?.value || '';
+        
+        // Salvar escolhas no localStorage
+        if (setorFiltro) {
+            localStorage.setItem('filtroSetorEquipamentos', setorFiltro);
+        } else {
+            localStorage.removeItem('filtroSetorEquipamentos');
+        }
+        if (tipoFiltro) {
+            localStorage.setItem('filtroTipoEquipamentos', tipoFiltro);
+        } else {
+            localStorage.removeItem('filtroTipoEquipamentos');
+        }
+
+        const cards = document.querySelectorAll('.equipamento-card');
+        const emptyState = document.getElementById('semResultadosBusca');
+        let visiveis = 0;
+
+        cards.forEach(card => {
+            const texto = (card.dataset.search || '').toLowerCase();
+            const setorCard = card.dataset.setor || '';
+            const tipoCard = card.dataset.tipo || '';
+            
+            const matchTermo = !termo || texto.includes(termo);
+            const matchSetor = !setorFiltro || setorCard === setorFiltro;
+            const matchTipo = !tipoFiltro || tipoCard === tipoFiltro;
+            
+            const match = matchTermo && matchSetor && matchTipo;
+            
+            card.classList.toggle('hidden', !match);
+            if (match) visiveis += 1;
+        });
+
+        // Atualizar contador
+        const totalEl = document.getElementById('total_equipamentos');
+        if (totalEl) {
+            totalEl.textContent = visiveis;
+        }
+
+        if (emptyState) {
+            emptyState.classList.toggle('hidden', visiveis !== 0);
+        }
+    }
+
+    function syncFormByType() {
+        const tipo = document.getElementById('equip_tipo')?.value;
+        const extra = document.getElementById('monitor-extra-fields');
+        const primary = document.getElementById('desktop-primary-fields');
+        const details = document.getElementById('desktop-detail-fields');
+        const osField = document.getElementById('desktop-os-field');
+        const label = document.getElementById('equip_modelo_label');
+        const modelInput = document.getElementById('equip_modelo');
+
+        if (!extra || !primary || !details || !osField || !label || !modelInput) return;
+
+        extra.classList.remove('hidden');
+        primary.classList.remove('hidden');
+        details.classList.remove('hidden');
+        osField.classList.remove('hidden');
+        label.textContent = 'Modelo do Equipamento';
+        modelInput.placeholder = tipo === 'Monitor' ? 'Ex: Dell P2419H' : 'Ex: OptiPlex 3080';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const cards = document.querySelectorAll('.glass-card-magnetic');
+        cards.forEach(card => {
+            card.addEventListener('mousemove', e => {
+                const rect = card.getBoundingClientRect();
+                card.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+                card.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+            });
+        });
+    });
+</script>
+
+<style>
+    .glass-panel {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+    }
+    .glass-input {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.3s;
+    }
+    .glass-input:focus {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(99, 102, 241, 0.4);
+        outline: none;
+    }
+</style>
+{% endblock %}

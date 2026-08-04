@@ -1,0 +1,101 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      POSTGRES_DB: sistema_impressao
+      TZ: America/Porto_Velho
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d sistema_impressao"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ─── Evolution API (WhatsApp) ────────────────────────────────────────────────
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.0
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      - SERVER_URL=http://evolution-api:8080
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:?Defina EVOLUTION_API_KEY no arquivo .env}
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://root:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}@db:5432/sistema_impressao?schema=evolution
+      - CACHE_REDIS_ENABLED=false
+      - DEL_INSTANCE=false
+      - QRCODE_LIMIT=30
+      - QRCODE_COLOR=#6366f1
+      - LANGUAGE=pt-BR
+      - LOG_LEVEL=ERROR
+      - LOG_COLOR=false
+      - LOG_BAILEYS=error
+      - TELEMETRY=false
+    volumes:
+      - evolution_instances:/evolution/instances
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "3001:8000"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=sistema_impressao
+      - DB_USER=root
+      - DB_PASS=${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      - TZ=America/Porto_Velho
+      - AGENT_API_KEY=${AGENT_API_KEY:?Defina AGENT_API_KEY no arquivo .env}
+    volumes:
+      - ./backend:/app
+      - ./status_maquinas.json:/app/status_maquinas.json
+      - ./status_usuarios.json:/app/status_usuarios.json
+      - ./public_html:/app/public_html
+      - ./public_html/uploads:/app/static/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      evolution-api:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: python background_worker.py
+    restart: unless-stopped
+    environment:
+      - DB_HOST=db
+      - DB_NAME=sistema_impressao
+      - DB_USER=root
+      - DB_PASS=${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+      - TZ=America/Porto_Velho
+      - ADMIN_EMAIL=admin@empresa.local
+      - SMTP_SERVER=smtp.empresa.local
+      - SMTP_PORT=587
+      - SMTP_USER=alertas
+      - SMTP_PASS=${SMTP_PASS:?Defina SMTP_PASS no arquivo .env}
+      - SMTP_FROM=alertas@empresa.local
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  evolution_instances:

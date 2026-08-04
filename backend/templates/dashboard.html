@@ -1,0 +1,439 @@
+{% extends "base.html" %}
+
+{% block content %}
+<script>
+    // Trava agressiva anti-cache para operadores
+    {% set role = request.cookies.get("user_role") %}
+    {% if role == 'operator' and 'Dashboard' not in user_perms_real %}
+        window.location.replace("/chamados");
+    {% endif %}
+</script>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12 animate-fade-in">
+    
+    <!-- Header Executivo Modernizado -->
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 mb-12">
+        <div class="flex items-center gap-6">
+            <div class="relative group">
+                <div class="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-[2.5rem] blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                <div class="relative p-5 bg-slate-900 rounded-[2.2rem] border border-white/10 shadow-2xl">
+                    <svg class="w-10 h-10 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
+                </div>
+            </div>
+            <div>
+                <h1 class="text-5xl font-black text-white tracking-tighter mb-2 uppercase italic leading-none">Painel <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">Geral</span></h1>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></span>
+                        <span class="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Sistema Ativo</span>
+                    </div>
+                    <span class="text-[9px] text-slate-500 font-bold uppercase tracking-[0.3em]">Monitoramento {{ hoje|default('Hoje') }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="hidden xl:flex flex-col items-end mr-4">
+                <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Última Sincronização</span>
+                <span id="sync-time" class="text-xs font-bold text-white">Carregando...</span>
+            </div>
+            <div class="flex bg-slate-900/60 p-1.5 rounded-[1.5rem] border border-white/10 shadow-inner">
+                <a href="/chamados" class="px-6 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all text-[10px] font-black uppercase tracking-widest">Chamados</a>
+                <a href="/monitor_usuarios" class="px-6 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all text-[10px] font-black uppercase tracking-widest">Rede</a>
+                <button onclick="window.location.reload()" class="ml-2 px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all border border-indigo-500">Sincronizar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs de Impressão (Carrossel Dinâmico) -->
+    <style>
+        @keyframes scroll-kpi {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(calc(-50% - 0.75rem)); }
+        }
+        .kpi-carousel {
+            overflow: hidden;
+            width: 100%;
+            position: relative;
+            mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+        }
+        .kpi-track {
+            display: flex;
+            gap: 1.5rem;
+            width: max-content;
+            animation: scroll-kpi 40s linear infinite;
+        }
+        .kpi-track:hover {
+            animation-play-state: paused;
+        }
+        .kpi-card {
+            width: 280px;
+            flex-shrink: 0;
+        }
+    </style>
+    <div class="kpi-carousel mb-8">
+        <div class="kpi-track">
+            {% for _ in range(2) %}
+            <div class="kpi-card glass-panel p-8 rounded-[2.5rem] border border-white/5 relative group overflow-hidden hover:border-indigo-500/30 transition-all duration-500">
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Equipamentos Rede</p>
+                <div class="flex items-baseline gap-2 mb-2">
+                    <h3 class="text-5xl font-black text-white tracking-tighter">{{ stats.maquinas_online|default(0) }}</h3>
+                    <span class="text-sm font-black text-slate-600">/ {{ stats.total_maquinas|default(0) }}</span>
+                </div>
+                <div class="flex-grow h-1.5 bg-white/5 rounded-full overflow-hidden mt-4">
+                    <div class="progress-bar-equipamentos h-full bg-gradient-to-r from-indigo-500 to-blue-500 shadow-[0_0_10px_#6366f1] transition-all duration-1000 ease-out" style="width: 0%" data-width="{{ (stats.maquinas_online / stats.total_maquinas * 100) if stats.total_maquinas|default(0) > 0 else 0 }}%"></div>
+                </div>
+            </div>
+
+            <div class="kpi-card glass-panel p-8 rounded-[2.5rem] border border-white/5 relative group overflow-hidden hover:border-cyan-500/30 transition-all duration-500">
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Impressoras Online</p>
+                <h3 class="text-5xl font-black text-white tracking-tighter mb-2">{{ stats.impressoras_online|default(0) }}</h3>
+                <span class="text-[9px] font-black text-cyan-500 uppercase tracking-widest italic">Equipamentos Prontos</span>
+            </div>
+
+            <div class="kpi-card glass-panel p-8 rounded-[2.5rem] border border-white/5 relative group overflow-hidden hover:border-fuchsia-500/30 transition-all duration-500">
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Volume Total</p>
+                <h3 class="text-5xl font-black text-white tracking-tighter mb-2">{{ "{:,}".format(stats.paginas_total|default(0)).replace(",", ".") }}</h3>
+                <span class="text-[9px] font-black text-fuchsia-500 uppercase tracking-widest italic">Páginas Processadas</span>
+            </div>
+
+            <div class="kpi-card glass-panel p-8 rounded-[2.5rem] border border-white/5 relative group overflow-hidden hover:border-amber-500/30 transition-all duration-500">
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Páginas Hoje</p>
+                <h3 class="text-5xl font-black text-white tracking-tighter mb-2">{{ "{:,}".format(stats.paginas_hoje|default(0)).replace(",", ".") }}</h3>
+                <span class="text-[9px] font-black text-amber-400 uppercase tracking-widest italic">Produção Atual</span>
+            </div>
+
+            <div class="kpi-card glass-panel p-8 rounded-[2.5rem] border border-white/5 bg-gradient-to-br from-slate-900/50 to-emerald-900/10 relative group overflow-hidden hover:border-emerald-500/30 transition-all duration-500 shadow-2xl">
+                <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Custo Bruto</p>
+                <div class="flex items-baseline gap-1.5 mb-2">
+                    <span class="text-lg font-black text-emerald-500/40 tracking-tighter uppercase italic">R$</span>
+                    <h3 class="text-4xl font-black text-white tracking-tighter">{{ "{:,.2f}".format(stats.faturamento|default(0)).replace(",", "X").replace(".", ",").replace("X", ".") }}</h3>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Gráficos de Análise Superior -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+        <div class="glass-panel rounded-[3rem] p-8 h-[400px] flex flex-col border border-white/5 hover:bg-slate-900/40 transition-all duration-500">
+            <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8 text-center italic">Disponibilidade de Rede</h3>
+            <div class="flex-1 relative">
+                <canvas id="chart-rede"></canvas>
+            </div>
+        </div>
+        <div class="glass-panel rounded-[3rem] p-8 h-[400px] flex flex-col border border-white/5 hover:bg-slate-900/40 transition-all duration-500">
+            <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8 text-center italic">Top Equipamentos</h3>
+            <div class="flex-1 relative">
+                <canvas id="chart-impressoras"></canvas>
+            </div>
+        </div>
+        <div class="glass-panel rounded-[3rem] p-8 h-[400px] flex flex-col border border-white/5 hover:bg-slate-900/40 transition-all duration-500">
+            <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8 text-center italic">Ranking de Uso</h3>
+            <div class="flex-1 relative">
+                <canvas id="chart-usuarios"></canvas>
+            </div>
+        </div>
+    </div>
+
+    {% if role in ['admin', 'gestor'] %}
+    <!-- PAINÉIS GERENCIAIS -->
+    <div class="mb-12">
+        <div class="flex items-center gap-4 mb-6">
+            <h2 class="text-sm font-black text-slate-500 uppercase tracking-[0.4em] italic">Visões Gerenciais</h2>
+            <div class="flex-grow h-px bg-white/5"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Executivo -->
+            <div class="glass-panel p-8 rounded-[2rem] border border-amber-500/20 bg-amber-500/5 flex items-center justify-between group hover:bg-amber-500/10 hover:border-amber-500/40 transition-all cursor-pointer shadow-lg shadow-amber-500/5 hover:shadow-amber-500/20" onclick="window.location.href='/executivo'">
+                <div class="flex items-center gap-6">
+                    <div class="w-16 h-16 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)] group-hover:scale-110 transition-transform duration-500">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] font-black text-amber-400 uppercase tracking-[0.3em] mb-1">Métricas Globais</span>
+                        <h4 class="text-3xl font-black text-white tracking-tighter leading-none italic uppercase">Painel Executivo</h4>
+                    </div>
+                </div>
+                <div class="w-12 h-12 rounded-full border border-amber-500/20 flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-all">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </div>
+            </div>
+            <!-- Financeiro -->
+            <div class="glass-panel p-8 rounded-[2rem] border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-between group hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-all cursor-pointer shadow-lg shadow-emerald-500/5 hover:shadow-emerald-500/20" onclick="window.location.href='/financeiro'">
+                <div class="flex items-center gap-6">
+                    <div class="w-16 h-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)] group-hover:scale-110 transition-transform duration-500">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-1">Custos e ROI</span>
+                        <h4 class="text-3xl font-black text-white tracking-tighter leading-none italic uppercase">Financeiro</h4>
+                    </div>
+                </div>
+                <div class="w-12 h-12 rounded-full border border-emerald-500/20 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- MONITOR DE CHAMADOS (TI) - NOVA SEÇÃO -->
+    <div class="mb-12">
+        <div class="flex items-center gap-4 mb-6">
+            <h2 class="text-sm font-black text-slate-500 uppercase tracking-[0.4em] italic">Monitor de Suporte TI</h2>
+            <div class="flex-grow h-px bg-white/5"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Pendentes -->
+            <div class="glass-panel p-6 rounded-[2rem] border border-rose-500/20 bg-rose-500/5 flex items-center justify-between group hover:bg-rose-500/10 transition-all cursor-pointer" onclick="window.location.href='/chamados'">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-rose-500/20 flex items-center justify-center text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div>
+                        <span class="block text-[9px] font-black text-rose-400 uppercase tracking-widest">Pendentes</span>
+                        <h4 class="text-2xl font-black text-white leading-none">{{ stats['chamados']['abertos']|default(0) }}</h4>
+                    </div>
+                </div>
+                <div class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
+            </div>
+            <!-- Em Atendimento -->
+            <div class="glass-panel p-6 rounded-[2rem] border border-amber-500/20 bg-amber-500/5 flex items-center justify-between group hover:bg-amber-500/10 transition-all cursor-pointer" onclick="window.location.href='/chamados'">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </div>
+                    <div>
+                        <span class="block text-[9px] font-black text-amber-400 uppercase tracking-widest">Em Curso</span>
+                        <h4 class="text-2xl font-black text-white leading-none">{{ stats['chamados']['atendimento']|default(0) }}</h4>
+                    </div>
+                </div>
+                <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce"></div>
+            </div>
+            <!-- Resolvidos -->
+            <div class="glass-panel p-6 rounded-[2rem] border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-between group hover:bg-emerald-500/10 transition-all cursor-pointer" onclick="window.location.href='/chamados'">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    </div>
+                    <div>
+                        <span class="block text-[9px] font-black text-emerald-400 uppercase tracking-widest">Resolvidos</span>
+                        <h4 class="text-2xl font-black text-white leading-none">{{ stats['chamados']['resolvidos']|default(0) }}</h4>
+                    </div>
+                </div>
+                <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+                <span class="text-[8px] font-black uppercase tracking-widest text-slate-600">{{ stats.chamados.total }} chamados no total</span>
+                <span class="text-[8px] font-black uppercase tracking-widest text-rose-500">{{ stats.chamados.urgentes }} críticos</span>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Tabela de Atividade Premium -->
+    <div class="glass-panel rounded-[3rem] overflow-hidden border border-white/5 shadow-2xl bg-slate-950/20 backdrop-blur-3xl">
+        <div class="p-8 border-b border-white/5 bg-slate-900/40 flex flex-col sm:flex-row justify-between items-center gap-6">
+            <div>
+                <h2 class="text-3xl font-black text-white tracking-tighter uppercase italic leading-none">Fluxo <span class="text-indigo-400">Recente</span></h2>
+                <p class="text-[10px] text-slate-500 font-black tracking-[0.3em] uppercase mt-2">Monitoramento de Jobs em Tempo Real</p>
+            </div>
+            <a href="/relatorios" class="px-6 py-3 rounded-2xl bg-white/5 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all border border-white/5">Auditoria Completa</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-950/40 text-slate-500 text-[9px] font-black uppercase tracking-[0.3em] border-b border-white/5">
+                        <th class="px-10 py-6">Timestamp / Máquina</th>
+                        <th class="px-10 py-6">Documento & Categoria</th>
+                        <th class="px-10 py-6 hidden md:table-cell">Colaborador</th>
+                        <th class="px-10 py-6 text-center">Métricas</th>
+                        <th class="px-10 py-6 text-right hidden sm:table-cell">Encargos</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-atividades" class="divide-y divide-white/5">
+                    {% if atividades %}
+                    {% for imp in atividades %}
+                    <tr class="hover:bg-indigo-500/[0.03] transition-all group">
+                        <td class="px-10 py-8 whitespace-nowrap">
+                            <div class="flex flex-col">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-sm font-black text-white italic">{{ imp.data_str }}</span>
+                                    <span class="text-[9px] font-black text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg">{{ imp.hora_str }}</span>
+                                </div>
+                                <span class="text-[10px] font-bold text-slate-500 tracking-widest uppercase">{{ imp.maquina }}</span>
+                            </div>
+                        </td>
+                        <td class="px-10 py-8">
+                            <div class="flex flex-col gap-3">
+                                <div class="flex items-center gap-2">
+                                    {% set docColor = 'slate' %}
+                                    {% set docIcon = '📄' %}
+                                    {% if imp.tipo_documento == 'PDF' %}{% set docColor = 'rose' %}{% set docIcon = '📕' %}
+                                    {% elif imp.tipo_documento == 'Word' %}{% set docColor = 'blue' %}{% set docIcon = '📘' %}
+                                    {% elif imp.tipo_documento == 'Excel' %}{% set docColor = 'emerald' %}{% set docIcon = '📗' %}
+                                    {% elif imp.tipo_documento == 'Web' %}{% set docColor = 'cyan' %}{% set docIcon = '🌐' %}{% endif %}
+                                    <span class="px-3 py-1 rounded-xl text-[8px] font-black uppercase tracking-widest bg-{{ docColor }}-500/10 text-{{ docColor }}-400 border border-{{ docColor }}-500/20">
+                                        {{ docIcon }} {{ imp.tipo_documento }}
+                                    </span>
+                                </div>
+                                <span class="text-base font-bold text-white tracking-tight truncate max-w-[400px] leading-tight">{{ imp.documento }}</span>
+                            </div>
+                        </td>
+                        <td class="px-10 py-8 hidden md:table-cell">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center text-white font-black text-sm border border-white/10 shadow-2xl uppercase">
+                                    {{ imp.usuario[:1] }}
+                                </div>
+                                <span class="text-sm font-black text-white uppercase tracking-tighter">{{ imp.usuario }}</span>
+                            </div>
+                        </td>
+                        <td class="px-10 py-8 text-center">
+                            <div class="inline-flex flex-col items-center justify-center w-14 h-14 rounded-2xl bg-white/5 border border-white/5 group-hover:bg-indigo-500/10 transition-all">
+                                <span class="text-3xl font-black text-white leading-none">{{ imp.paginas }}</span>
+                                <span class="text-[8px] font-black text-slate-600 uppercase tracking-widest mt-1">Sht</span>
+                            </div>
+                        </td>
+                        <td class="px-10 py-8 text-right hidden sm:table-cell">
+                            <div class="flex flex-col items-end">
+                                <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Custo</span>
+                                <div class="flex items-baseline gap-1">
+                                    <span class="text-[11px] font-black text-emerald-500/50 uppercase italic tracking-tighter">R$</span>
+                                    <span class="text-2xl font-black text-emerald-500 tracking-tighter">{{ imp.valor_fmt }}</span>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-10 py-16 text-center">
+                            <div class="flex flex-col items-center justify-center text-slate-500">
+                                <svg class="w-16 h-16 mb-4 text-slate-600/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                                <p class="text-sm font-black uppercase tracking-widest">Nenhuma atividade registrada</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    Chart.defaults.color = '#64748b';
+    Chart.defaults.font.family = "'Outfit', 'Inter', sans-serif";
+    Chart.defaults.font.weight = '800';
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '80%',
+        plugins: {
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        let label = context.label || '';
+                        if (label) {
+                            label += ': ';
+                        }
+                        if (context.parsed !== null) {
+                            label += context.parsed + (context.chart.canvas.id === 'chart-rede' ? ' equipamentos' : ' páginas');
+                        }
+                        return label;
+                    }
+                }
+            },
+            legend: {
+                position: 'bottom',
+                labels: {
+                    color: '#94a3b8',
+                    font: { size: 10, weight: '800' },
+                    padding: 25,
+                    usePointStyle: true
+                }
+            }
+        },
+        animation: { duration: 2000, easing: 'easeOutQuart' }
+    };
+
+    const totalMaquinas = {{ stats.total_maquinas|default(0) }};
+    const maquinasOnline = {{ stats.maquinas_online|default(0) }};
+    const maquinasOffline = totalMaquinas - maquinasOnline;
+
+    new Chart(document.getElementById('chart-rede'), {
+        type: 'doughnut',
+        data: {
+            labels: totalMaquinas === 0 ? ['Sem Dados'] : ['Ativos', 'Offline'],
+            datasets: [{
+                data: totalMaquinas === 0 ? [1] : [maquinasOnline, maquinasOffline],
+                backgroundColor: totalMaquinas === 0 ? ['#1e293b'] : ['#10b981', '#1e293b'],
+                borderWidth: 0,
+                spacing: 8,
+                borderRadius: 10
+            }]
+        },
+        options: chartOptions
+    });
+
+    const impressorasLabels = [{% for i in top_impressoras %}'{{ i.nome|safe }}',{% endfor %}];
+    const impressorasData = [{% for i in top_impressoras %}{{ i.total }},{% endfor %}];
+
+    new Chart(document.getElementById('chart-impressoras'), {
+        type: 'doughnut',
+        data: {
+            labels: impressorasData.length === 0 ? ['Sem Dados'] : impressorasLabels,
+            datasets: [{
+                data: impressorasData.length === 0 ? [1] : impressorasData,
+                backgroundColor: impressorasData.length === 0 ? ['#1e293b'] : ['#06b6d4', '#0891b2', '#0e7490', '#155e75', '#164e63'],
+                borderWidth: 0,
+                spacing: 4,
+                borderRadius: 5
+            }]
+        },
+        options: chartOptions
+    });
+
+    const usuariosLabels = [{% for u in top_usuarios %}'{{ u.nome|safe }}',{% endfor %}];
+    const usuariosData = [{% for u in top_usuarios %}{{ u.total }},{% endfor %}];
+
+    new Chart(document.getElementById('chart-usuarios'), {
+        type: 'doughnut',
+        data: {
+            labels: usuariosData.length === 0 ? ['Sem Dados'] : usuariosLabels,
+            datasets: [{
+                data: usuariosData.length === 0 ? [1] : usuariosData,
+                backgroundColor: usuariosData.length === 0 ? ['#1e293b'] : ['#6366f1', '#4f46e5', '#4338ca', '#3730a3', '#312e81'],
+                borderWidth: 0,
+                spacing: 4,
+                borderRadius: 5
+            }]
+        },
+        options: chartOptions
+    });
+
+    function updateSyncTime() {
+        const now = new Date();
+        const el = document.getElementById('sync-time');
+        if (el) el.textContent = now.toLocaleTimeString('pt-BR');
+    }
+    updateSyncTime();
+    setInterval(updateSyncTime, 1000);
+
+    // Auto-refresh da página a cada 60s
+    setTimeout(function() {
+        window.location.reload();
+    }, 60000);
+
+    // Animação de progresso da barra
+    setTimeout(() => {
+        const pbs = document.querySelectorAll('.progress-bar-equipamentos');
+        pbs.forEach(pb => {
+            pb.style.width = pb.getAttribute('data-width');
+        });
+    }, 100);
+</script>
+{% endblock %}

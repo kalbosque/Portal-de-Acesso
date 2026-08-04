@@ -1,0 +1,1872 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <script>
+        if(localStorage.getItem('theme') === 'light') { document.documentElement.classList.add('light-mode'); }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ config.APP_NAME }} Premium{% endblock %}</title>
+    <!-- Assets hospedados localmente - sem dependência de internet -->
+    <script src="/static/js/tailwind.min.js"></script>
+    <link href="/static/css/google-fonts.css" rel="stylesheet">
+    <script src="/static/js/chart.min.js"></script>
+    
+    <style>
+        :root { --app-color: {{ config.APP_COLOR }}; }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; transition: background-color 0.3s, color 0.3s; letter-spacing: -0.01em; }
+        h1, h2, h3, h4, .font-premium { font-family: 'Outfit', sans-serif; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glass-input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); color: #f8fafc; outline: none; transition: all 0.3s ease;}
+        .gradient-text { background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        /* === High Contrast & Modern Premium Light/Dark Mode Customizations === */
+        html.light-mode body { background-color: #f8fafc; color: #0f172a; }
+        html.light-mode .glass-panel { background: #ffffff !important; border: 1px solid #e2e8f0 !important; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -4px rgba(0,0,0,0.05); }
+        html.light-mode .text-white, html.light-mode .font-bold, html.light-mode .font-black, html.light-mode h1 { color: #0f172a !important; }
+        html.light-mode .text-slate-400, html.light-mode .text-slate-300, html.light-mode .text-slate-500 { color: #475569 !important; font-weight: 500 !important; }
+        html.light-mode .text-slate-600 { color: #334155 !important; font-weight: 600 !important; }
+        html.light-mode .glass-input { background: #ffffff !important; border: 1.5px solid #cbd5e1 !important; color: #0f172a !important; }
+        html.light-mode .html-light\:text-slate-900 { color: #0f172a !important; }
+        
+        /* Modern Premium Navigation Styles */
+        .nav-shell {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        html.light-mode .nav-shell {
+            background: rgba(255, 255, 255, 0.8) !important;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+            box-shadow: 0 4px 30px rgba(15, 23, 42, 0.03);
+        }
+
+        .nav-pill-container {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 0.25rem;
+            border-radius: 1.25rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        html.light-mode .nav-pill-container {
+            background: rgba(15, 23, 42, 0.03) !important;
+            border: 1px solid rgba(15, 23, 42, 0.06) !important;
+        }
+
+        .nav-link-custom {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 0.85rem;
+            border-radius: 0.95rem;
+            font-size: 0.68rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #94a3b8;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+        }
+        .nav-link-custom:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .nav-link-custom.is-active {
+            background: var(--app-color);
+            color: #ffffff !important;
+            box-shadow: 0 8px 20px -4px rgba(99, 102, 241, 0.4);
+        }
+        html.light-mode .nav-link-custom {
+            color: #475569;
+        }
+        html.light-mode .nav-link-custom:hover {
+            color: #0f172a;
+            background: rgba(15, 23, 42, 0.05);
+        }
+        html.light-mode .nav-link-custom.is-active {
+            background: var(--app-color);
+            color: #ffffff !important;
+        }
+
+        /* Menu Dropdown de Administração */
+        .admin-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .admin-menu {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(10px);
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1.25rem;
+            min-width: 180px;
+            padding: 0.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+            display: none;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .admin-dropdown:hover .admin-menu {
+            display: block;
+            opacity: 1;
+            transform: translateX(-50%) translateY(4px);
+        }
+        .admin-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1rem;
+            border-radius: 0.75rem;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            transition: all 0.15s ease;
+        }
+        .admin-menu-item:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .admin-menu-item.is-active {
+            background: var(--app-color);
+            color: #ffffff !important;
+        }
+        html.light-mode .admin-menu {
+            background: #ffffff !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05) !important;
+        }
+        html.light-mode .admin-menu-item {
+            color: #475569;
+        }
+        html.light-mode .admin-menu-item:hover {
+            color: #0f172a;
+            background: rgba(15, 23, 42, 0.05);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative overflow-x-hidden">
+    <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div class="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px]"></div>
+        <div class="absolute bottom-[10%] -right-[10%] w-[40%] h-[40%] rounded-full bg-fuchsia-600/10 blur-[120px]"></div>
+    </div>
+
+    <!-- Navbar Principal -->
+    <nav class="nav-shell sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="h-16 flex items-center justify-between gap-4">
+
+                <!-- Logo + Nome -->
+                <a href="/" class="flex items-center gap-3 group flex-shrink-0">
+                    <div class="relative">
+                        <div class="absolute -inset-1.5 bg-indigo-600/30 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500"></div>
+                        {% if config.APP_LOGO_URL %}
+                            <img src="/static/{{ config.APP_LOGO_URL }}" alt="Logo" class="relative h-9 w-auto object-contain rounded-xl shadow-lg border border-white/5" />
+                        {% else %}
+                            <div class="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center shadow-xl border border-indigo-500/30">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="hidden sm:flex flex-col leading-none">
+                        <h1 class="text-base font-black tracking-tighter text-white html-light:text-slate-900 uppercase">{{ config.APP_NAME }}</h1>
+                        <span class="text-[8px] text-slate-500 font-black uppercase tracking-[0.35em] mt-0.5">{{ config.APP_TAGLINE or 'Sistema de Gestão' }}</span>
+                    </div>
+                </a>
+
+                <!-- Menu Desktop -->
+                {% set perms = request.cookies.get("user_perms")|from_json if request.cookies.get("user_perms") else [] %}
+                {% set role = request.cookies.get("user_role") %}
+                <div class="hidden lg:flex items-center nav-pill-container flex-initial max-w-full justify-center overflow-visible">
+
+                    {% if role == 'admin' or 'Dashboard' in perms %}
+                    <a href="/" title="Painel" class="nav-link-custom {% if request.url.path == '/' %}is-active{% endif %}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                        Painel
+                    </a>
+                    {% endif %}
+
+                    {% if role == 'admin' or 'Equipamentos' in perms %}
+                    <a href="/impressoras" title="Impressoras" class="nav-link-custom {% if request.url.path == '/impressoras' %}is-active{% endif %}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                        Impressoras
+                    </a>
+                    {% endif %}
+
+                    {% if role == 'admin' or 'Relatórios' in perms %}
+                    <a href="/relatorios" title="Relatórios" class="nav-link-custom {% if request.url.path == '/relatorios' %}is-active{% endif %}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Relatórios
+                    </a>
+                    {% endif %}
+
+                    {% if role == 'admin' or 'Suporte' in perms %}
+                    <a href="/chamados" title="Suporte" class="nav-link-custom {% if request.url.path == '/chamados' %}is-active{% endif %}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                        Suporte
+                    </a>
+                    {% endif %}
+
+                    {% if config.MODULO_ATENDIMENTO %}
+                    <a href="/atendimento" title="Atendimento WhatsApp" class="nav-link-custom {% if request.url.path == '/atendimento' %}is-active{% endif %}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                        Atendimento
+                    </a>
+                    {% endif %}
+
+                    {% if role == 'admin' or 'Ajustes' in perms %}
+                    <div class="w-px h-5 bg-white/10 mx-1"></div>
+                    <div class="admin-dropdown">
+                        <button class="nav-link-custom {% if request.url.path in ['/equipamentos_ti', '/usuarios', '/cofre', '/configuracoes'] %}is-active{% endif %} flex items-center gap-1.5 focus:outline-none">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                            Gestão
+                            <svg class="w-2.5 h-2.5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+                        <div class="admin-menu">
+                            {% if role == 'admin' %}
+                            <a href="/whatsapp_config" class="admin-menu-item {% if request.url.path == '/whatsapp_config' %}is-active{% endif %}">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                Configurar WhatsApp
+                            </a>
+                            <a href="/monitor_usuarios" class="admin-menu-item {% if request.url.path == '/monitor_usuarios' %}is-active{% endif %}">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                Monitor Usuários
+                            </a>
+                            <a href="/equipamentos_ti" class="admin-menu-item {% if request.url.path == '/equipamentos_ti' %}is-active{% endif %}">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                                Ativos TI
+                            </a>
+                            <a href="/usuarios" class="admin-menu-item {% if request.url.path == '/usuarios' %}is-active{% endif %}">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                Usuários
+                            </a>
+                            <a href="/cofre" class="admin-menu-item {% if request.url.path == '/cofre' %}is-active{% endif %}">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                                Cofre
+                            </a>
+                            {% endif %}
+                            
+                            {% if role == 'admin' or 'Ajustes' in perms %}
+                            <a href="/configuracoes" class="admin-menu-item {% if request.url.path == '/configuracoes' %}is-active{% endif %}">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                Ajustes
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Direita: Ações -->
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <!-- Tema -->
+                    <button onclick="toggleTheme()" title="Alternar tema" class="w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-all border border-white/5">
+                        <svg id="icon-sun" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                        <svg id="icon-moon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    </button>
+
+                    <!-- Perfil -->
+                    <div class="relative" id="profile-dropdown-container">
+                        <button onclick="toggleProfileDropdown()" class="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group focus:outline-none">
+                            <div class="relative w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-xs font-black text-white shadow-lg border border-white/10 flex-shrink-0">
+                                {{ (request.cookies.get("user_name") or 'U')[0] | upper }}
+                            </div>
+                            <div class="hidden sm:flex flex-col leading-none text-left">
+                                <span class="text-[11px] font-black text-white html-light:text-slate-900 tracking-tight">{{ request.cookies.get("user_name") or 'Usuário' }}</span>
+                                <span class="text-[8px] text-slate-500 font-bold uppercase tracking-wider">{{ request.cookies.get("user_role") or 'Operador' }}</span>
+                            </div>
+                            <svg class="w-3 h-3 text-slate-500 group-hover:text-slate-300 transition-colors hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </button>
+
+                        <!-- Dropdown -->
+                        <div id="profile-dropdown" class="absolute right-0 mt-2 w-52 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden hidden origin-top-right z-[60]">
+                            <div class="px-4 py-3 border-b border-white/5 bg-white/5">
+                                <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Conta</p>
+                                <p class="text-xs font-bold text-white mt-0.5">{{ request.cookies.get("user_name") or 'Usuário' }}</p>
+                            </div>
+                            <div class="py-1.5">
+                                <a href="javascript:void(0)" onclick="openModal('modal-perfil')" class="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-400 hover:text-white hover:bg-indigo-600 transition-all uppercase tracking-widest">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                    Editar Perfil
+                                </a>
+                                <a href="javascript:void(0)" onclick="openModal('modal-senha')" class="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-400 hover:text-white hover:bg-indigo-600 transition-all uppercase tracking-widest">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                                    Alterar Senha
+                                </a>
+                                <div class="border-t border-white/5 my-1"></div>
+                                <a href="javascript:void(0)" onclick="handleLogout()" class="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-rose-400 hover:bg-rose-500 hover:text-white transition-all uppercase tracking-widest">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                                    Sair do Sistema
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mobile: Botão Hamburger -->
+                    <button onclick="toggleMobileMenu()" class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white border border-white/5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </nav>
+
+    <!-- Menu Lateral Mobile -->
+    <div id="mobileDrawer" class="fixed inset-0 z-[100] hidden">
+        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onclick="toggleMobileMenu()"></div>
+        <div class="absolute right-0 top-0 bottom-0 w-72 bg-slate-900 border-l border-white/10 shadow-2xl flex flex-col" id="drawerContent">
+            <!-- Header do Drawer -->
+            <div class="flex justify-between items-center px-6 py-5 border-b border-white/5">
+                <div class="flex flex-col">
+                    <span class="text-sm font-black text-white uppercase tracking-tight">{{ config.APP_NAME }}</span>
+                    <span class="text-[8px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">{{ request.cookies.get("user_name") or 'Usuário' }}</span>
+                </div>
+                <button onclick="toggleMobileMenu()" class="w-8 h-8 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Links -->
+            <div class="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
+                {% if role == 'admin' or 'Dashboard' in perms %}
+                <a href="/" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                    Painel
+                </a>
+                {% endif %}
+
+                {% if role == 'admin' or 'Equipamentos' in perms %}
+                <a href="/impressoras" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/impressoras' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                    Impressoras
+                </a>
+                {% endif %}
+
+                {% if role == 'admin' or 'Relatórios' in perms %}
+                <a href="/relatorios" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/relatorios' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    Relatórios
+                </a>
+                {% endif %}
+
+                {% if role == 'admin' or 'Suporte' in perms %}
+                <a href="/chamados" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/chamados' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    Suporte
+                </a>
+                {% endif %}
+
+                {% if config.MODULO_ATENDIMENTO %}
+                <a href="/atendimento" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/atendimento' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                    Atendimento WhatsApp
+                </a>
+                {% endif %}
+
+                {% if role == 'admin' %}
+                <div class="border-t border-white/5 my-2"></div>
+                <p class="text-[9px] text-slate-600 font-black uppercase tracking-widest px-4 mb-1">Administração</p>
+                <a href="/whatsapp_config" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/whatsapp_config' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    WhatsApp Config
+                </a>
+                <a href="/equipamentos_ti" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/equipamentos_ti' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    Ativos de TI
+                </a>
+                <a href="/usuarios" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/usuarios' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    Usuários
+                </a>
+                <a href="/cofre" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/cofre' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                    Cofre de Senhas
+                </a>
+                <a href="/configuracoes" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/configuracoes' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Configurações
+                </a>
+                {% elif 'Ajustes' in perms %}
+                <a href="/configuracoes" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all {% if request.url.path == '/configuracoes' %}bg-indigo-600 text-white{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Configurações
+                </a>
+                {% endif %}
+            </div>
+
+            <!-- Rodapé do Drawer -->
+            <div class="p-4 border-t border-white/5">
+                <button onclick="handleLogout()" class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-all text-sm font-bold">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    Sair do Sistema
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main id="app-container" class="flex-grow max-w-7xl w-full mx-auto px-4 pb-12 relative">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="mt-auto py-8 border-t border-white/5 text-center text-slate-500 text-[10px] font-black uppercase tracking-[0.3em]">
+        <p>&copy; 2026 {{ config.APP_NAME }} - Todos os direitos reservados. Desenvolvido por Jose Calbosque.</p>
+    </footer>
+
+    <!-- Modal Editar Perfil -->
+    <div id="modal-perfil" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden animate-fade-in">
+        <div class="glass-panel w-full max-w-md rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
+            <div class="p-8 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                <h3 class="text-xl font-black text-white uppercase italic tracking-tighter">Editar Perfil</h3>
+                <button onclick="closeModal('modal-perfil')" class="text-slate-500 hover:text-white transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <form onsubmit="handleUpdateProfile(event)" class="p-8 space-y-6">
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Seu Nome</label>
+                    <input type="text" name="nome" value="{{ request.cookies.get('user_name') }}" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all" required>
+                </div>
+                <button type="submit" class="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-[1.02] active:scale-95 transition-all">Salvar Alterações</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Alterar Senha -->
+    <div id="modal-senha" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden animate-fade-in">
+        <div class="glass-panel w-full max-w-md rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
+            <div class="p-8 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                <h3 class="text-xl font-black text-white uppercase italic tracking-tighter">Alterar Senha</h3>
+                <button onclick="closeModal('modal-senha')" class="text-slate-500 hover:text-white transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <form onsubmit="handleChangePassword(event)" class="p-8 space-y-6">
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Nova Senha</label>
+                    <input type="password" name="password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all" required minlength="6">
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Confirmar Senha</label>
+                    <input type="password" name="confirm_password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all" required>
+                </div>
+                <button type="submit" class="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all">Atualizar Senha</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleProfileDropdown() {
+            const dropdown = document.getElementById('profile-dropdown');
+            dropdown.classList.toggle('hidden');
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+            document.getElementById('profile-dropdown').classList.add('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        // Fecha dropdown ao clicar fora
+        window.addEventListener('click', function(e) {
+            const container = document.getElementById('profile-dropdown-container');
+            const dropdown = document.getElementById('profile-dropdown');
+            if (container && !container.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        async function handleUpdateProfile(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            try {
+                const res = await fetch('/api/auth/update_profile', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Perfil atualizado! O nome será atualizado após o recarregamento.');
+                    window.location.reload();
+                } else {
+                    alert(data.detail || 'Erro ao atualizar perfil');
+                }
+            } catch (err) {
+                alert('Erro na conexão com o servidor');
+            }
+        }
+
+        async function handleChangePassword(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            if (formData.get('password') !== formData.get('confirm_password')) {
+                alert('As senhas não coincidem!');
+                return;
+            }
+            try {
+                const res = await fetch('/api/auth/change_password', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Senha alterada com sucesso!');
+                    closeModal('modal-senha');
+                } else {
+                    alert(data.detail || 'Erro ao alterar senha');
+                }
+            } catch (err) {
+                alert('Erro na conexão com o servidor');
+            }
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            html.classList.toggle('light-mode');
+            const isLight = html.classList.contains('light-mode');
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            document.getElementById('icon-sun').classList.toggle('hidden', !isLight);
+            document.getElementById('icon-moon').classList.toggle('hidden', isLight);
+        }
+
+        // Carregar tema salvo
+        if (localStorage.getItem('theme') === 'light') {
+            document.documentElement.classList.add('light-mode');
+            document.getElementById('icon-sun').classList.remove('hidden');
+            document.getElementById('icon-moon').classList.add('hidden');
+        }
+
+        async function handleLogout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('live-clock').textContent = now.toLocaleTimeString('pt-BR', { hour12: false });
+            document.getElementById('live-date').textContent = now.toLocaleDateString('pt-BR');
+        }
+        function toggleMobileMenu() {
+            const drawer = document.getElementById('mobileDrawer');
+            const content = document.getElementById('drawerContent');
+            if (drawer.classList.contains('hidden')) {
+                drawer.classList.remove('hidden');
+                setTimeout(() => content.classList.remove('translate-x-full'), 10);
+            } else {
+                content.classList.add('translate-x-full');
+                setTimeout(() => drawer.classList.add('hidden'), 300);
+            }
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            updateThemeIcons(document.documentElement.classList.contains('light-mode'));
+            setInterval(updateClock, 1000);
+            updateClock();
+        });
+
+        async function handleLogout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch(e) {}
+            // Limpar cookies manualmente também
+            document.cookie = 'user_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            document.cookie = 'user_role=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            document.cookie = 'user_name=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            window.location.href = '/login';
+        }
+
+        // ── REAL-TIME WebSocket (substitui polling) ──────────────────────
+        let ws = null;
+        let wsReconnectTimer = null;
+        let latestMsgId = 0;
+        let lastAbertosCount = null;
+
+        function playNotificationSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+                osc.start(); osc.stop(ctx.currentTime + 0.3);
+            } catch(e) {}
+        }
+
+        function showToast(message, color = '#6366f1', icon = '🔔') {
+            const container = document.getElementById('ws-toast-container') || createToastContainer();
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                background: rgba(15,23,42,0.95); backdrop-filter: blur(20px);
+                border: 1px solid ${color}44; border-left: 3px solid ${color};
+                border-radius: 1rem; padding: 14px 20px;
+                box-shadow: 0 20px 40px -10px rgba(0,0,0,0.6);
+                display: flex; align-items: center; gap: 12px;
+                min-width: 280px; max-width: 380px;
+                animation: wsToastIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275) forwards;
+                cursor: pointer;
+            `;
+            toast.innerHTML = `<span style="font-size:18px">${icon}</span><span style="color:#f8fafc;font-size:11px;font-weight:800;letter-spacing:0.05em;text-transform:uppercase;flex:1">${message}</span>`;
+            toast.onclick = () => toast.remove();
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.animation = 'wsToastOut 0.4s ease forwards'; setTimeout(() => toast.remove(), 400); }, 6000);
+        }
+
+        function createToastContainer() {
+            const c = document.createElement('div');
+            c.id = 'ws-toast-container';
+            c.style.cssText = 'position:fixed;top:24px;right:24px;z-index:99999;display:flex;flex-direction:column;gap:10px;pointer-events:none;';
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes wsToastIn { from{opacity:0;transform:translateX(60px)} to{opacity:1;transform:translateX(0)} }
+                @keyframes wsToastOut { to{opacity:0;transform:translateX(60px)} }
+                #ws-toast-container > * { pointer-events: auto; }
+            `;
+            document.head.appendChild(style);
+            document.body.appendChild(c);
+            return c;
+        }
+
+        function handleWsEvent(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data === 'pong') return;
+
+                switch(data.event) {
+                    case 'new_ticket':
+                        playNotificationSound();
+                        const urgLabel = data.prioridade === 'Alta' ? '🚨 URGENTE! ' : '';
+                        showToast(`${urgLabel}Novo chamado de ${data.usuario}`, data.prioridade === 'Alta' ? '#ef4444' : '#6366f1', '🎫');
+                        // Atualiza badge no menu
+                        document.querySelectorAll('[data-ticket-count]').forEach(el => {
+                            el.textContent = parseInt(el.textContent || '0') + 1;
+                        });
+                        break;
+                    case 'new_message':
+                        playNotificationSound();
+                        showToast(`Nova mensagem de ${data.usuario}`, '#6366f1', '💬');
+                        // Atualiza badge de não-lidas
+                        const badge = document.querySelector(`.unread-badge-${data.chamado_id}`);
+                        if (badge) { badge.style.display=''; badge.textContent = (parseInt(badge.textContent||0)+1); }
+                        break;
+                    case 'ticket_resolved':
+                        showToast('Chamado resolvido com sucesso!', '#10b981', '✅');
+                        break;
+                    case 'machine_offline':
+                        showToast(`Máquina ${data.machine} está Offline!`, '#f59e0b', '⚠️');
+                        break;
+                    case 'ticket_updated':
+                        // Silencioso — recarregar se estiver na página de chamados
+                        if (window.location.pathname === '/chamados') {
+                            setTimeout(() => window.location.reload(), 1500);
+                        }
+                        break;
+                }
+            } catch(e) {}
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) return;
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+            ws.onopen = () => {
+                console.log('[WS] Conectado ao servidor em tempo real');
+                clearInterval(wsReconnectTimer);
+                // Ping periódico para manter conexão ativa
+                setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 30000);
+            };
+
+            ws.onmessage = handleWsEvent;
+
+            ws.onclose = () => {
+                console.log('[WS] Conexão perdida. Reconectando em 5s...');
+                clearInterval(wsReconnectTimer);
+                wsReconnectTimer = setInterval(() => {
+                    if (!ws || ws.readyState === WebSocket.CLOSED) connectWebSocket();
+                }, 5000);
+            };
+
+            ws.onerror = () => ws.close();
+        }
+
+        // Inicia WebSocket ao carregar
+        document.addEventListener('DOMContentLoaded', connectWebSocket);
+    </script>
+
+    <!-- ============================================================ -->
+    <!-- 🛡️ Assistente Virtual: Guardião do Portal de Acesso          -->
+    <!-- ============================================================ -->
+    <style>
+    #guardiao-assistant {
+        position: fixed;
+        bottom: 28px;
+        right: 28px;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+        pointer-events: none;
+    }
+    #guardiao-assistant > * { pointer-events: auto; }
+
+    /* ══════════════════════════════════════════════
+       🤖 CONTADORZINHO — CHAT WIDGET PREMIUM
+       ══════════════════════════════════════════════ */
+    .guardiao-bubble {
+        background: linear-gradient(180deg, #0d1424 0%, #0a0f1e 100%);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid rgba(99,102,241,0.3);
+        color: #e2e8f0;
+        border-radius: 20px 20px 4px 20px;
+        box-shadow:
+            0 24px 60px rgba(0,0,0,0.8),
+            0 0 0 1px rgba(99,102,241,0.1),
+            0 0 60px rgba(99,102,241,0.08),
+            inset 0 1px 0 rgba(255,255,255,0.05);
+        margin-bottom: 16px;
+        width: 380px;
+        overflow: hidden;
+        position: relative;
+        display: none;
+        opacity: 0;
+        transform: translateY(16px) scale(0.94);
+        transition: opacity 0.4s cubic-bezier(0.16,1,0.3,1), transform 0.4s cubic-bezier(0.16,1,0.3,1);
+    }
+    .guardiao-bubble.visible {
+        display: block;
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+
+    /* ── Header Premium ── */
+    .g-chat-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e3a5f 100%);
+        border-bottom: 1px solid rgba(99,102,241,0.25);
+        padding: 14px 16px 14px 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        position: relative;
+        overflow: hidden;
+    }
+    .g-chat-header::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(ellipse at 30% 50%, rgba(99,102,241,0.15) 0%, transparent 70%);
+        pointer-events: none;
+    }
+    .g-header-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        border: 2px solid rgba(255,255,255,0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+        box-shadow: 0 0 16px rgba(99,102,241,0.5);
+        position: relative;
+        z-index: 1;
+    }
+    .g-header-info {
+        flex: 1;
+        min-width: 0;
+        position: relative;
+        z-index: 1;
+    }
+    .g-header-name {
+        font-size: 0.82rem;
+        font-weight: 800;
+        color: #f1f5f9;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+    }
+    .g-header-status {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 2px;
+    }
+    .g-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 6px #4ade80;
+        animation: statusPulse 2s ease-in-out infinite;
+    }
+    .g-status-txt {
+        font-size: 0.65rem;
+        color: #94a3b8;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .g-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        position: relative;
+        z-index: 1;
+    }
+    .g-btn-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: none;
+        background: rgba(255,255,255,0.06);
+        color: #94a3b8;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        font-size: 12px;
+    }
+    .g-btn-icon:hover { background: rgba(239,68,68,0.2); color: #fca5a5; }
+
+    .g-chat-msgs {
+        height: 200px;
+        overflow-y: auto;
+        padding: 16px 14px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        scroll-behavior: smooth;
+    }
+    .g-chat-msgs::-webkit-scrollbar { width: 3px; }
+    .g-chat-msgs::-webkit-scrollbar-track { background: transparent; }
+    .g-chat-msgs::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 2px; }
+
+    /* ── Mensagens ── */
+    .g-msg { max-width: 88%; animation: msgPop 0.3s cubic-bezier(0.16,1,0.3,1); }
+    .g-msg-inner {
+        font-size: 0.8rem;
+        line-height: 1.6;
+        padding: 9px 13px;
+        word-break: break-word;
+    }
+    .g-msg-inner strong { font-weight: 700; }
+    .g-msg-inner ul { margin: 4px 0 0 16px; padding: 0; }
+    .g-msg-inner li { margin-bottom: 2px; }
+
+    .g-msg-bot { align-self: flex-start; }
+    .g-msg-bot .g-msg-inner {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        color: #e2e8f0;
+        border-radius: 4px 16px 16px 16px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    .g-msg-user { align-self: flex-end; }
+    .g-msg-user .g-msg-inner {
+        background: linear-gradient(135deg, #4f46e5, #6d28d9);
+        color: #fff;
+        border-radius: 16px 4px 16px 16px;
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 4px 16px rgba(79,70,229,0.4);
+    }
+
+    /* ── Indicador digitando ── */
+    .g-typing .g-msg-inner {
+        background: rgba(255,255,255,0.03) !important;
+        border: 1px solid rgba(255,255,255,0.06) !important;
+    }
+    .g-dots { display: flex; align-items: center; gap: 4px; padding: 4px 2px; }
+    .g-dots span {
+        width: 7px; height: 7px;
+        background: #6366f1;
+        border-radius: 50%;
+        animation: dotBounce 1.4s ease-in-out infinite;
+    }
+    .g-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .g-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    /* ── Chips de sugestão rápida ── */
+    .g-suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 8px 14px;
+        border-top: 1px solid rgba(255,255,255,0.04);
+    }
+    .g-chip {
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 5px 10px;
+        border-radius: 20px;
+        border: 1px solid rgba(99,102,241,0.35);
+        background: rgba(99,102,241,0.08);
+        color: #a5b4fc;
+        cursor: pointer;
+        letter-spacing: 0.01em;
+        transition: all 0.2s;
+        white-space: nowrap;
+    }
+    .g-chip:hover {
+        background: rgba(99,102,241,0.25);
+        border-color: rgba(99,102,241,0.6);
+        color: #c4b5fd;
+        transform: translateY(-1px);
+    }
+
+    /* ── Input area ── */
+    .g-chat-input-area {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        background: rgba(255,255,255,0.02);
+    }
+    #g-chat-input {
+        flex: 1;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        outline: none;
+        color: #f1f5f9;
+        font-size: 0.82rem;
+        padding: 9px 13px;
+        font-family: 'Inter', sans-serif;
+        transition: border-color 0.2s, background 0.2s;
+    }
+    #g-chat-input::placeholder { color: #475569; }
+    #g-chat-input:focus {
+        border-color: rgba(99,102,241,0.5);
+        background: rgba(99,102,241,0.06);
+    }
+    #g-chat-send {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        border: none;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(79,70,229,0.4);
+    }
+    #g-chat-send:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(79,70,229,0.6);
+    }
+    #g-chat-send:disabled {
+        background: #1e293b;
+        box-shadow: none;
+        cursor: not-allowed;
+        transform: none;
+    }
+    #g-chat-send svg { width: 16px; height: 16px; }
+
+    /* ── Avatar flutuante ── */
+    .guardiao-avatar {
+        width: 100px;
+        height: 140px;
+        border-radius: 0;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+        animation: guardiao-float 3.5s ease-in-out infinite;
+        transition: transform 0.3s ease;
+    }
+    .guardiao-avatar:hover {
+        animation: none;
+        transform: scale(1.12) translateY(-4px);
+    }
+    .guardiao-avatar-ring {
+        position: absolute;
+        inset: -6px;
+        border-radius: 50%;
+        border: 2px solid rgba(99,102,241,0.3);
+        animation: ringPulse 2.5s ease-out infinite;
+    }
+    .guardiao-dot {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 14px;
+        height: 14px;
+        background: #4ade80;
+        border: 2.5px solid #0a0f1e;
+        border-radius: 50%;
+        z-index: 2;
+        box-shadow: 0 0 8px rgba(74,222,128,0.6);
+    }
+    /* SVG do boneco dentro do botão */
+    .guardiao-avatar svg {
+        width: 100px;
+        height: auto;
+        overflow: visible;
+        filter: drop-shadow(0 6px 16px rgba(0,0,0,0.5));
+    }
+
+    /* ── Keyframes ── */
+    @keyframes msgPop {
+        from { opacity:0; transform: translateY(8px) scale(0.96); }
+        to   { opacity:1; transform: translateY(0) scale(1); }
+    }
+    @keyframes dotBounce {
+        0%,80%,100% { transform: translateY(0); opacity: 0.6; }
+        40%          { transform: translateY(-7px); opacity: 1; }
+    }
+    @keyframes guardiao-float {
+        0%,100% { transform: translateY(0px); }
+        50%      { transform: translateY(-8px); }
+    }
+    @keyframes statusPulse {
+        0%,100% { opacity: 1; box-shadow: 0 0 6px #4ade80; }
+        50%     { opacity: 0.6; box-shadow: 0 0 2px #4ade80; }
+    }
+    @keyframes ringPulse {
+        0%   { transform: scale(1);    opacity: 0.5; }
+        70%  { transform: scale(1.2);  opacity: 0; }
+        100% { transform: scale(1.2);  opacity: 0; }
+    }
+    @keyframes guardiao-blink {
+        0%,100% { opacity: 1;   }
+        50%     { opacity: 0.2; }
+    }
+    /* Animação dos olhos do contador */
+    .cnt-olho {
+        animation: cnt-piscar 5s ease-in-out infinite;
+        /* transform-origin no centro exato de cada olho - evita deslizar */
+        transform-box: fill-box;
+        transform-origin: center center;
+    }
+    @keyframes cnt-piscar {
+        0%,90%,100% { transform: scaleY(1); }
+        93%          { transform: scaleY(0.08); }
+    }
+    .cnt-braco-dir {
+        animation: cnt-digitar 1.2s ease-in-out infinite;
+        transform-origin: 92px 88px;
+    }
+    .cnt-mao-dir {
+        animation: cnt-digitar 1.2s ease-in-out infinite;
+        transform-origin: 116px 88px;
+    }
+    .cnt-btn-press { animation: cnt-btn 1.2s ease-in-out infinite; }
+    .cnt-display   { animation: cnt-display-blink 1.2s steps(1) infinite; }
+    .cnt-cabeca {
+        animation: cnt-olhar 4s ease-in-out infinite;
+        transform-origin: 65px 84px;
+    }
+    @keyframes cnt-digitar {
+        0%,100% { transform: translateY(0px) rotate(-35deg); }
+        30%      { transform: translateY(2px) rotate(-31deg); }
+        60%      { transform: translateY(0px) rotate(-35deg); }
+        80%      { transform: translateY(3px) rotate(-30deg); }
+    }
+    @keyframes cnt-btn {
+        0%,100% { transform: scaleY(1);   fill: #475569; }
+        30%      { transform: scaleY(0.6); fill: #38bdf8; }
+        80%      { transform: scaleY(0.6); fill: #a78bfa; }
+    }
+    @keyframes cnt-display-blink {
+        0%,45%  { opacity: 1; }
+        50%,95% { opacity: 0.4; }
+    }
+    @keyframes cnt-olhar {
+        0%,100% { transform: rotate(0deg); }
+        25%,75% { transform: rotate(-4deg) translateX(2px); }
+    }
+    /* Animações de membros do Contadorzinho */
+    .cnt-perna-esq {
+        animation: cnt-perna-l 1.4s ease-in-out infinite;
+        transform-origin: 55px 116px;
+        animation-delay: 0s;
+    }
+    .cnt-perna-dir {
+        animation: cnt-perna-r 1.4s ease-in-out infinite;
+        transform-origin: 75px 116px;
+        animation-delay: -0.7s; /* começa na metade do ciclo = perna alternada */
+    }
+    @keyframes cnt-perna-l {
+        0%, 100% { transform: rotate(0deg); }
+        50% { transform: rotate(18deg); }
+    }
+    @keyframes cnt-perna-r {
+        0%, 100% { transform: rotate(0deg); }
+        50% { transform: rotate(-18deg); }
+    }
+    /* Braço esquerdo animado (balanceio natural) */
+    .cnt-braco-esq {
+        animation: cnt-braco-l 1.4s ease-in-out infinite;
+        transform-origin: 32px 86px;
+        animation-delay: -0.7s; /* oposto ao braço direito */
+    }
+    @keyframes cnt-braco-l {
+        0%, 100% { transform: rotate(25deg); }
+        50% { transform: rotate(5deg); }
+    }
+    </style>
+
+    <div id="guardiao-assistant">
+        <div class="guardiao-bubble" id="guardiao-bubble">
+
+            <!-- ── Header Premium ── -->
+            <div class="g-chat-header">
+                <div class="g-header-avatar">🧑‍💼</div>
+                <div class="g-header-info">
+                    <div class="g-header-name">Contadorzinho</div>
+                    <div class="g-header-status">
+                        <span class="g-status-dot"></span>
+                        <span class="g-status-txt">Assistente Virtual · Online</span>
+                    </div>
+                </div>
+                <div class="g-header-actions">
+                    <button class="g-btn-icon mr-1" onclick="guardiaoFlutuar()" title="Flutuar Conversa (Sempre no Topo)" id="pip-btn" style="display:inline-flex; align-items:center; justify-content:center;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/>
+                            <rect x="13" y="13" width="8" height="8" rx="1" fill="currentColor"/>
+                        </svg>
+                    </button>
+                    <button class="g-btn-icon" onclick="guardiaoFechar(true)" title="Encerrar Conversa">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mascot Area -->
+            <div id="g-mascot-container" style="display:flex; justify-content:center; align-items:center; background: rgba(99,102,241,0.03); border-bottom: 1px solid rgba(255,255,255,0.06); padding: 8px 0; height: 100px; overflow: hidden; flex-shrink: 0;">
+                <svg viewBox="0 0 130 150" style="width: 100px; height: 95px; display:block; overflow:visible;">
+                      <!-- Sombra chão -->
+                      <ellipse cx="65" cy="147" rx="26" ry="5" fill="rgba(59,130,246,0.2)"/>
+
+                      <!-- ================= TRAJE NORMAL (Corpo) ================= -->
+                      <g class="traje-normal">
+                          <!-- Perna esquerda com animação -->
+                          <g class="cnt-perna-esq">
+                            <rect x="48" y="116" width="14" height="24" rx="5" fill="#1e293b"/>
+                            <ellipse cx="54" cy="141" rx="12" ry="5" fill="#0f172a"/>
+                          </g>
+                          <!-- Perna direita com animação -->
+                          <g class="cnt-perna-dir">
+                            <rect x="68" y="116" width="14" height="24" rx="5" fill="#1e293b"/>
+                            <ellipse cx="76" cy="141" rx="12" ry="5" fill="#0f172a"/>
+                          </g>
+                          <!-- Tronco: paletó azul marinho -->
+                          <rect x="37" y="79" width="56" height="42" rx="13" fill="#1e3a5f"/>
+                          <!-- Camisa branca interna e gravata -->
+                          <rect x="57" y="80" width="16" height="20" rx="3" fill="#f8fafc"/>
+                          <polygon points="65,82 69,88 65,104 61,88" fill="#ef4444"/>
+                          <rect x="62" y="82" width="6" height="3" rx="1.5" fill="#b91c1c"/>
+                          <path d="M57 80 L43 93 L57 106" fill="#162d4a"/>
+                          <path d="M73 80 L87 93 L73 106" fill="#162d4a"/>
+                      </g>
+
+                      <!-- ================= TRAJE JOGO (Corpo) ================= -->
+                      <g class="traje-jogo" style="display: none;">
+                          <rect x="42" y="118" width="46" height="6" rx="2" fill="#1d4ed8"/>
+                          <rect x="44" y="120" width="18" height="15" rx="3" fill="#2563eb"/>
+                          <rect x="68" y="120" width="18" height="15" rx="3" fill="#2563eb"/>
+                          <rect x="43" y="119" width="3" height="16" rx="1" fill="#f8fafc"/>
+                          <rect x="84" y="119" width="3" height="16" rx="1" fill="#f8fafc"/>
+                          <rect x="48" y="132" width="10" height="7" fill="#f5c28a"/>
+                          <rect x="72" y="132" width="10" height="7" fill="#f5c28a"/>
+                          <rect x="47" y="137" width="12" height="9" rx="2" fill="#f8fafc"/>
+                          <rect x="47" y="138" width="12" height="1.5" fill="#16a34a"/>
+                          <rect x="47" y="140" width="12" height="1.5" fill="#facc15"/>
+                          <rect x="71" y="137" width="12" height="9" rx="2" fill="#f8fafc"/>
+                          <rect x="71" y="138" width="12" height="1.5" fill="#16a34a"/>
+                          <rect x="71" y="140" width="12" height="1.5" fill="#facc15"/>
+                          <ellipse cx="53" cy="144" rx="12" ry="5" fill="#0f172a"/>
+                          <ellipse cx="77" cy="144" rx="12" ry="5" fill="#0f172a"/>
+                          <rect x="37" y="79" width="56" height="42" rx="13" fill="#facc15"/>
+                      </g>
+
+                      <!-- Braço esquerdo: animado balanceando -->
+                      <g class="cnt-braco-esq">
+                        <g class="traje-normal">
+                          <rect x="25" y="80" width="14" height="32" rx="6" fill="#1e3a5f"/>
+                          <rect x="27" y="108" width="10" height="10" rx="4" fill="#f5c28a"/>
+                        </g>
+                      </g>
+                      <!-- Pasta amarela -->
+                      <g transform="translate(18, 22) rotate(10, 0, 0)">
+                        <rect x="-4" y="90" width="22" height="28" rx="4" fill="#f59e0b"/>
+                      </g>
+
+                      <!-- Braço direito: levemente dobrado digitando -->
+                      <g class="cnt-braco-dir" transform="rotate(-35, 98, 86)">
+                        <g class="traje-normal">
+                          <rect x="91" y="80" width="14" height="32" rx="6" fill="#1e3a5f"/>
+                          <rect x="93" y="108" width="10" height="10" rx="4" fill="#f5c28a"/>
+                        </g>
+                      </g>
+                      <!-- Calculadora -->
+                      <g transform="translate(-10, 24) rotate(-5, 110, 75)">
+                          <rect x="111" y="73" width="23" height="29" rx="4" fill="#1e293b"/>
+                          <rect x="111" y="73" width="23" height="29" rx="4" fill="none" stroke="#38bdf8" stroke-width="1" opacity="0.5"/>
+                          <rect x="114" y="76" width="17" height="7" rx="2" fill="#0d1b2e"/>
+                          <rect class="cnt-display" x="114" y="76" width="17" height="7" rx="2" fill="#10b981" opacity="0.15"/>
+                          <text class="calc-display-text" x="122" y="82" text-anchor="middle" font-size="5" fill="#10b981" font-weight="bold" font-family="monospace">0</text>
+                      </g>
+
+                      <!-- Pescoço e Rosto -->
+                      <rect x="58" y="72" width="14" height="12" rx="4" fill="#f5c28a"/>
+                      <ellipse cx="65" cy="50" rx="26" ry="30" fill="#f5c28a"/>
+                      <path d="M39 38 Q41 18 65 16 Q89 18 91 38 Q85 30 65 29 Q45 30 39 38Z" fill="#1c1917"/>
+
+                      <!-- Óculos -->
+                      <rect x="44" y="45" width="19" height="11" rx="2.5" fill="none" stroke="#292524" stroke-width="2"/>
+                      <rect x="67" y="45" width="19" height="11" rx="2.5" fill="none" stroke="#292524" stroke-width="2"/>
+                      <line x1="63" y1="50" x2="67" y2="50" stroke="#292524" stroke-width="1.8"/>
+
+                      <!-- Olhos -->
+                      <ellipse class="cnt-olho" cx="53" cy="51" rx="3.8" ry="4" fill="#1c1917"/>
+                      <ellipse class="cnt-olho" cx="76" cy="51" rx="3.8" ry="4" fill="#1c1917"/>
+
+                      <!-- Nariz e Sorriso -->
+                      <path d="M62 60 Q65 65 68 60" stroke="#d4956a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+                      <path d="M55 69 Q65 77 75 69" stroke="#c07850" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+                </svg>
+            </div>
+
+            <!-- ── Mensagens ── -->
+            <div class="g-chat-msgs" id="g-chat-msgs">
+                <div class="g-msg g-msg-bot">
+                    <div class="g-msg-inner">👋 Olá! Sou o <strong>Contadorzinho</strong>, seu assistente virtual.<br>Pode me perguntar sobre impressoras, chamados, relatórios, MEI, férias e muito mais!</div>
+                </div>
+            </div>
+
+            <!-- ── Sugestões rápidas ── -->
+            <div class="g-suggestions" id="g-suggestions">
+                <button class="g-chip" onclick="guardiaoSugestao('Como abrir um chamado?')">🎫 Abrir chamado</button>
+                <button class="g-chip" onclick="guardiaoSugestao('Status das impressoras')">🖨️ Impressoras</button>
+                <button class="g-chip" onclick="guardiaoSugestao('O que é MEI?')">🏢 MEI</button>
+                <button class="g-chip" onclick="guardiaoSugestao('Como funciona o 13º salário?')">🎄 13º Salário</button>
+            </div>
+
+            <!-- ── Input ── -->
+            <div class="g-chat-input-area">
+                <input id="g-chat-input" type="text" placeholder="Pergunte qualquer coisa..." maxlength="300"
+                    onkeydown="if(event.key==='Enter')guardiaoEnviar()"/>
+                <button onclick="guardiaoEnviar()" id="g-chat-send" title="Enviar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"/>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="guardiao-avatar" onclick="guardiaoToggle()" title="Abrir Contadorzinho">
+            <div class="guardiao-avatar-ring"></div>
+            <div class="guardiao-dot" id="guardiao-dot"></div>
+            <!-- Boneco Contador Humano - SVG redesenhado -->
+            <svg width="120" height="144" viewBox="0 0 130 150" xmlns="http://www.w3.org/2000/svg">
+
+              <!-- Sombra chão -->
+              <ellipse cx="65" cy="147" rx="26" ry="5" fill="rgba(59,130,246,0.2)"/>
+
+              <!-- ================= TRAJE NORMAL (Corpo) ================= -->
+              <g class="traje-normal">
+                  <!-- Perna esquerda com animação -->
+                  <g class="cnt-perna-esq">
+                    <rect x="48" y="116" width="14" height="24" rx="5" fill="#1e293b"/>
+                    <ellipse cx="54" cy="141" rx="12" ry="5" fill="#0f172a"/>
+                  </g>
+                  <!-- Perna direita com animação -->
+                  <g class="cnt-perna-dir">
+                    <rect x="68" y="116" width="14" height="24" rx="5" fill="#1e293b"/>
+                    <ellipse cx="76" cy="141" rx="12" ry="5" fill="#0f172a"/>
+                  </g>
+                  <!-- Tronco: paletó azul marinho -->
+                  <rect x="37" y="79" width="56" height="42" rx="13" fill="#1e3a5f"/>
+                  <!-- Camisa branca interna e gravata -->
+                  <rect x="57" y="80" width="16" height="20" rx="3" fill="#f8fafc"/>
+                  <polygon points="65,82 69,88 65,104 61,88" fill="#ef4444"/>
+                  <rect x="62" y="82" width="6" height="3" rx="1.5" fill="#b91c1c"/>
+                  <path d="M57 80 L43 93 L57 106" fill="#162d4a"/>
+                  <path d="M73 80 L87 93 L73 106" fill="#162d4a"/>
+              </g>
+
+              <!-- ================= TRAJE JOGO (Corpo) ================= -->
+              <g class="traje-jogo" style="display: none;">
+                  <!-- Cintura e base da bermuda azul -->
+                  <rect x="42" y="118" width="46" height="6" rx="2" fill="#1d4ed8"/>
+                  <!-- Pernas da bermuda azul -->
+                  <rect x="44" y="120" width="18" height="15" rx="3" fill="#2563eb"/>
+                  <rect x="68" y="120" width="18" height="15" rx="3" fill="#2563eb"/>
+                  <!-- Listra branca na lateral da bermuda -->
+                  <rect x="43" y="119" width="3" height="16" rx="1" fill="#f8fafc"/>
+                  <rect x="84" y="119" width="3" height="16" rx="1" fill="#f8fafc"/>
+                  <!-- Pele pernas -->
+                  <rect x="48" y="132" width="10" height="7" fill="#f5c28a"/>
+                  <rect x="72" y="132" width="10" height="7" fill="#f5c28a"/>
+                  <!-- Meias brancas com listras verde/amarela -->
+                  <rect x="47" y="137" width="12" height="9" rx="2" fill="#f8fafc"/>
+                  <rect x="47" y="138" width="12" height="1.5" fill="#16a34a"/>
+                  <rect x="47" y="140" width="12" height="1.5" fill="#facc15"/>
+                  <rect x="71" y="137" width="12" height="9" rx="2" fill="#f8fafc"/>
+                  <rect x="71" y="138" width="12" height="1.5" fill="#16a34a"/>
+                  <rect x="71" y="140" width="12" height="1.5" fill="#facc15"/>
+                  <!-- Chuteiras pretas com travas -->
+                  <ellipse cx="53" cy="144" rx="12" ry="5" fill="#0f172a"/>
+                  <ellipse cx="77" cy="144" rx="12" ry="5" fill="#0f172a"/>
+                  <rect x="45" y="147" width="2" height="3" rx="1" fill="#94a3b8"/>
+                  <rect x="52" y="148" width="2" height="3" rx="1" fill="#94a3b8"/>
+                  <rect x="58" y="147" width="2" height="3" rx="1" fill="#94a3b8"/>
+                  <rect x="69" y="147" width="2" height="3" rx="1" fill="#94a3b8"/>
+                  <rect x="76" y="148" width="2" height="3" rx="1" fill="#94a3b8"/>
+                  <rect x="82" y="147" width="2" height="3" rx="1" fill="#94a3b8"/>
+                  <!-- Tronco: Camisa Amarela Seleção -->
+                  <rect x="37" y="79" width="56" height="42" rx="13" fill="#facc15"/>
+                  <polygon points="55,79 75,79 65,92" fill="#16a34a"/>
+                  <polygon points="58,79 72,79 65,88" fill="#f5c28a"/>
+                  <text x="75" y="100" font-family="sans-serif" font-weight="bold" font-size="10" fill="#16a34a">10</text>
+              </g>
+
+              <!-- Braço esquerdo: animado balanceando -->
+              <g class="cnt-braco-esq">
+                <g class="traje-normal">
+                  <!-- Manga paletó e mão -->
+                  <rect x="25" y="80" width="14" height="32" rx="6" fill="#1e3a5f"/>
+                  <rect x="27" y="108" width="10" height="10" rx="4" fill="#f5c28a"/>
+                </g>
+                <g class="traje-jogo" style="display: none;">
+                  <!-- Manga curta amarela com barra verde e braço pele -->
+                  <rect x="25" y="80" width="14" height="15" rx="4" fill="#facc15"/>
+                  <rect x="25" y="93" width="14" height="3" fill="#16a34a"/>
+                  <rect x="26" y="95" width="12" height="16" rx="4" fill="#f5c28a"/>
+                  <rect x="27" y="108" width="10" height="10" rx="4" fill="#f5c28a"/>
+                </g>
+              </g>
+              <!-- Pasta amarela (agora na altura da perna) -->
+              <g transform="translate(18, 22) rotate(10, 0, 0)">
+                <rect x="-4" y="90" width="22" height="28" rx="4" fill="#f59e0b"/>
+                <rect x="-4" y="90" width="22" height="28" rx="4" fill="none" stroke="#d97706" stroke-width="1.5"/>
+                <rect x="-1" y="93" width="16" height="4" rx="2" fill="#d97706"/>
+                <line x1="-1" y1="101" x2="16" y2="101" stroke="#d97706" stroke-width="1.2"/>
+                <line x1="-1" y1="105" x2="16" y2="105" stroke="#d97706" stroke-width="1.2"/>
+                <line x1="-1" y1="109" x2="10" y2="109" stroke="#d97706" stroke-width="1.2"/>
+              </g>
+
+              <!-- Braço direito: levemente dobrado para frente digitando -->
+              <g class="cnt-braco-dir" transform="rotate(-35, 98, 86)">
+                <g class="traje-normal">
+                  <!-- Manga paletó e mão -->
+                  <rect x="91" y="80" width="14" height="32" rx="6" fill="#1e3a5f"/>
+                  <rect x="93" y="108" width="10" height="10" rx="4" fill="#f5c28a"/>
+                </g>
+                <g class="traje-jogo" style="display: none;">
+                  <!-- Manga curta amarela com barra verde e braço pele -->
+                  <rect x="91" y="80" width="14" height="15" rx="4" fill="#facc15"/>
+                  <rect x="91" y="93" width="14" height="3" fill="#16a34a"/>
+                  <rect x="92" y="95" width="12" height="16" rx="4" fill="#f5c28a"/>
+                  <rect x="93" y="108" width="10" height="10" rx="4" fill="#f5c28a"/>
+                </g>
+              </g>
+              <!-- Calculadora (mais para baixo e levemente inclinada) -->
+              <g transform="translate(-10, 24) rotate(-5, 110, 75)">
+                  <rect x="111" y="73" width="23" height="29" rx="4" fill="#1e293b"/>
+                  <rect x="111" y="73" width="23" height="29" rx="4" fill="none" stroke="#38bdf8" stroke-width="1" opacity="0.5"/>
+                  <rect x="114" y="76" width="17" height="7" rx="2" fill="#0d1b2e"/>
+                  <rect class="cnt-display" x="114" y="76" width="17" height="7" rx="2" fill="#10b981" opacity="0.15"/>
+                  <text class="calc-display-text" x="122" y="82" text-anchor="middle" font-size="5" fill="#10b981" font-weight="bold" font-family="monospace">0</text>
+                  <rect x="114" y="86" width="4" height="3.5" rx="1" fill="#475569"/>
+                  <rect x="119" y="86" width="4" height="3.5" rx="1" fill="#475569"/>
+                  <rect x="124" y="86" width="4" height="3.5" rx="1" fill="#475569"/>
+                  <rect x="114" y="91" width="4" height="3.5" rx="1" fill="#475569"/>
+                  <rect class="cnt-btn-press" x="119" y="91" width="4" height="3.5" rx="1" fill="#10b981"/>
+                  <rect x="124" y="91" width="4" height="3.5" rx="1" fill="#ef4444"/>
+                  <rect x="114" y="96" width="14" height="3.5" rx="1" fill="#2563eb" opacity="0.8"/>
+              </g>
+
+              <!-- ====== CABEÇA HUMANA ====== -->
+
+              <!-- Pescoço tom de pele -->
+              <rect x="58" y="72" width="14" height="12" rx="4" fill="#f5c28a"/>
+
+              <!-- Orelhas pequenas laterais -->
+              <ellipse cx="37" cy="56" rx="4" ry="6" fill="#f5c28a"/>
+              <ellipse cx="93" cy="56" rx="4" ry="6" fill="#f5c28a"/>
+              <ellipse cx="37" cy="56" rx="2" ry="3.5" fill="#e8a878" opacity="0.6"/>
+              <ellipse cx="93" cy="56" rx="2" ry="3.5" fill="#e8a878" opacity="0.6"/>
+
+              <!-- Rosto oval, tom de pele natural -->
+              <ellipse cx="65" cy="50" rx="26" ry="30" fill="#f5c28a"/>
+
+              <!-- Cabelo escuro bem penteado -->
+              <!-- Topo -->
+              <path d="M39 38 Q41 18 65 16 Q89 18 91 38 Q85 30 65 29 Q45 30 39 38Z" fill="#1c1917"/>
+              <!-- Laterais -->
+              <path d="M39 38 Q36 47 37 56 Q38 48 42 42Z" fill="#1c1917"/>
+              <path d="M91 38 Q94 47 93 56 Q92 48 88 42Z" fill="#1c1917"/>
+
+              <!-- (Lápis removido a pedido) -->
+
+              <!-- Sobrancelhas finas e expressivas -->
+              <path d="M47 40 Q53 37 60 39" stroke="#1c1917" stroke-width="2" fill="none" stroke-linecap="round"/>
+              <path d="M70 39 Q77 37 83 40" stroke="#1c1917" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+              <!-- Óculos RETANGULARES finos -->
+              <rect x="44" y="45" width="19" height="11" rx="2.5" fill="none" stroke="#292524" stroke-width="2"/>
+              <rect x="67" y="45" width="19" height="11" rx="2.5" fill="none" stroke="#292524" stroke-width="2"/>
+              <!-- Ponte central -->
+              <line x1="63" y1="50" x2="67" y2="50" stroke="#292524" stroke-width="1.8"/>
+              <!-- Hastes laterais -->
+              <line x1="44" y1="50" x2="37" y2="54" stroke="#292524" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="86" y1="50" x2="93" y2="54" stroke="#292524" stroke-width="1.5" stroke-linecap="round"/>
+
+              <!-- Olhos pequenos e humanos (dentro dos óculos retangulares) -->
+              <ellipse class="cnt-olho" cx="53" cy="51" rx="3.8" ry="4" fill="#1c1917"/>
+              <ellipse class="cnt-olho" cx="76" cy="51" rx="3.8" ry="4" fill="#1c1917"/>
+              <!-- Íris castanha -->
+              <circle cx="53" cy="51" r="2.2" fill="#6b3a1f"/>
+              <circle cx="76" cy="51" r="2.2" fill="#6b3a1f"/>
+              <!-- Brilho dos olhos -->
+              <circle cx="54.5" cy="49.5" r="1.2" fill="white" opacity="0.9"/>
+              <circle cx="77.5" cy="49.5" r="1.2" fill="white" opacity="0.9"/>
+
+              <!-- Nariz simples e natural -->
+              <path d="M62 60 Q65 65 68 60" stroke="#d4956a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+
+              <!-- Sorriso amigável -->
+              <path d="M55 69 Q65 77 75 69" stroke="#c07850" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+
+              <!-- Bochechas rosadas discretas -->
+              <circle cx="43" cy="63" r="6" fill="#f87171" opacity="0.2"/>
+              <circle cx="87" cy="63" r="6" fill="#f87171" opacity="0.2"/>
+            </svg>
+        </div>
+    </div>
+
+    <script>
+    // =============================================
+    // Animação do display da calculadora
+    // =============================================
+    (function() {
+        var digitos = [];
+        var digitando = false;
+        var fases = [
+            // [texto, duração ms]
+            ['1', 180], ['12', 180], ['12.', 180], ['12.5', 180],
+            ['12.5+', 180], ['87', 180], ['87.', 180], ['87.30', 180],
+            ['=', 300], ['R$99.80', 1200],
+            ['', 400],
+            ['3', 180], ['37', 180], ['37*', 180], ['4', 180], ['148', 300],
+            ['=', 300], ['R$148', 1200],
+            ['', 400],
+            ['C', 300], ['0', 600],
+        ];
+        var fase = 0;
+
+        function animarDisplay() {
+            var els = (window.guardiaoPipWindow ? window.guardiaoPipWindow.document : document).querySelectorAll('.calc-display-text');
+            if (els.length === 0) return;
+            var f = fases[fase % fases.length];
+            els.forEach(function(el) { el.textContent = f[0]; });
+            fase++;
+            setTimeout(animarDisplay, f[1]);
+        }
+
+        // Inicia após o DOM carregar
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() { setTimeout(animarDisplay, 1500); });
+        } else {
+            setTimeout(animarDisplay, 1500);
+        }
+    })();
+
+    (function() {
+        // Custom shadow object for document to support PiP
+        const shadowDocument = {
+            get activeDoc() {
+                return window.guardiaoPipWindow ? window.guardiaoPipWindow.document : window.document;
+            },
+            getElementById(id) { return this.activeDoc.getElementById(id); },
+            createElement(tag) { return this.activeDoc.createElement(tag); },
+            querySelectorAll(sel) { return this.activeDoc.querySelectorAll(sel); },
+            addEventListener(ev, cb) { return window.document.addEventListener(ev, cb); },
+            get readyState() { return window.document.readyState; }
+        };
+
+        var bubble = null;
+        var dot    = null;
+
+        function init() {
+            bubble = shadowDocument.getElementById('guardiao-bubble');
+            dot    = shadowDocument.getElementById('guardiao-dot');
+            if (!bubble) return;
+
+            // Restaura o estado aberto/fechado da sessão anterior
+            var isAberto = sessionStorage.getItem('g_chat_aberto');
+            if (isAberto === 'true') {
+                guardiaoAbrir(true);
+            }
+
+            // Exibe o botão de PiP se o navegador suportar
+            if ('documentPictureInPicture' in window) {
+                const pipBtn = shadowDocument.getElementById('pip-btn');
+                if (pipBtn) pipBtn.style.display = 'inline-flex';
+            }
+        }
+
+        function guardiaoAbrir(imediato) {
+            if (!bubble) return;
+            bubble.style.display = 'block';
+            if (!imediato) void bubble.offsetWidth; // Reflow para animação
+            bubble.classList.add('visible');
+            if (dot) dot.style.display = 'none';
+            sessionStorage.setItem('g_chat_aberto', 'true');
+        }
+
+        function guardiaoFechar(limparHistorico) {
+            // Se estiver em Picture-in-Picture, fecha a janela PiP
+            if (window.guardiaoPipWindow) {
+                window.guardiaoPipWindow.close();
+                return;
+            }
+
+            if (!bubble) return;
+            bubble.classList.remove('visible');
+            setTimeout(function() {
+                if (!bubble.classList.contains('visible')) {
+                    bubble.style.display = 'none';
+                    if (limparHistorico) {
+                        sessionStorage.removeItem('g_chat_historico');
+                        var msgs = shadowDocument.getElementById('g-chat-msgs');
+                        if (msgs) {
+                            msgs.innerHTML = '<div class="g-msg g-msg-bot"><p>Olá! 👋 Sou o <strong>Contadorzinho</strong>, seu assistente virtual.<br>Pode me perguntar sobre impressoras, chamados, usuários, relatórios e muito mais!</p></div>';
+                        }
+                    }
+                }
+            }, 350);
+            sessionStorage.setItem('g_chat_aberto', 'false');
+        }
+
+        function guardiaoToggle() {
+            if (!bubble) return;
+            if (bubble.classList.contains('visible')) {
+                guardiaoFechar(false); // Apenas minimiza
+            } else {
+                guardiaoAbrir(false);
+            }
+        }
+
+        // Expõe globalmente
+        window.guardiaoToggle = guardiaoToggle;
+        window.guardiaoFechar = guardiaoFechar;
+        window.guardiaoAbrir = guardiaoAbrir;
+
+        // ── Função de chat do Contador ──
+        function salvarHistorico() {
+            var msgs = shadowDocument.getElementById('g-chat-msgs');
+            if (msgs) sessionStorage.setItem('g_chat_historico', msgs.innerHTML);
+        }
+
+        function carregarHistorico() {
+            var msgs = shadowDocument.getElementById('g-chat-msgs');
+            if (!msgs) return;
+            var hist = sessionStorage.getItem('g_chat_historico');
+            if (hist) {
+                msgs.innerHTML = hist;
+                msgs.scrollTop = msgs.scrollHeight;
+                // Esconde chips se já houve conversa
+                var sugg = shadowDocument.getElementById('g-suggestions');
+                if (sugg) sugg.style.display = 'none';
+            }
+        }
+
+        // Carrega o histórico assim que o script iniciar
+        shadowDocument.addEventListener('DOMContentLoaded', carregarHistorico);
+
+        // Converte Markdown simples para HTML
+        function renderMarkdown(txt) {
+            return txt
+                // Negrito **texto**
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                // Listas com • ou -
+                .replace(/^[•\-]\s(.+)$/gm, '<li>$1</li>')
+                // Quebras de linha
+                .replace(/\n{2,}/g, '</p><p>')
+                .replace(/\n/g, '<br>')
+                // Envolve li em ul
+                .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+        }
+
+        // Envia sugestão rápida ao clicar no chip
+        function guardiaoSugestao(texto) {
+            var input = shadowDocument.getElementById('g-chat-input');
+            if (input) {
+                input.value = texto;
+                guardiaoEnviar();
+            }
+        }
+
+        function guardiaoEnviar() {
+            var input  = shadowDocument.getElementById('g-chat-input');
+            var msgs   = shadowDocument.getElementById('g-chat-msgs');
+            var btn    = shadowDocument.getElementById('g-chat-send');
+            var sugg   = shadowDocument.getElementById('g-suggestions');
+            if (!input || !msgs) return;
+            var texto = input.value.trim();
+            if (!texto) return;
+
+            // Esconde chips após primeira mensagem
+            if (sugg) sugg.style.display = 'none';
+
+            // Mensagem do usuário
+            var mUser = shadowDocument.createElement('div');
+            mUser.className = 'g-msg g-msg-user';
+            var mUserInner = shadowDocument.createElement('div');
+            mUserInner.className = 'g-msg-inner';
+            mUserInner.textContent = texto;
+            mUser.appendChild(mUserInner);
+            msgs.appendChild(mUser);
+            input.value = '';
+            btn.disabled = true;
+            msgs.scrollTop = msgs.scrollHeight;
+            salvarHistorico();
+
+            // Indicador de digitando
+            var typing = shadowDocument.createElement('div');
+            typing.className = 'g-msg g-msg-bot g-typing';
+            typing.innerHTML = '<div class="g-msg-inner"><p class="g-dots"><span></span><span></span><span></span></p></div>';
+            msgs.appendChild(typing);
+            msgs.scrollTop = msgs.scrollHeight;
+
+            // Chamar API
+            fetch('/api/contador-chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mensagem: texto})
+            })
+            .then(function(r){ return r.json(); })
+            .then(function(data) {
+                if (msgs.contains(typing)) msgs.removeChild(typing);
+                var mBot = shadowDocument.createElement('div');
+                mBot.className = 'g-msg g-msg-bot';
+                var mBotInner = shadowDocument.createElement('div');
+                mBotInner.className = 'g-msg-inner';
+                var resp = data.resposta || 'Desculpe, tente novamente.';
+                mBotInner.innerHTML = '<p>' + renderMarkdown(resp) + '</p>';
+                mBot.appendChild(mBotInner);
+                msgs.appendChild(mBot);
+                msgs.scrollTop = msgs.scrollHeight;
+                btn.disabled = false;
+                input.focus();
+                salvarHistorico();
+            })
+            .catch(function() {
+                if (msgs.contains(typing)) msgs.removeChild(typing);
+                var mErr = shadowDocument.createElement('div');
+                mErr.className = 'g-msg g-msg-bot';
+                var mErrInner = shadowDocument.createElement('div');
+                mErrInner.className = 'g-msg-inner';
+                mErrInner.innerHTML = '⚠️ Erro ao conectar. Tente novamente.';
+                mErr.appendChild(mErrInner);
+                msgs.appendChild(mErr);
+                btn.disabled = false;
+                salvarHistorico();
+            });
+        }
+
+        window.guardiaoSugestao = guardiaoSugestao;
+        window.guardiaoEnviar = guardiaoEnviar;
+
+        // ── Lógica de Roupa de Jogo da Seleção ──
+        function verificarDiaDeJogo() {
+            var roupasNormais = shadowDocument.querySelectorAll('.traje-normal');
+            var roupasJogo = shadowDocument.querySelectorAll('.traje-jogo');
+            if (roupasNormais.length === 0 || roupasJogo.length === 0) return;
+            
+            var diasDeJogo = [
+                "2026-06-29",
+                "2026-07-04",
+                "2026-07-09",
+                "2026-07-14",
+                "2026-07-19"
+            ];
+            
+            var dataLocal = new Date();
+            var timezoneOffset = dataLocal.getTimezoneOffset() * 60000;
+            var localISOTime = (new Date(dataLocal - timezoneOffset)).toISOString().split('T')[0];
+            
+            var isJogoHoje = diasDeJogo.indexOf(localISOTime) !== -1;
+            
+            if (isJogoHoje) {
+                roupasNormais.forEach(function(el) { el.style.display = 'none'; });
+                roupasJogo.forEach(function(el) { el.style.display = 'block'; });
+            } else {
+                roupasNormais.forEach(function(el) { el.style.display = 'block'; });
+                roupasJogo.forEach(function(el) { el.style.display = 'none'; });
+            }
+        }
+        
+        shadowDocument.addEventListener('DOMContentLoaded', verificarDiaDeJogo);
+
+        // ── Função de Flutuar Chat (Picture in Picture / Popup Fallback) ──
+        async function guardiaoFlutuar() {
+            const usePiP = 'documentPictureInPicture' in window;
+
+            if (usePiP) {
+                if (window.guardiaoPipWindow) {
+                    window.guardiaoPipWindow.close();
+                    return;
+                }
+            } else {
+                if (window.guardiaoPipWindow && !window.guardiaoPipWindow.closed) {
+                    window.guardiaoPipWindow.focus();
+                    return;
+                }
+            }
+
+            try {
+                const bubble = window.document.getElementById('guardiao-bubble');
+                if (!bubble) return;
+
+                let floatWindow;
+                if (usePiP) {
+                    floatWindow = await window.documentPictureInPicture.requestWindow({
+                        width: 380,
+                        height: 520
+                    });
+                } else {
+                    floatWindow = window.open('', 'Contadorzinho', 'width=380,height=520,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+                    if (!floatWindow) {
+                        alert('Por favor, ative a permissão de pop-up no seu navegador para permitir flutuar o assistente!');
+                        return;
+                    }
+                }
+                window.guardiaoPipWindow = floatWindow;
+
+                // Copiar estilos
+                [...window.document.styleSheets].forEach((styleSheet) => {
+                    try {
+                        const cssRules = [...styleSheet.cssRules].map((rule) => rule.cssText).join('');
+                        const style = floatWindow.document.createElement('style');
+                        style.textContent = cssRules;
+                        floatWindow.document.head.appendChild(style);
+                    } catch (e) {
+                        const link = floatWindow.document.createElement('link');
+                        link.rel = 'stylesheet';
+                        link.type = styleSheet.type;
+                        link.media = styleSheet.media;
+                        link.href = styleSheet.href;
+                        floatWindow.document.head.appendChild(link);
+                    }
+                });
+
+                window.document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
+                    floatWindow.document.head.appendChild(link.cloneNode(true));
+                });
+
+                floatWindow.document.body.style.background = '#0a0f1e';
+                floatWindow.document.body.style.margin = '0';
+                floatWindow.document.body.style.padding = '0';
+                floatWindow.document.body.style.overflow = 'hidden';
+                floatWindow.document.title = 'Contadorzinho';
+
+                const parent = bubble.parentElement;
+                const placeholder = window.document.createElement('div');
+                placeholder.id = 'guardiao-bubble-placeholder';
+                parent.insertBefore(placeholder, bubble);
+
+                floatWindow.document.body.appendChild(bubble);
+
+                bubble.style.position = 'absolute';
+                bubble.style.inset = '0';
+                bubble.style.width = '100%';
+                bubble.style.height = '100%';
+                bubble.style.maxWidth = 'none';
+                bubble.style.borderRadius = '0';
+                bubble.style.boxShadow = 'none';
+                bubble.style.display = 'block';
+                bubble.classList.add('visible');
+
+                // Mapear funções para o contexto do PiP/Popup
+                floatWindow.guardiaoFechar = window.guardiaoFechar;
+                floatWindow.guardiaoEnviar = window.guardiaoEnviar;
+                floatWindow.guardiaoSugestao = window.guardiaoSugestao;
+                floatWindow.guardiaoToggle = window.guardiaoToggle;
+                floatWindow.guardiaoFlutuar = window.guardiaoFlutuar;
+
+                const pipBtn = shadowDocument.getElementById('pip-btn');
+                if (pipBtn) {
+                    pipBtn.title = 'Retornar ao Navegador';
+                    pipBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17h6V11" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+                }
+
+                const onWindowClose = () => {
+                    window.guardiaoPipWindow = null;
+                    const placeholder = window.document.getElementById('guardiao-bubble-placeholder');
+                    if (placeholder) {
+                        placeholder.parentElement.insertBefore(bubble, placeholder);
+                        placeholder.remove();
+                    }
+
+                    bubble.style.position = '';
+                    bubble.style.inset = '';
+                    bubble.style.width = '';
+                    bubble.style.height = '';
+                    bubble.style.maxWidth = '';
+                    bubble.style.borderRadius = '';
+                    bubble.style.boxShadow = '';
+
+                    var isAberto = sessionStorage.getItem('g_chat_aberto');
+                    if (isAberto !== 'true') {
+                        bubble.classList.remove('visible');
+                        bubble.style.display = 'none';
+                    }
+
+                    const pipBtn = shadowDocument.getElementById('pip-btn');
+                    if (pipBtn) {
+                        pipBtn.title = 'Flutuar Conversa (Sempre no Topo)';
+                        pipBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="13" y="13" width="8" height="8" rx="1" fill="currentColor"/></svg>`;
+                    }
+                };
+
+                if (usePiP) {
+                    floatWindow.addEventListener('pagehide', onWindowClose);
+                } else {
+                    floatWindow.addEventListener('beforeunload', onWindowClose);
+                }
+
+            } catch (error) {
+                console.error('Erro ao abrir janela flutuante:', error);
+            }
+        }
+        window.guardiaoFlutuar = guardiaoFlutuar;
+
+        // Aguarda o DOM
+        if (shadowDocument.readyState === 'loading') {
+            shadowDocument.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
+    })();
+    </script>
+</body>
+</html>

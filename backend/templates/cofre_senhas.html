@@ -1,0 +1,768 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* === Cofre de Senhas — Premium Glassmorphism === */
+    .cofre-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem; }
+    .cofre-card {
+        background: rgba(30, 41, 59, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 2rem;
+        padding: 1.75rem;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+    }
+    .cofre-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--app-color), #a855f7);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+    .cofre-card:hover { 
+        transform: translateY(-5px); 
+        border-color: rgba(255, 255, 255, 0.15);
+        background: rgba(30, 41, 59, 0.6);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+    }
+    .cofre-card:hover::before { opacity: 1; }
+
+    .cat-badge {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        padding: 0.35rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.65rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .cat-email   { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); }
+    .cat-app     { background: rgba(168,85,247,0.12); color: #c084fc; border: 1px solid rgba(168,85,247,0.2); }
+    .cat-web     { background: rgba(34,197,94,0.12);  color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+    .cat-rede    { background: rgba(249,115,22,0.12); color: #fb923c; border: 1px solid rgba(249,115,22,0.2); }
+    .cat-sistema { background: rgba(236,72,153,0.12); color: #f472b6; border: 1px solid rgba(236,72,153,0.2); }
+    .cat-outro   { background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid rgba(148,163,184,0.2); }
+
+    .senha-field {
+        display: flex; align-items: center; gap: 0.5rem;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 1rem;
+        padding: 0.75rem 1rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
+        color: #94a3b8;
+        letter-spacing: 0.15em;
+    }
+    .senha-field .senha-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .btn-icon {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 2.25rem; height: 2.25rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        background: rgba(255, 255, 255, 0.03);
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+    .btn-icon:hover { background: rgba(255, 255, 255, 0.1); color: #f8fafc; border-color: rgba(255,255,255,0.15); }
+    .btn-icon.copied { background: rgba(34,197,94,0.15); color: #4ade80; border-color: rgba(34,197,94,0.3); }
+
+    .cofre-stat {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: rgba(30, 41, 59, 0.4); 
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 1.5rem; 
+        padding: 1.5rem;
+        min-width: 150px;
+        transition: all 0.3s;
+    }
+    .cofre-stat:hover { border-color: rgba(255,255,255,0.12); background: rgba(30, 41, 59, 0.5); }
+    .cofre-stat .stat-num { font-size: 2.5rem; font-weight: 900; font-family: 'Outfit', sans-serif; line-height: 1; }
+    .cofre-stat .stat-label { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; margin-top: 0.5rem; }
+
+    .cofre-empty {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 6rem 2rem;
+        text-align: center;
+        color: #64748b;
+    }
+    .cofre-empty svg { width: 5rem; height: 5rem; margin-bottom: 1.5rem; opacity: 0.25; }
+
+    /* Toast */
+    .cofre-toast {
+        position: fixed; bottom: 2rem; right: 2rem; z-index: 200;
+        background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 1.25rem 2rem; border-radius: 1.25rem;
+        font-size: 0.85rem; font-weight: 600; color: #f8fafc;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        transform: translateY(150%); opacity: 0;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .cofre-toast.show { transform: translateY(0); opacity: 1; }
+
+    /* Light mode overrides */
+    html.light-mode .cofre-card { background: #ffffff !important; border-color: #e2e8f0 !important; }
+    html.light-mode .cofre-card:hover { border-color: #cbd5e1 !important; box-shadow: 0 10px 25px rgba(0,0,0,0.08) !important; background: #ffffff !important; }
+    html.light-mode .senha-field { background: #f8fafc !important; border-color: #e2e8f0 !important; color: #334155 !important; }
+    html.light-mode .cofre-stat { background: #ffffff !important; border-color: #e2e8f0 !important; }
+    html.light-mode .cofre-toast { background: #ffffff !important; border-color: #e2e8f0 !important; color: #0f172a !important; }
+    html.light-mode .btn-icon { border-color: #e2e8f0 !important; background: #f8fafc !important; color: #64748b !important; }
+    html.light-mode .btn-icon:hover { background: #e2e8f0 !important; color: #0f172a !important; }
+
+    @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-card { animation: fadeSlideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12 animate-fade-in">
+
+    <!-- Header Executivo -->
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 mb-12">
+        <div class="flex items-center gap-6">
+            <div class="relative group">
+                <div class="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-[2.5rem] blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+                <div class="relative p-5 bg-slate-900 rounded-[2.2rem] border border-white/10 shadow-2xl">
+                    <svg class="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+            </div>
+            <div>
+                <h1 class="text-5xl font-black text-white tracking-tighter mb-2 uppercase italic leading-none">Cofre de <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Senhas</span></h1>
+                <p class="text-slate-400 text-sm mt-1">Gerencie credenciais de e-mail e aplicativos do escritório com segurança e criptografia</p>
+            </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button onclick="gerarRelatorio()" class="px-6 py-4 rounded-2xl bg-emerald-700 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all border border-emerald-600 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Exportar PDF
+            </button>
+            <button onclick="openCreateModal()" class="px-8 py-4 rounded-2xl bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all border border-indigo-500">
+                Nova Credencial
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div id="cofreStats" class="flex flex-wrap gap-6 mb-10"></div>
+
+    <!-- Search & Filters -->
+    <div class="flex flex-col sm:flex-row gap-4 mb-8">
+        <div class="flex-1 relative">
+            <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input id="searchInput" type="text" placeholder="Buscar por título, e-mail, categoria ou setor..." class="glass-input w-full pl-12 pr-4 py-4 rounded-2xl text-sm" oninput="filterCards()">
+        </div>
+        <select id="filterSetor" onchange="filterCards()" class="glass-input px-6 py-4 rounded-2xl text-sm cursor-pointer min-w-[180px]">
+            <option value="">Todos os Setores</option>
+        </select>
+        <select id="filterCategoria" onchange="filterCards()" class="glass-input px-6 py-4 rounded-2xl text-sm cursor-pointer min-w-[200px]">
+            <option value="">Todas Categorias</option>
+            <option value="E-mail">📧 E-mail</option>
+            <option value="App">📱 App</option>
+            <option value="Web">🌐 Web</option>
+            <option value="Rede">🔌 Rede</option>
+            <option value="Sistema">💻 Sistema</option>
+            <option value="Outro">📎 Outro</option>
+        </select>
+    </div>
+
+    <!-- Grid de Credenciais -->
+    <div id="cofreGrid" class="cofre-grid"></div>
+
+    <!-- Empty State -->
+    <div id="cofreEmpty" class="cofre-empty hidden">
+        <div class="p-6 bg-slate-800/30 rounded-full border border-white/5 mb-4">
+            <svg class="text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+        </div>
+        <p class="text-xl font-bold text-white html-light:text-black">Nenhuma credencial salva</p>
+        <p class="text-sm text-slate-500 mt-1">Clique em "Nova Credencial" para começar a organizar.</p>
+    </div>
+</div>
+
+<!-- Modal Unificado: Criar/Editar -->
+<div id="cofreModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
+    <div class="glass-panel w-full max-w-lg p-8 rounded-[2.5rem] border border-white/10 shadow-2xl relative animate-fade-in">
+        <button onclick="closeModal('cofreModal')" class="absolute top-6 right-6 text-slate-400 hover:text-white transition-colors">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+
+        <h3 id="modalTitle" class="text-2xl font-black text-white uppercase italic tracking-tight mb-1" style="font-family: 'Outfit', sans-serif;">Nova Credencial</h3>
+        <p class="text-slate-400 text-xs mb-6">Preencha os dados da credencial para salvá-la de forma segura.</p>
+
+        <form id="cofreForm" class="space-y-4" onsubmit="submitForm(event)">
+            <input type="hidden" id="editId" value="">
+
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Título *</label>
+                <input type="text" id="fTitulo" required placeholder="Ex: Outlook RH" class="glass-input w-full px-4 py-3.5 rounded-xl text-sm">
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Categoria</label>
+                    <select id="fCategoria" class="glass-input w-full px-4 py-3.5 rounded-xl text-sm cursor-pointer">
+                        <option value="E-mail">📧 E-mail</option>
+                        <option value="App">📱 App</option>
+                        <option value="Web">🌐 Web</option>
+                        <option value="Rede">🔌 Rede</option>
+                        <option value="Sistema">💻 Sistema</option>
+                        <option value="Outro">📎 Outro</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Setor</label>
+                    <input type="text" id="fSetor" list="setorList" required placeholder="Selecione ou digite novo" class="glass-input w-full px-4 py-3.5 rounded-xl text-sm">
+                    <datalist id="setorList"></datalist>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">E-mail / Login *</label>
+                <input type="text" id="fLogin" required placeholder="usuario@empresa.com.br" class="glass-input w-full px-4 py-3.5 rounded-xl text-sm">
+            </div>
+
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                    Senha *
+                    <span id="senhaHint" class="text-slate-600 normal-case tracking-normal hidden">(deixe vazio para manter a atual)</span>
+                </label>
+                <div class="relative">
+                    <input type="password" id="fSenha" placeholder="●●●●●●●●" class="glass-input w-full px-4 py-3.5 pr-12 rounded-xl text-sm">
+                    <button type="button" onclick="toggleFormPassword()" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">
+                        <svg id="formEyeIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">URL (opcional)</label>
+                <input type="text" id="fUrl" placeholder="https://outlook.office.com" class="glass-input w-full px-4 py-3.5 rounded-xl text-sm">
+            </div>
+
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Observações (opcional)</label>
+                <textarea id="fObs" rows="2" placeholder="Anotações adicionais..." class="glass-input w-full px-4 py-3.5 rounded-xl text-sm resize-none"></textarea>
+            </div>
+
+            <div id="formMsg" class="text-xs font-bold hidden p-3 rounded-xl border"></div>
+
+            <button type="submit" id="btnSubmit" class="w-full text-white font-bold py-4 rounded-xl hover:shadow-lg transition-all text-xs uppercase tracking-widest" style="background: var(--app-color);">
+                💾 Salvar Credencial
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Confirmação de Exclusão -->
+<div id="deleteModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
+    <div class="glass-panel w-full max-w-sm p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center animate-fade-in">
+        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+            <svg class="w-8 h-8 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        </div>
+        <h3 class="text-xl font-bold text-white mb-2">Excluir credencial?</h3>
+        <p id="deleteItemName" class="text-slate-400 text-xs mb-6">Esta ação não pode ser desfeita.</p>
+        <div class="flex gap-3">
+            <button onclick="closeDeleteModal()" class="flex-1 py-3 rounded-xl font-bold text-xs uppercase tracking-widest border border-white/10 text-slate-300 hover:bg-white/5 transition-all">Cancelar</button>
+            <button id="btnConfirmDelete" onclick="confirmDelete()" class="flex-1 py-3 rounded-xl font-bold text-xs uppercase tracking-widest bg-rose-600 text-white hover:bg-rose-500 transition-all">Excluir</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="cofreToast" class="cofre-toast"></div>
+
+<script>
+const API_BASE = window.location.port === '3001' ? '' : 'http://' + window.location.hostname + ':3001';
+const API = API_BASE + '/api/cofre';
+
+const SETORES_FIXOS = ['Contábil','Fiscal','Legalização','RH/DP','TI','Financeiro','Diretoria','Recepção'];
+
+function updateSetorLists() {
+    const usedSetores = allCredentials.map(c => c.setor).filter(s => s && s.trim() !== '');
+    const uniqueSetores = [...new Set([...SETORES_FIXOS, ...usedSetores])].sort((a,b) => a.localeCompare(b, 'pt-BR'));
+
+    // Atualiza o filtro
+    const filterSel = document.getElementById('filterSetor');
+    if (filterSel) {
+        const currentFilter = filterSel.value;
+        filterSel.innerHTML = '<option value="">Todos os Setores</option>' + 
+            uniqueSetores.map(s => `<option value="${s}">${s}</option>`).join('');
+        filterSel.value = currentFilter;
+    }
+
+    // Atualiza o datalist do formulário
+    const datalist = document.getElementById('setorList');
+    if (datalist) {
+        datalist.innerHTML = uniqueSetores.map(s => `<option value="${s}"></option>`).join('');
+    }
+}
+let allCredentials = [];
+let deleteTargetId = null;
+let isInitialLoad = true;
+
+const catIcons = {
+    'E-mail': '📧', 'App': '📱', 'Web': '🌐',
+    'Rede': '🔌', 'Sistema': '💻', 'Outro': '📎'
+};
+
+const catClasses = {
+    'E-mail': 'cat-email', 'App': 'cat-app', 'Web': 'cat-web',
+    'Rede': 'cat-rede', 'Sistema': 'cat-sistema', 'Outro': 'cat-outro'
+};
+
+// ====================
+// Load & Render
+// ====================
+async function loadCredentials() {
+    try {
+        const res = await fetch(`${API}/list`);
+        const data = await res.json();
+        if (data.success) {
+            allCredentials = data.credenciais.sort((a, b) =>
+                a.titulo.localeCompare(b.titulo, 'pt-BR', { sensitivity: 'base' })
+            );
+            updateSetorLists();
+            renderStats();
+            filterCards();
+            isInitialLoad = false;
+        }
+    } catch (e) { console.error('Erro ao carregar credenciais:', e); }
+}
+
+function renderStats() {
+    const cats = {};
+    allCredentials.forEach(c => { cats[c.categoria] = (cats[c.categoria] || 0) + 1; });
+    const el = document.getElementById('cofreStats');
+    let html = `
+        <div class="cofre-stat">
+            <span class="stat-num" style="color: var(--app-color);">${allCredentials.length}</span>
+            <span class="stat-label">Total</span>
+        </div>`;
+    Object.entries(cats).sort((a,b) => b[1]-a[1]).forEach(([cat, count]) => {
+        html += `
+        <div class="cofre-stat">
+            <span class="stat-num text-white html-light:text-slate-800">${count}</span>
+            <span class="stat-label">${catIcons[cat] || '📎'} ${cat}</span>
+        </div>`;
+    });
+    el.innerHTML = html;
+}
+
+function renderCards(items) {
+    const grid = document.getElementById('cofreGrid');
+    const empty = document.getElementById('cofreEmpty');
+
+    if (items.length === 0) {
+        grid.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+    }
+    empty.classList.add('hidden');
+
+    grid.innerHTML = items.map((c, i) => `
+        <div class="cofre-card ${isInitialLoad ? 'animate-card' : ''}" ${isInitialLoad ? `style="animation-delay: ${i * 0.05}s"` : ''}>
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <h3 class="text-white html-light:text-slate-900 font-black tracking-tight text-lg">${esc(c.titulo)}</h3>
+                    <div class="flex flex-wrap gap-1.5 mt-2">
+                        <span class="cat-badge ${catClasses[c.categoria] || 'cat-outro'}">${catIcons[c.categoria] || '📎'} ${esc(c.categoria)}</span>
+                        <span class="px-2.5 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-slate-800 text-slate-400 border border-white/5 html-light:bg-slate-100 html-light:text-slate-700 html-light:border-slate-200">${esc(c.setor || 'TI')}</span>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="openEditModal(${c.id})" class="btn-icon" title="Editar">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    </button>
+                    <button onclick="openDeleteModal(${c.id}, '${esc(c.titulo)}')" class="btn-icon text-rose-400 hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/30" title="Excluir">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-3 text-sm">
+                <div class="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+                    <svg class="w-4 h-4 flex-shrink-0 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    <span class="truncate text-slate-300 font-bold">${esc(c.login_email)}</span>
+                </div>
+
+                <div class="senha-field">
+                    <svg class="w-4 h-4 flex-shrink-0 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                    <span class="senha-text" id="senha-${c.id}">●●●●●●●●</span>
+                    <button type="button" onclick="toggleReveal(${c.id})" class="btn-icon" id="eye-${c.id}" title="Mostrar senha">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    </button>
+                    <button type="button" onclick="copyPassword(${c.id})" class="btn-icon" id="copy-${c.id}" title="Copiar senha">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    </button>
+                </div>
+
+                ${c.url ? `
+                <div class="flex items-center gap-3 p-2 bg-white/5 rounded-2xl border border-white/5 text-xs">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                    <a href="${esc(c.url)}" target="_blank" class="truncate text-indigo-400 font-bold hover:underline">${esc(c.url)}</a>
+                </div>` : ''}
+
+                ${c.observacoes ? `
+                <div class="flex items-start gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 text-xs text-slate-400">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path></svg>
+                    <span class="italic">${esc(c.observacoes)}</span>
+                </div>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function filterCards() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const cat = document.getElementById('filterCategoria').value;
+    const setor = document.getElementById('filterSetor').value;
+    const filtered = allCredentials.filter(c => {
+        const matchQ = !q || c.titulo.toLowerCase().includes(q) || c.login_email.toLowerCase().includes(q) || c.categoria.toLowerCase().includes(q) || (c.setor && c.setor.toLowerCase().includes(q));
+        const matchCat = !cat || c.categoria === cat;
+        const matchSetor = !setor || (c.setor && c.setor === setor);
+        return matchQ && matchCat && matchSetor;
+    });
+    renderCards(filtered);
+}
+
+// ====================
+// Reveal / Copy
+// ====================
+const revealCache = {};
+
+async function toggleReveal(id) {
+    const el = document.getElementById(`senha-${id}`);
+    if (el.dataset.revealed === 'true') {
+        el.textContent = '●●●●●●●●';
+        el.dataset.revealed = 'false';
+        el.style.color = '';
+        el.style.letterSpacing = '0.15em';
+        return;
+    }
+    try {
+        let senha = revealCache[id];
+        if (!senha) {
+            const res = await fetch(`${API}/reveal/${id}`);
+            const data = await res.json();
+            if (!data.success) throw new Error();
+            senha = data.senha;
+            revealCache[id] = senha;
+        }
+        el.textContent = senha;
+        el.dataset.revealed = 'true';
+        el.style.color = '#f8fafc';
+        el.style.letterSpacing = '0.02em';
+    } catch (e) { showToast('Erro ao revelar senha', 'error'); }
+}
+
+async function copyPassword(id) {
+    try {
+        let senha = revealCache[id];
+        if (!senha) {
+            const res = await fetch(`${API}/reveal/${id}`);
+            const data = await res.json();
+            if (!data.success) throw new Error();
+            senha = data.senha;
+            revealCache[id] = senha;
+        }
+        await navigator.clipboard.writeText(senha);
+        const btn = document.getElementById(`copy-${id}`);
+        btn.classList.add('copied');
+        setTimeout(() => btn.classList.remove('copied'), 1500);
+        showToast('✅ Senha copiada para a área de transferência!', 'success');
+    } catch (e) { showToast('Erro ao copiar senha', 'error'); }
+}
+
+// ====================
+// Modal Create/Edit
+// ====================
+function openCreateModal() {
+    document.getElementById('editId').value = '';
+    document.getElementById('modalTitle').textContent = 'Nova Credencial';
+    document.getElementById('fTitulo').value = '';
+    document.getElementById('fSetor').value = 'TI';
+    document.getElementById('fCategoria').value = 'E-mail';
+    document.getElementById('fLogin').value = '';
+    document.getElementById('fSenha').value = '';
+    document.getElementById('fSenha').required = true;
+    document.getElementById('fUrl').value = '';
+    document.getElementById('fObs').value = '';
+    document.getElementById('senhaHint').classList.add('hidden');
+    document.getElementById('formMsg').classList.add('hidden');
+    document.getElementById('btnSubmit').textContent = '💾 Salvar Credencial';
+    document.getElementById('cofreModal').classList.remove('hidden');
+}
+
+function openEditModal(id) {
+    const item = allCredentials.find(c => c.id === id);
+    if (!item) return;
+    document.getElementById('editId').value = id;
+    document.getElementById('modalTitle').textContent = 'Editar Credencial';
+    document.getElementById('fTitulo').value = item.titulo;
+    document.getElementById('fCategoria').value = item.categoria;
+    document.getElementById('fSetor').value = item.setor || 'TI';
+    document.getElementById('fLogin').value = item.login_email;
+    document.getElementById('fSenha').value = '';
+    document.getElementById('fSenha').required = false;
+    document.getElementById('fUrl').value = item.url || '';
+    document.getElementById('fObs').value = item.observacoes || '';
+    document.getElementById('senhaHint').classList.remove('hidden');
+    document.getElementById('formMsg').classList.add('hidden');
+    document.getElementById('btnSubmit').textContent = '💾 Atualizar Credencial';
+    document.getElementById('cofreModal').classList.remove('hidden');
+}
+
+async function submitForm(e) {
+    e.preventDefault();
+    const editId = document.getElementById('editId').value;
+    const isEdit = !!editId;
+    const endpoint = isEdit ? `${API}/edit` : `${API}/create`;
+
+    const fd = new FormData();
+    if (isEdit) fd.append('id', editId);
+    fd.append('titulo', document.getElementById('fTitulo').value);
+    fd.append('categoria', document.getElementById('fCategoria').value);
+    fd.append('setor', document.getElementById('fSetor').value);
+    fd.append('login_email', document.getElementById('fLogin').value);
+    fd.append('senha', document.getElementById('fSenha').value);
+    fd.append('url', document.getElementById('fUrl').value);
+    fd.append('observacoes', document.getElementById('fObs').value);
+
+    if (!isEdit && !document.getElementById('fSenha').value.trim()) {
+        showFormMsg('A senha é obrigatória para novas credenciais.', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch(endpoint, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) {
+            closeModal('cofreModal');
+            showToast(data.message || 'Salvo com sucesso!', 'success');
+            if (isEdit) delete revealCache[editId];
+            await loadCredentials();
+        } else {
+            showFormMsg(data.detail || 'Erro ao salvar credencial', 'error');
+        }
+    } catch (e) { showFormMsg('Erro de conexão com o servidor', 'error'); }
+}
+
+function showFormMsg(msg, type) {
+    const el = document.getElementById('formMsg');
+    el.classList.remove('hidden');
+    el.textContent = msg;
+    el.className = `text-xs font-bold p-3 rounded-xl border ${type === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`;
+}
+
+function toggleFormPassword() {
+    const inp = document.getElementById('fSenha');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+// ====================
+// Delete
+// ====================
+function openDeleteModal(id, titulo) {
+    deleteTargetId = id;
+    document.getElementById('deleteItemName').textContent = `"${titulo}" será removida permanentemente.`;
+    document.getElementById('deleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.add('hidden');
+    deleteTargetId = null;
+}
+
+async function confirmDelete() {
+    if (!deleteTargetId) return;
+    const fd = new FormData();
+    fd.append('id', deleteTargetId);
+    try {
+        const res = await fetch(`${API}/delete`, { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) {
+            closeDeleteModal();
+            showToast('🗑️ Credencial removida com sucesso!', 'success');
+            delete revealCache[deleteTargetId];
+            await loadCredentials();
+        } else { showToast(data.detail || 'Erro ao remover', 'error'); }
+    } catch (e) { showToast('Erro de conexão com o servidor', 'error'); }
+}
+
+// ====================
+// Toast
+// ====================
+function showToast(msg, type = 'info') {
+    const el = document.getElementById('cofreToast');
+    el.textContent = msg;
+    el.style.borderLeft = `4px solid ${type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#6366f1'}`;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ====================
+// Helpers
+// ====================
+function esc(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', loadCredentials);
+
+// ====================
+// Relatório PDF
+// ====================
+function gerarRelatorio() {
+    if (!allCredentials.length) {
+        showToast('Nenhuma credencial para exportar.', 'error');
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    const now = new Date();
+    const dataHora = now.toLocaleString('pt-BR');
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
+
+    // =====================
+    // CABEÇALHO
+    // =====================
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(10, 10, W - 20, 36, 4, 4, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(248, 250, 252);
+    doc.text('COFRE DE SENHAS', W / 2, 22, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Relatório de Credenciais por Setor  —  Uso Restrito e Confidencial', W / 2, 30, { align: 'center' });
+
+    doc.setFontSize(7);
+    doc.text(`Gerado em: ${dataHora}`, W / 2, 37, { align: 'center' });
+
+    doc.setDrawColor(99, 102, 241);
+    doc.setLineWidth(0.8);
+    doc.line(10, 49, W - 10, 49);
+
+    // =====================
+    // RESUMO GERAL (tabela compacta no topo)
+    // =====================
+    const porSetor = {};
+    allCredentials.forEach(c => {
+        const s = c.setor || 'TI';
+        if (!porSetor[s]) porSetor[s] = [];
+        porSetor[s].push(c);
+    });
+    const setoresOrdenados = Object.keys(porSetor).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+    // Linha de resumo compacta em texto
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('RESUMO:', 14, 56);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    const resumoTexto = setoresOrdenados.map(s => `${s}: ${porSetor[s].length}`).join('   ·   ');
+    doc.text(resumoTexto, 36, 56, { maxWidth: W - 50 });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(99, 102, 241);
+    doc.text(`TOTAL GERAL: ${allCredentials.length} e-mails`, W - 14, 56, { align: 'right' });
+
+    // =====================
+    // TABELA CONTÍNUA COM SEÇÕES POR SETOR
+    // =====================
+    const body = [];
+
+    setoresOrdenados.forEach(setor => {
+        // Linha de cabeçalho do setor (span 4 colunas)
+        body.push([{
+            content: `  ${setor.toUpperCase()}   (${porSetor[setor].length} credencial${porSetor[setor].length > 1 ? 'is' : ''})`,
+            colSpan: 4,
+            styles: {
+                fillColor: [51, 65, 85],
+                textColor: [248, 250, 252],
+                fontStyle: 'bold',
+                fontSize: 8.5,
+                cellPadding: { top: 4, bottom: 4, left: 6, right: 4 },
+            }
+        }]);
+
+        // Credenciais do setor ordenadas alfabeticamente
+        const credenciais = [...porSetor[setor]].sort((a, b) =>
+            a.titulo.localeCompare(b.titulo, 'pt-BR', { sensitivity: 'base' })
+        );
+
+        credenciais.forEach((c, i) => {
+            body.push([
+                i + 1,
+                c.titulo,
+                c.login_email,
+                c.categoria || '-'
+            ]);
+        });
+    });
+
+    doc.autoTable({
+        startY: 60,
+        head: [['#', 'Nome / Título', 'E-mail / Login', 'Categoria']],
+        body: body,
+        theme: 'grid',
+        styles: {
+            fontSize: 8,
+            cellPadding: { top: 2.8, bottom: 2.8, left: 4, right: 4 },
+            textColor: [30, 41, 59],
+            lineColor: [226, 232, 240],
+            lineWidth: 0.25,
+            overflow: 'linebreak',
+        },
+        headStyles: {
+            fillColor: [99, 102, 241],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            fontSize: 8,
+            halign: 'center',
+        },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+            0: { halign: 'center', cellWidth: 10 },
+            1: { cellWidth: 55, fontStyle: 'bold' },
+            2: { cellWidth: 80 },
+            3: { halign: 'center', cellWidth: 35 },
+        },
+        didDrawPage: function(data) {
+            // Rodapé com número de página correto
+            const total = doc.internal.getNumberOfPages();
+            doc.setFontSize(7);
+            doc.setTextColor(100, 116, 139);
+            doc.text(
+                `Página ${data.pageNumber} de ${total}  —  Documento Confidencial  —  ${dataHora}`,
+                W / 2, H - 8, { align: 'center' }
+            );
+        }
+    });
+
+    window.open(doc.output('bloburl'), '_blank');
+    showToast('📄 Relatório aberto em nova aba!', 'success');
+}
+
+</script>
+{% endblock %}

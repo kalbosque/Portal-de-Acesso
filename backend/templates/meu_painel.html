@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12 animate-fade-in">
+
+    <!-- Header Meu Painel -->
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 mb-12">
+        <div class="flex items-center gap-6">
+            <div class="relative group">
+                <div class="absolute -inset-1 bg-gradient-to-r from-emerald-400 to-cyan-500 rounded-[2.5rem] blur opacity-25"></div>
+                <div class="relative p-5 bg-slate-900 rounded-[2.2rem] border border-white/10 shadow-2xl">
+                    <svg class="w-10 h-10 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </div>
+            </div>
+            <div>
+                <h1 class="text-4xl font-black text-white tracking-tighter mb-2">Olá, <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">{{ current_user.nome }}</span>!</h1>
+                <p class="text-sm text-slate-400 font-medium">Aqui está o seu resumo de atividades deste mês.</p>
+            </div>
+        </div>
+        <div class="flex gap-4">
+            <a href="/chamados" class="px-6 py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm uppercase tracking-widest shadow-lg shadow-indigo-500/20 hover:scale-105 transition-all">Abrir Chamado</a>
+        </div>
+    </div>
+
+    <!-- Cards Principais -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        
+        <!-- Impressões no mês -->
+        <div class="glass-panel p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group">
+            <div class="absolute -right-6 -top-6 w-24 h-24 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-all"></div>
+            <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Minhas Impressões (Mês)</p>
+            <div class="flex items-baseline gap-2 mb-2">
+                <h3 class="text-5xl font-black text-white tracking-tighter">{{ stats.paginas_mes }}</h3>
+                <span class="text-sm font-black text-slate-600">páginas</span>
+            </div>
+            <p class="text-xs text-slate-400">Em {{ stats.jobs_mes }} trabalhos de impressão</p>
+        </div>
+
+        <!-- Cota / Economia Financeira -->
+        <div class="glass-panel p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden">
+            <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Custo Gerado</p>
+            <div class="flex items-baseline gap-1.5 mb-2">
+                <span class="text-lg font-black text-rose-400/40 tracking-tighter uppercase italic">R$</span>
+                <h3 class="text-4xl font-black text-white tracking-tighter">{{ "%.2f"|format(stats.custo_mes)|replace(".",",") }}</h3>
+            </div>
+            {% if stats.variacao_custo < 0 %}
+                <p class="text-xs text-emerald-400 font-bold">Você economizou {{ (stats.variacao_custo * -1)|round(1) }}% comparado ao mês passado!</p>
+            {% elif stats.variacao_custo > 0 %}
+                <p class="text-xs text-rose-400 font-bold">Aumento de {{ stats.variacao_custo|round(1) }}% em relação ao mês passado.</p>
+            {% else %}
+                <p class="text-xs text-slate-400 font-bold">Igual ao mês passado.</p>
+            {% endif %}
+        </div>
+
+        <!-- Gamificação Ecológica -->
+        <div class="p-8 rounded-[2.5rem] border border-emerald-500/20 bg-gradient-to-br from-emerald-900/20 to-slate-900 relative overflow-hidden">
+            <div class="absolute -right-10 -bottom-10 opacity-10">
+                <svg class="w-48 h-48 text-emerald-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.021h-2v-3.774c-1.849-1.393-3.003-3.606-3.003-6.115 0-4.142 3.358-7.5 7.5-7.5s7.5 3.358 7.5 7.5-3.358 7.5-7.5 7.5c-2.486 0-4.63-1.196-6-3.04v5.429z"/></svg>
+            </div>
+            <p class="text-emerald-500/70 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Impacto Ambiental</p>
+            
+            {% set arvores = (stats.paginas_mes / 8333) * 100 %} <!-- 1 árvore = ~8333 folhas -->
+            
+            <h3 class="text-3xl font-black text-emerald-400 tracking-tighter mb-2">{{ "%.2f"|format(arvores) }}%</h3>
+            <span class="text-[10px] font-black text-emerald-500 uppercase tracking-widest italic">De uma árvore consumida</span>
+            <div class="mt-4 w-full bg-slate-800 rounded-full h-1.5">
+                <div class="bg-emerald-500 h-1.5 rounded-full" style="width: {{ [arvores, 100]|min }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meus Chamados Recentes -->
+    <div class="glass-panel p-8 rounded-[2.5rem] border border-white/5">
+        <h3 class="text-lg font-black text-white tracking-tight mb-6">Meus Últimos Chamados</h3>
+        {% if chamados %}
+            <div class="space-y-4">
+            {% for c in chamados %}
+                <div class="flex items-center justify-between p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-all cursor-pointer" onclick="window.location.href='/chamados?id={{ c.id }}'">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-black text-xs">#{{ c.id }}</div>
+                        <div>
+                            <p class="text-sm font-black text-white">{{ c.titulo }}</p>
+                            <p class="text-[10px] text-slate-400 font-bold">{{ c.created_at.strftime('%d/%m/%Y às %H:%M') }}</p>
+                        </div>
+                    </div>
+                    <div>
+                        {% if c.status == 'Aberto' %}
+                            <span class="px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-widest border border-rose-500/30">Aberto</span>
+                        {% elif c.status == 'Em Atendimento' %}
+                            <span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest border border-amber-500/30">Atendimento</span>
+                        {% else %}
+                            <span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-500/30">Resolvido</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-8">
+                <p class="text-slate-500 font-bold text-sm">Você não tem chamados recentes.</p>
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.spec
+
+# Logs
+*.log
+*.txt
+!COMO_USAR_NOVO_MENU.txt
+
+# Executáveis e builds do agente
+agent_2.0.exe
+agent_new.exe
+build/
+dist/
+*.spec
+
+# Variáveis de ambiente
+.env
+.env.*
+
+# Docker volumes e status
+status_maquinas.json
+status_usuarios.json
+status_usuarios_anterior.json
+status_usuarios_historico.json
+docker_status.txt
+db_tables.txt
+web_log.txt
+monitor_log.txt
+monitor_usuarios_log.txt
+deploy_log.txt
+agent_out.txt
+agent_debug*.log
+
+# Pastas locais
+PaperCut*/
+scratch/
+.qodo/
+LEGACY_PS_SCRIPTS/
+INSTALADOR_V2/
+
+# Backups dentro do sistema
+backend/public_html/backups/
+backend/inspect_*.json
+public_html/backups/
+public_html/uploads/
+public_html/build/
+public_html/dist/
+public_html/scratch/
+public_html/.git.backup/
+
+# Uploads do usuário (não versionar)
+backend/static/uploads/
+backend/public_html/uploads/

@@ -1,0 +1,117 @@
+📋 COMO USAR O NOVO SISTEMA
+
+============================================================
+🎯 FORMA MAIS SIMPLES
+============================================================
+
+1. Abra o arquivo: C:\sistema-impressao\INICIAR.bat
+   (Duplo clique no arquivo)
+
+2. Pronto! O menu vai aparecer com as opções
+
+============================================================
+🎛️ OPÇÕES DO MENU
+============================================================
+
+[1] INICIAR MONITOR
+    - Inicia a coleta de dados das máquinas
+    - Fica rodando em loop até você pressionar CTRL+C
+    - Atualiza a cada 5 segundos
+    - Salva em: status_usuarios.json
+
+[2] VER DASHBOARD
+    - Mostra um dashboard em tempo real no PowerShell
+    - Atualiza a cada 5 segundos
+    - Pressione CTRL+C para voltar ao menu
+
+[3] VER STATUS
+    - Mostra o status atual (sem atualizar)
+    - Mostra máquinas, usuários, dados
+
+[4] EXPORTAR DADOS
+    - Mostra os dados em formato JSON
+    - Opção de salvar em arquivo
+
+[5] VARRER MÁQUINAS NOVAMENTE
+    - Testa conexão com todas as máquinas
+    - Mostra quantas estão online/offline
+
+[0] SAIR
+    - Encerra o programa
+
+============================================================
+🔍 O QUE O PROGRAMA FAZ AUTOMATICAMENTE
+============================================================
+
+Toda vez que o menu aparece:
+✓ Faz uma varredura das máquinas (lista_maquinas.txt)
+✓ Testa ping em cada uma
+✓ Mostra quantas estão Online/Offline
+✓ Oferece o menu de opções
+
+============================================================
+💡 EXEMPLOS DE USO
+============================================================
+
+PRIMEIRA VEZ:
+1. Abra INICIAR.bat
+2. Escolha opção [1] - Iniciar Monitor
+3. Deixe rodando por alguns minutos
+4. Pressione CTRL+C para parar
+5. Agora acesse a web: http://seu-servidor/monitor_usuarios.php
+
+USO DIÁRIO:
+1. Abra INICIAR.bat
+2. Escolha [3] para ver status atual
+ou
+2. Escolha [2] para ver dashboard em tempo real
+
+============================================================
+🌐 ACESSAR PELA WEB
+============================================================
+
+Depois que o monitor coletar dados:
+
+http://seu-servidor/monitor_usuarios.php
+
+Ou:
+
+http://localhost/sistema-impressao/public_html/monitor_usuarios.php
+
+============================================================
+❌ REMOVER AUTOMAÇÃO (Task Scheduler)
+============================================================
+
+Se você tinha os scripts de automação antigos:
+
+1. Abra PowerShell como ADMIN
+2. Execute: 
+   Unregister-ScheduledTask -TaskName "MonitorUsuarios" -Confirm:$false
+
+3. Pronto! A tarefa foi removida
+
+============================================================
+📝 ARQUIVOS IMPORTANTES
+============================================================
+
+MENU.ps1              - Script do menu principal (o novo)
+INICIAR.bat           - Atalho para abrir o menu (clique duplo)
+monitor_usuarios.ps1  - Script que coleta os dados
+lista_maquinas.txt    - Lista de máquinas a monitorar
+status_usuarios.json  - Arquivo com os dados coletados
+
+============================================================
+✨ RESUMO
+============================================================
+
+ANTES (complicado):
+  - Executar SETUP_AUTOMATICO.ps1
+  - Usar Task Scheduler
+  - Gerenciar automação
+
+AGORA (simples):
+  - Clique duplo em INICIAR.bat
+  - Escolha a opção que quer
+  - Pronto!
+
+============================================================
