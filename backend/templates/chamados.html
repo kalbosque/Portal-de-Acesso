@@ -886,13 +886,19 @@
         }
 
         // Caso contrário: atender ou reabrir
-        let url = '';
-        if (newStatus === 'Em Atendimento') url = `/api/tickets/atender/${ticketId}`;
-        else if (newStatus === 'Aberto') url = `/api/tickets/reabrir/${ticketId}`;
-
         try {
-            const res = await fetch(url, { method: 'POST' });
+            // A API centraliza a troca de status nesta rota e responde JSON.
+            // As antigas URLs /atender/{id} e /reabrir/{id} não são compatíveis
+            // com o fluxo AJAX desta página.
+            const res = await fetch('/api/tickets/atualizar_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: Number(ticketId), status: newStatus })
+            });
             const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.detail || 'Não foi possível atualizar o chamado.');
+            }
             if (data.success) {
                 // Mover o card visualmente sem reload
                 const col = document.querySelector(`.kanban-col[data-status="${newStatus}"]`);
@@ -1114,8 +1120,21 @@
     }
 
     async function atenderChamado(id) {
-        const res = await fetch(`/api/tickets/atender/${id}`, { method: 'POST' });
-        if (res.ok) location.reload();
+        try {
+            const res = await fetch('/api/tickets/atualizar_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: Number(id), status: 'Em Atendimento' })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.detail || 'Não foi possível assumir o chamado.');
+            }
+            location.reload();
+        } catch (err) {
+            console.error('Erro ao assumir chamado:', err);
+            alert(err.message || 'Erro ao assumir chamado.');
+        }
     }
 
     function openSolutionModal(id) {
@@ -1266,16 +1285,27 @@
 
     async function saveAtalho() {
         const id = document.getElementById('atalho_edit_id').value;
-        const form = new FormData();
-        form.append('icone', document.getElementById('input_picker_icon').value);
-        form.append('label', document.getElementById('input_picker_label').value);
-        form.append('titulo_padrao', document.getElementById('input_picker_titulo').value);
-        form.append('categoria', document.getElementById('input_picker_cat').value);
-        form.append('prioridade', document.getElementById('input_picker_pri').value);
-        
-        const url = id ? `/api/tickets/atalhos/edit/${id}` : '/api/tickets/atalhos/add';
-        const res = await fetch(url, { method: 'POST', body: form });
-        if (res.ok) location.reload();
+        const payload = {
+            icone: document.getElementById('input_picker_icon').value,
+            label: document.getElementById('input_picker_label').value,
+            titulo_padrao: document.getElementById('input_picker_titulo').value,
+            categoria: document.getElementById('input_picker_cat').value,
+            prioridade_padrao: document.getElementById('input_picker_pri').value,
+            sla_horas: 24
+        };
+
+        const url = id ? `/api/tickets/atalhos/${id}` : '/api/tickets/atalhos';
+        const res = await fetch(url, {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            alert(data.detail || 'Não foi possível salvar o atalho.');
+            return;
+        }
+        location.reload();
     }
 
     function editAtalho(a) {

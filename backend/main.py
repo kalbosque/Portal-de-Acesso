@@ -8,6 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import WebSocket, WebSocketDisconnect
+from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, create_engine, select, func, SQLModel, desc
 from models import Usuario, Impressora, Impressao, Licenca, Chamado, ChamadoInteracao, TipoProblema, EquipamentoTI, MarmitaCardapio, MarmitaPedido
 import license_service
@@ -125,15 +127,34 @@ def ensure_schema_compatibility():
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS avaliacao_comentario TEXT",
         "ALTER TABLE cofre_senhas ADD COLUMN IF NOT EXISTS setor VARCHAR(80) DEFAULT 'TI'",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS whatsapp_cliente VARCHAR(80)",
+        "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS whatsapp_instance VARCHAR(120)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS origem VARCHAR(50) DEFAULT 'Web'",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS assigned_user VARCHAR(120)",
+        "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS visivel_suporte BOOLEAN DEFAULT TRUE",
+        "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_status VARCHAR(20) DEFAULT 'sent'",
         "ALTER TABLE impressoes DROP CONSTRAINT IF EXISTS impressoes_tipo_impressao_check",
         "ALTER TABLE impressoes ADD CONSTRAINT impressoes_tipo_impressao_check CHECK (tipo_impressao IN ('Preto e Branco', 'Colorida', 'Digital', 'P&B', 'Colorido'))",
     ]
 
+    # Cada ajuste usa sua própria transação. Assim, uma alteração opcional
+    # que falhe não desfaz as colunas essenciais de chamados/WhatsApp.
+    for statement in statements:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(statement))
+        except Exception as exc:
+            print(f"[SCHEMA] Ajuste ignorado: {statement[:90]}... ({exc})")
+
+
+def ensure_whatsapp_columns():
+    statements = [
+        "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS whatsapp_cliente VARCHAR(80)",
+        "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS whatsapp_instance VARCHAR(120)"
+    ]
     with engine.begin() as conn:
         for statement in statements:
             conn.execute(text(statement))
+
 
 @app.get("/chamados", response_class=HTMLResponse)
 async def view_chamados(request: Request, success: str = None, error: str = None):
@@ -153,10 +174,24 @@ async def view_chamados(request: Request, success: str = None, error: str = None
             amanha = hoje + timedelta(days=1)
             quatro_horas_atras = datetime.now() - timedelta(hours=4)
 
-            if user_role == "admin":
-                chamados = session.exec(select(Chamado).order_by(desc(Chamado.data_abertura))).all()
-            else:
-                chamados = session.exec(select(Chamado).where(Chamado.usuario == user_name).order_by(desc(Chamado.data_abertura))).all()
+            try:
+                if user_role == "admin":
+                    chamados = session.exec(select(Chamado).where(Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+                else:
+                    chamados = session.exec(select(Chamado).where(Chamado.usuario == user_name, Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+            except ProgrammingError as pe:
+                if "whatsapp_instance" in str(pe) or "whatsapp_cliente" in str(pe):
+                    print(f"[STARTUP] Detectado erro de schema WhatsApp em chamados: {pe}. Aplicando correção de schema.")
+                    # A consulta que falhou deixa a transação SQLAlchemy abortada.
+                    # Sem rollback, a nova consulta falha mesmo após criar as colunas.
+                    session.rollback()
+                    ensure_whatsapp_columns()
+                    if user_role == "admin":
+                        chamados = session.exec(select(Chamado).where(Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+                    else:
+                        chamados = session.exec(select(Chamado).where(Chamado.usuario == user_name, Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+                else:
+                    raise
 
             total_tickets = len(chamados)
             abertos = sum(1 for c in chamados if c.status == "Aberto")
@@ -1463,51 +1498,128 @@ async def view_executivo(request: Request):
 
 
 @app.get("/login", response_class=HTMLResponse)
-async def view_login(request: Request):
+async def view_login(request: Request, intent: str = "suporte"):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
+        context={"config": APP_CONFIG, "intent": intent, "only_atendimento": False}
+    )
+
+@app.get("/atendimento/login", response_class=HTMLResponse)
+async def view_atendimento_login(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="atendimento_login.html",
         context={"config": APP_CONFIG}
     )
 
-@app.get("/atendimento", response_class=HTMLResponse)
-async def view_atendimento(request: Request):
+def _can_access_atendimento(request: Request) -> bool:
+    """Permite a Central de Atendimento a administradores ou usuários autorizados."""
+    if get_signed_cookie(request, "user_role") == "admin":
+        return True
+    try:
+        raw_perms = get_signed_cookie(request, "user_perms", "[]") or "[]"
+        perms = normalize_permissions(json.loads(raw_perms))
+        return "Atendimento" in perms or "Suporte" in perms
+    except Exception:
+        return False
+
+
+@app.get("/central-atendimento", response_class=HTMLResponse)
+async def view_central_atendimento(request: Request):
     user_id = request.cookies.get("user_id")
     user_role = request.cookies.get("user_role")
     user_name = request.cookies.get("user_name")
-    if not user_id: return RedirectResponse(url="/login")
-    
+
     config = load_app_config()
     if not config.get("MODULO_ATENDIMENTO", False):
         return RedirectResponse(url="/")
-        
+
+    if not user_id:
+        return templates.TemplateResponse(
+            request=request,
+            name="atendimento_login.html",
+            context={"config": config},
+        )
+
+    has_access = _can_access_atendimento(request)
+
     return templates.TemplateResponse(
         request=request,
         name="atendimento_whatsapp.html",
         context={
             "config": config,
             "is_admin": user_role == "admin",
-            "user_name": user_name
+            "user_role": user_role,
+            "can_manage_atendimento": user_role in ("admin", "gestor", "gerente", "supervisor", "recepcao", "recepção", "recepcionista"),
+            "user_name": user_name,
+            "authenticated": True,
+            "has_access": has_access,
         }
     )
 
-@app.get("/whatsapp_config", response_class=HTMLResponse)
+@app.get("/atendimento")
+async def redirect_atendimento():
+    return RedirectResponse(url="/central-atendimento")
+
+@app.get("/central-atendimento/contatos", response_class=HTMLResponse)
+async def view_whatsapp_contacts(request: Request):
+    user_id = request.cookies.get("user_id")
+    user_role = request.cookies.get("user_role")
+    if not user_id:
+        return RedirectResponse(url="/login")
+    if user_role not in ("admin", "operator"):
+        return RedirectResponse(url="/central-atendimento")
+    return templates.TemplateResponse(
+        request=request,
+        name="whatsapp_contacts.html",
+        context={
+            "config": load_app_config(),
+            "is_admin": user_role == "admin",
+            "authenticated": True,
+            "user_name": request.cookies.get("user_name", ""),
+        },
+    )
+
+@app.get("/central-atendimento/configuracoes", response_class=HTMLResponse)
 async def view_whatsapp_config(request: Request):
     user_id = request.cookies.get("user_id")
     user_role = request.cookies.get("user_role")
-    if not user_id: return RedirectResponse(url="/login")
-    
+    if not user_id:
+        return RedirectResponse(url="/login")
+
     if user_role != "admin":
-        return RedirectResponse(url="/")
-        
+        return RedirectResponse(url="/central-atendimento")
+
     config = load_app_config()
     return templates.TemplateResponse(
         request=request,
         name="whatsapp_config.html",
         context={
             "config": config,
-            "is_admin": user_role == "admin"
+            "is_admin": user_role == "admin",
+            "authenticated": True,
+            "user_name": request.cookies.get("user_name", ""),
         }
     )
 
+@app.get("/central-atendimento/grupos", response_class=HTMLResponse)
+async def view_whatsapp_groups(request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+    config = load_app_config()
+    groups = []
+    with Session(engine) as session:
+        chamados = session.exec(select(Chamado).where(Chamado.origem == "WhatsApp", Chamado.whatsapp_cliente.like("%@g.us")).order_by(desc(Chamado.data_abertura))).all()
+        seen = set()
+        for chamado in chamados:
+            if chamado.whatsapp_cliente in seen:
+                continue
+            seen.add(chamado.whatsapp_cliente)
+            groups.append({"name": chamado.usuario or "Grupo WhatsApp", "jid": chamado.whatsapp_cliente, "last_activity": chamado.data_abertura.strftime("%d/%m/%Y %H:%M")})
+    return templates.TemplateResponse(request=request, name="whatsapp_groups.html", context={"config": config, "groups": groups, "authenticated": True, "user_name": request.cookies.get("user_name", "")})
 
+@app.get("/whatsapp_config")
+async def redirect_whatsapp_config():
+    return RedirectResponse(url="/central-atendimento/configuracoes")

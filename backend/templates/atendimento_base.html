@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Central de Atendimento | {{ config.APP_NAME }}{% endblock %}</title>
+    <script src="/static/js/tailwind.min.js"></script>
+    <link href="/static/css/google-fonts.css" rel="stylesheet">
+    <style>
+        html, body { margin: 0; min-width: 0; overflow-x: hidden; }
+        body { width: 100%; font-family: 'Inter', sans-serif; background: radial-gradient(circle at top, rgba(16, 185, 129, 0.08), transparent 35%), linear-gradient(180deg, #020617 0%, #070f1d 100%); color: #f8fafc; }
+        header { width: 100%; }
+        .glass-panel { background: rgba(15, 23, 42, 0.78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .glass-input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); color: #f8fafc; }
+        .page-shell { min-height: 100vh; }
+        .attendance-nav a { text-decoration: none; }
+        .attendance-action { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255,255,255,0.08); }
+        .attendance-action:hover { background: rgba(15, 23, 42, 0.9); }
+        .attendance-menu-toggle { display: inline-flex; position: fixed; left: 22px; top: 109px; width: 90px; height: 40px; padding: 0; justify-content: center; z-index: 80; }
+        .attendance-menu-toggle span { display: none; }
+        .attendance-nav { display: flex !important; position: fixed; left: 22px; top: 196px; transform: none; z-index: 90; flex-direction: column; align-items: stretch; gap: .15rem; width: 218px; min-width: 218px; padding: .55rem; border: 1px solid rgba(148,163,184,.22); border-radius: 1rem; background: #101827; box-shadow: 0 22px 48px rgba(0,0,0,.55); }
+        .attendance-nav.mobile-open { display: flex !important; }
+        .attendance-nav a, .attendance-nav button { width: 100%; justify-content: flex-start; min-height: 42px; padding: .55rem .85rem; border-radius: .7rem; white-space: nowrap; border: 1px solid transparent; cursor: pointer; }
+        .attendance-nav.menu-collapsed { width: 58px; min-width: 58px; }
+        .attendance-nav.menu-collapsed a, .attendance-nav.menu-collapsed button { justify-content: center; padding-left: .35rem; padding-right: .35rem; font-size: 0; }
+        .attendance-nav.menu-collapsed a span, .attendance-nav.menu-collapsed button span { display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; height: 1.1rem; }
+        .attendance-nav.menu-collapsed a[href="/central-atendimento/configuracoes"]::before { margin-right: 0; }
+        .attendance-nav.menu-collapsed a::before, .attendance-nav.menu-collapsed button::before { display: inline-flex; align-items: center; justify-content: center; margin: 0; font-size: 1rem; line-height: 1; }
+        .attendance-nav.menu-collapsed a[href="/central-atendimento"]::before { content: '💬'; }
+        .attendance-nav.menu-collapsed a[href="/central-atendimento/contatos"]::before { content: '👥'; }
+        .attendance-nav.menu-collapsed > button:nth-of-type(1)::before { content: '📝'; }
+        .attendance-nav.menu-collapsed a[href="/central-atendimento/configuracoes"]::before { content: '⚙'; }
+        .attendance-nav.menu-collapsed a[href="/login?intent="]::before { content: '↩'; }
+        .attendance-nav.menu-collapsed > button.menu-logout::before { content: '⏻'; }
+        .attendance-nav a[href="/central-atendimento/configuracoes"]::before { content: none !important; display: none; }
+        .attendance-nav.menu-collapsed a::before, .attendance-nav.menu-collapsed button::before { content: none !important; display: none; }
+        .attendance-nav .menu-icon svg { width: 1.1rem; height: 1.1rem; display: block; }
+        body.attendance-subpage .attendance-nav, body.attendance-subpage .attendance-menu-toggle { display: none !important; }
+        .attendance-nav a:hover, .attendance-nav button:hover, .attendance-nav .menu-current { background: rgba(13,148,136,.28); border-color: rgba(45,212,191,.12); color: #f8fafc; }
+        .attendance-nav .menu-logout:hover { background: rgba(244,63,94,.16); border-color: rgba(251,113,133,.2); color: #fecdd3; }
+        body.attendance-menu-expanded main { padding-left: 250px !important; transition: none !important; }
+        .attendance-nav a[href="/central-atendimento/configuracoes"]::before { content: '⚙'; margin-right: .55rem; font-size: 1rem; }
+        @media (max-width: 1200px) {
+            .attendance-nav { left: 22px; top: 196px; }
+            .attendance-menu-toggle { left: 22px; top: 109px; width: 90px; height: 40px; }
+            header > div { position: relative; padding-left: 1rem; }
+        }
+        @media (min-width: 1201px) {
+            .attendance-brand { transform: translateX(-205px); }
+        }
+    </style>
+</head>
+<body class="page-shell{% if request.url.path != '/central-atendimento' %} attendance-subpage{% endif %}">
+    {% if authenticated|default(false) %}
+    <header class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl shadow-[0_10px_40px_-24px_rgba(0,0,0,0.5)]">
+        <div class="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
+            <div class="attendance-brand flex items-center gap-4">
+                <div class="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 shadow-sm">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase tracking-[0.35em] text-emerald-300 font-black">Central de Atendimento</p>
+                    <h1 class="text-lg font-black tracking-tight">{{ config.APP_NAME }}</h1>
+                </div>
+            </div>
+            <button type="button" class="attendance-menu-toggle items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200" onclick="toggleAttendanceMenu(event)" aria-label="Abrir menu">☰ Menu</button>
+            <div class="flex flex-wrap items-center gap-2 attendance-nav mobile-open menu-collapsed">
+                <a href="/central-atendimento" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">💬</span>Conversas</a>
+                <a href="/central-atendimento/contatos" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">👥</span>Contatos</a>
+                <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-internal-note'))" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-amber-500/15"><span aria-hidden="true">📝</span>Nota interna</button>
+                <a href="/central-atendimento/configuracoes" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15">Configurações</a>
+                <a href="/login?intent=" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-white/10"><span aria-hidden="true">↩</span>Portal Geral</a>
+                <button type="button" onclick="sairDaCentral(event)" class="menu-logout inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-rose-200 transition"><span aria-hidden="true">⏻</span>Sair</button>
+            </div>
+        </div>
+    </header>
+    {% endif %}
+    <main class="mx-auto max-w-screen-2xl px-4 py-8 lg:px-8">
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        function toggleAttendanceMenu(event) {
+            event?.stopPropagation();
+            const menu = document.querySelector('.attendance-nav');
+            if (!menu) return;
+            if (!menu.classList.contains('mobile-open')) {
+                menu.classList.add('mobile-open');
+                menu.classList.remove('menu-collapsed');
+                document.body.classList.add('attendance-menu-expanded');
+            } else if (!menu.classList.contains('menu-collapsed')) {
+                menu.classList.add('menu-collapsed');
+                document.body.classList.remove('attendance-menu-expanded');
+            } else {
+                menu.classList.remove('menu-collapsed');
+                document.body.classList.add('attendance-menu-expanded');
+            }
+        }
+        function closeAttendanceMenu(event) {
+            event?.stopPropagation();
+            document.querySelector('.attendance-nav')?.classList.add('mobile-open', 'menu-collapsed');
+            document.body.classList.remove('attendance-menu-expanded');
+        }
+        async function sairDaCentral(event) {
+            event?.stopPropagation();
+            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+            window.location.href = '/login?intent=';
+        }
+        document.addEventListener('click', function(event) {
+            const menu = document.querySelector('.attendance-nav');
+            const toggle = document.querySelector('.attendance-menu-toggle');
+            if (!menu || !toggle) return;
+            const clickedOutside = !event.target.closest('.attendance-nav') && !event.target.closest('.attendance-menu-toggle');
+            if (event.target.closest('.attendance-nav a') || (clickedOutside && !menu.classList.contains('menu-collapsed'))) {
+                closeAttendanceMenu(event);
+            }
+        });
+        function initializeAttendanceMenu() {
+            const path = window.location.pathname;
+            document.querySelectorAll('.attendance-nav a').forEach(function(link) {
+                if (link.getAttribute('href') === path) link.classList.add('menu-current');
+            });
+            const icons = {
+                '/central-atendimento': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 18h-.5A3.5 3.5 0 0 1 3 14.5v-5A3.5 3.5 0 0 1 6.5 6h11A3.5 3.5 0 0 1 21 9.5v5a3.5 3.5 0 0 1-3.5 3.5H13l-3 3v-3H7Z"/><path d="M8 11h.01M12 11h.01M16 11h.01" stroke-linecap="round"/></svg>',
+                '/central-atendimento/contatos': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 5.5a3 3 0 0 1 0 5.8M16 14a5 5 0 0 1 4.5 5"/></svg>',
+                '/central-atendimento/configuracoes': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 15 .1.1a1.8 1.8 0 0 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3 .8v.2a1.8 1.8 0 0 1-3.6 0v-.2a1.8 1.8 0 0 0-3-.8l-.1.1a1.8 1.8 0 0 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-.8-3h-.2a1.8 1.8 0 0 1 0-3h.2a1.8 1.8 0 0 0 .8-3l-.1-.1a1.8 1.8 0 0 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3-.8v-.2a1.8 1.8 0 0 1 3.6 0v.2a1.8 1.8 0 0 0 3 .8l.1-.1a1.8 1.8 0 0 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 .8 3h.2a1.8 1.8 0 0 1 0 3h-.2a1.8 1.8 0 0 0-.8 3Z"/></svg>',
+                '/login?intent=': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 10 8-6 8 6v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Z" stroke-linejoin="round"/><path d="M9 20v-6h6v6"/></svg>'
+            };
+            document.querySelectorAll('.attendance-nav a').forEach(function(link) {
+                const icon = icons[link.getAttribute('href')];
+                if (!icon) return;
+                let holder = link.querySelector('span');
+                if (!holder) { holder = document.createElement('span'); link.prepend(holder); }
+                holder.innerHTML = icon;
+                holder.setAttribute('aria-hidden', 'true');
+                holder.className = 'menu-icon shrink-0';
+            });
+            const note = document.querySelector('.attendance-nav > button:not(.menu-logout)');
+            if (note) {
+                let holder = note.querySelector('span');
+                if (!holder) { holder = document.createElement('span'); note.prepend(holder); }
+                holder.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h10l4 4v12H5V4Z"/><path d="M15 4v5h4M8 14h8M8 17h5" stroke-linecap="round"/></svg>';
+                holder.setAttribute('aria-hidden', 'true');
+                holder.className = 'menu-icon shrink-0';
+            }
+            const configLink = document.querySelector('.attendance-nav a[href="/central-atendimento/configuracoes"]');
+            if (configLink && !document.querySelector('.attendance-nav .menu-history')) {
+                const history = document.createElement('button');
+                history.type = 'button';
+                history.className = 'menu-history inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-indigo-500/15';
+                history.innerHTML = '<span class="menu-icon shrink-0" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg></span>Histórico';
+                history.onclick = function() { window.dispatchEvent(new CustomEvent('open-resolved-history')); };
+                configLink.parentNode.insertBefore(history, configLink);
+            }
+            const logout = document.querySelector('.attendance-nav .menu-logout');
+            if (logout) {
+                let holder = logout.querySelector('span');
+                if (!holder) { holder = document.createElement('span'); logout.prepend(holder); }
+                holder.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 4h5v16h-5M10 8l4 4-4 4M14 12H3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                holder.setAttribute('aria-hidden', 'true');
+                holder.className = 'menu-icon shrink-0';
+            }
+        }
+        initializeAttendanceMenu();
+    </script>
+</body>
+</html>

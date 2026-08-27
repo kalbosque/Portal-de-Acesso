@@ -138,7 +138,7 @@
         <div class="c-dot" id="dot-4"></div>
     </div>
 
-    <div id="portalSelection" class="w-full max-w-7xl px-4 transition-all duration-700">
+    <div id="portalSelection" class="w-full max-w-7xl px-4 transition-all duration-700" style="{% if only_atendimento %}display:none;{% endif %}">
         <div class="text-center mb-16 animate-[slideIn_0.8s_ease-out] flex flex-col items-center">
             {% if config.APP_LOGO_URL %}
                 <div class="mb-8 p-3 bg-white rounded-3xl shadow-2xl border border-white/20">
@@ -212,8 +212,8 @@
             </div>
             {% endif %}
 
-            {% if config.MODULO_ATENDIMENTO and config.URL_ATENDIMENTO %}
-            <a href="{{ config.URL_ATENDIMENTO }}" target="_blank" class="portal-card glass-panel group p-10 rounded-[3rem] border border-emerald-500/20 hover:border-emerald-500/50 relative overflow-hidden block no-underline flex-1 min-w-[320px] max-w-[400px] flex flex-col">
+            {% if config.MODULO_ATENDIMENTO %}
+            <a href="/atendimento/login" class="portal-card glass-panel group p-10 rounded-[3rem] border border-emerald-500/20 hover:border-emerald-500/50 relative overflow-hidden block no-underline flex-1 min-w-[320px] max-w-[400px] flex flex-col">
                 <div class="absolute -top-6 -right-6 text-emerald-500/5 group-hover:text-emerald-500/10 transition-all duration-500 pointer-events-none transform group-hover:scale-110 group-hover:rotate-12">
                     <svg class="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/></svg>
                 </div>
@@ -237,7 +237,7 @@
         </div>
     </div>
 
-    <div id="loginFormContainer" class="login-container w-full max-w-md px-4">
+    <div id="loginFormContainer" class="login-container w-full max-w-md px-4" style="{% if only_atendimento %}display:block; opacity:1; transform: translateY(0);{% endif %}">
         <div class="glass-panel p-10 rounded-[3rem] border border-white/10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden">
             <button onclick="backToPortal()" class="absolute left-8 top-8 text-slate-500 hover:text-white transition-colors flex items-center gap-2 group">
                 <svg class="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -398,6 +398,14 @@
                 }, 50);
             }, 400);
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const presetIntent = '{{ intent | default('') }}';
+            const onlyAtendimento = {{ 'true' if only_atendimento else 'false' }};
+            if (onlyAtendimento || presetIntent) {
+                showLogin(presetIntent || 'suporte');
+            }
+        });
 
         // Auth Logic
         document.getElementById('loginForm').onsubmit = async (e) => {

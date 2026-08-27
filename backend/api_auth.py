@@ -90,9 +90,12 @@ async def login(
                     status_code=403,
                 )
 
-            redirect = "/chamados"
-            if user.role in ("admin", "gestor") and intent == "gestao":
+            if intent == "suporte":
+                redirect = "/central-atendimento"
+            elif user.role in ("admin", "gestor") and intent == "gestao":
                 redirect = "/"
+            else:
+                redirect = "/chamados"
 
             response = JSONResponse({"success": True, "redirect": redirect})
             _set_session_cookies(response, user)

@@ -1,351 +1,462 @@
-{% extends "base.html" %}
+{% extends "atendimento_base.html" %}
+
+{% block title %}Configuração WhatsApp | {{ config.APP_NAME }}{% endblock %}
 
 {% block content %}
-<link rel="stylesheet" href="/static/css/monitor.css">
-
-<div class="mb-8">
-    <h2 class="text-3xl font-black text-white mb-1 uppercase tracking-tighter italic">Configuração do WhatsApp</h2>
-    <p class="text-slate-500 font-bold uppercase tracking-[0.3em] text-[10px]">Conexão e Autenticação (Evolution API)</p>
+<div class="mx-auto mb-4 flex max-w-7xl flex-wrap justify-between gap-3 px-4">
+    <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-300">← Voltar para conversas</a>
+    <a href="/" class="rounded-xl bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300">⌂ Portal inicial</a>
 </div>
-
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
+<style>
+    /* Estilos baseados no WhatsApp Web */
+    .wa-bg { background-color: #111b21; }
+    .wa-card { background-color: #202c33; border: 1px solid rgba(255,255,255,0.05); }
+    .wa-btn-primary { background-color: #00a884; color: #111b21; }
+    .wa-btn-primary:hover { background-color: #00c59b; }
+    .wa-text-muted { color: #8696a0; }
+    .wa-text-primary { color: #e9edef; }
     
-    <!-- Coluna 1: Informações e Status -->
-    <div class="lg:col-span-1 space-y-6">
-        <div class="glass-panel p-8 rounded-[2.5rem] border border-white/5 bg-slate-900/40 relative overflow-hidden">
-            <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl"></div>
-            
-            <h3 class="text-lg font-black text-white mb-6 uppercase tracking-tight flex items-center gap-2 italic relative z-10">
-                <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                Status da Conexão
-            </h3>
-            
-            <div class="space-y-6 relative z-10">
-                <div class="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5">
-                    <div id="status-icon-container" class="w-12 h-12 rounded-xl flex items-center justify-center text-slate-500 border border-slate-500/20 bg-slate-500/10 shadow-lg">
-                        <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                    <div>
-                        <span class="block text-[10px] text-slate-500 font-black uppercase tracking-widest">Estado Atual</span>
-                        <span id="status-text" class="block text-sm font-black text-white uppercase tracking-tight">Verificando...</span>
-                    </div>
-                </div>
+    .modal-overlay {
+        background: rgba(11, 20, 26, 0.85);
+        backdrop-filter: blur(4px);
+    }
+    @media (min-width: 1201px) {
+        body:has(.wa-bg) main { padding-left: 220px; }
+    }
+</style>
 
-                <div class="p-5 rounded-2xl bg-slate-950/40 border border-white/5 space-y-3">
-                    <div class="flex justify-between text-xs">
-                        <span class="text-slate-500 font-bold">Instância:</span>
-                        <span class="text-white font-black font-mono">printdash</span>
-                    </div>
-                    <div class="flex justify-between text-xs">
-                        <span class="text-slate-500 font-bold">Servidor:</span>
-                        <span id="config-server" class="text-white font-bold truncate max-w-[150px] font-mono">Carregando...</span>
-                    </div>
-                </div>
-
-                <div id="action-area" class="pt-2">
-                    <!-- Botões de Ação Dinâmicos -->
-                </div>
-            </div>
+<div class="min-h-screen flex flex-col items-center pt-10 pb-20 wa-bg px-4">
+    
+    <div class="w-full max-w-3xl">
+        <div class="mb-8">
+            <h2 class="text-3xl font-normal text-[#e9edef] mb-2">Aparelhos conectados</h2>
+            <p class="wa-text-muted text-[15px]">Conecte seus aparelhos usando o WhatsApp no seu celular.</p>
         </div>
-        
-        <!-- Instruções de Conexão -->
-        <div class="glass-panel p-8 rounded-[2.5rem] border border-white/5 bg-slate-900/40">
-            <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                📖 Como Conectar?
-            </h3>
-            <ol class="space-y-4 text-xs font-bold text-slate-500 list-decimal pl-4">
-                <li>Abra o **WhatsApp** no seu aparelho celular.</li>
-                <li>Toque em **Mais Opções** (três pontos) ou **Configurações** e selecione **Aparelhos Conectados**.</li>
-                <li>Toque em **Conectar um aparelho**.</li>
-                <li>Aponte a câmera do seu celular para o **QR Code** ao lado para ler e sincronizar.</li>
-                <li>Mantenha o aparelho conectado à internet para sincronização em tempo real.</li>
-            </ol>
+
+        <div class="wa-card rounded-2xl p-8 flex flex-col items-center justify-center text-center shadow-md mb-6">
+            <div class="w-48 h-32 bg-[url('https://static.whatsapp.net/rsrc.php/v3/ys/r/a0z-F88rR7a.png')] bg-contain bg-center bg-no-repeat mb-6 opacity-80" style="filter: grayscale(100%) brightness(1.5);"></div>
+            <h3 class="text-xl text-[#e9edef] font-normal mb-6">Use o WhatsApp em outros aparelhos</h3>
+            
+            <button onclick="openConnectModal()" class="wa-btn-primary font-medium text-[15px] px-8 py-2.5 rounded-full shadow-lg transition-transform active:scale-95 flex items-center gap-2">
+                Conectar um aparelho
+            </button>
+        </div>
+
+        <div class="wa-card rounded-2xl p-6 mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 shadow-md">
+            <div>
+                <h3 class="text-[#e9edef] text-lg font-medium mb-1">Criar chamados automaticamente</h3>
+                <p class="wa-text-muted text-sm leading-relaxed max-w-xl">
+                    Quando ativado, a primeira mensagem do cliente também aparece no módulo Chamados.
+                    Desativado, ela fica somente na Central e pode ser promovida depois pelo atendente.
+                </p>
+            </div>
+            <label class="inline-flex items-center gap-3 cursor-pointer shrink-0">
+                <span class="text-xs font-semibold text-[#8696a0]">Ativo</span>
+                <input id="auto-create-tickets" type="checkbox" class="sr-only peer" onchange="saveAutoCreateTickets(this.checked)">
+                <span class="relative w-12 h-7 rounded-full bg-slate-700 peer-checked:bg-[#00a884] transition-colors after:content-[''] after:absolute after:top-1 after:left-1 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition-transform peer-checked:after:translate-x-5"></span>
+            </label>
+        </div>
+
+        <div class="wa-card rounded-2xl p-6 mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 shadow-md">
+            <div>
+                <h3 class="text-[#e9edef] text-lg font-medium mb-1">Exibir grupos do WhatsApp</h3>
+                <p class="wa-text-muted text-sm leading-relaxed max-w-xl">Quando ativado, os grupos aparecem na Central de Atendimento e poderão ser consultados na página de Grupos.</p>
+            </div>
+            <label class="inline-flex items-center gap-3 cursor-pointer shrink-0">
+                <span class="text-xs font-semibold text-[#8696a0]">Ativo</span>
+                <input id="show-groups" type="checkbox" class="sr-only peer" onchange="saveShowGroups(this.checked)">
+                <span class="relative w-12 h-7 rounded-full bg-slate-700 peer-checked:bg-[#00a884] transition-colors after:content-[''] after:absolute after:top-1 after:left-1 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition-transform peer-checked:after:translate-x-5"></span>
+            </label>
+        </div>
+
+        <div>
+            <h4 class="wa-text-muted text-sm font-semibold uppercase tracking-wider mb-4 px-2">Aparelhos vinculados</h4>
+            
+            <!-- Lista de Aparelhos -->
+            <div id="instances-list" class="wa-card rounded-2xl overflow-hidden divide-y divide-white/5 shadow-md">
+                <div class="p-6 text-center wa-text-muted text-sm">Carregando aparelhos...</div>
+            </div>
+            
+            <p class="wa-text-muted text-xs text-center mt-6">
+                Suas mensagens pessoais possuem a criptografia de ponta a ponta em todos os seus aparelhos conectados.
+            </p>
         </div>
     </div>
-    
-    <!-- Coluna 2 e 3: Display do QR Code / Estado de Sucesso -->
-    <div class="lg:col-span-2">
-        <div class="glass-panel p-10 rounded-[3rem] border border-white/5 bg-slate-900/40 h-full flex flex-col items-center justify-center min-h-[450px] relative overflow-hidden">
-            <div class="absolute -left-16 -bottom-16 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl"></div>
+</div>
+
+<!-- Modal Nome do Aparelho -->
+<div id="modal-name" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden opacity-0 transition-opacity">
+    <div class="wa-card w-full max-w-md rounded-2xl shadow-2xl transform scale-95 transition-transform overflow-hidden">
+        <div class="p-6 border-b border-white/5 flex justify-between items-center">
+            <h3 class="text-[#e9edef] text-xl font-medium">Nome do Aparelho</h3>
+            <button onclick="closeModals()" class="wa-text-muted hover:text-[#e9edef] transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-6">
+            <p class="wa-text-muted text-[15px] mb-4">Dê um nome para identificar este número (ex: Vendas, Suporte 2).</p>
+            <input type="text" id="instance-name-input" class="w-full bg-[#111b21] border border-white/10 rounded-lg px-4 py-3 text-[#e9edef] focus:outline-none focus:border-[#00a884] mb-6" placeholder="Nome da conexão">
             
-            <div id="qrcode-display-area" class="text-center relative z-10 space-y-6">
-                <!-- Estado Inicial / QR Code / Sucesso Renderizado via JS -->
-                <div class="w-16 h-16 mx-auto bg-slate-500/10 rounded-full flex items-center justify-center text-slate-500 animate-spin border border-slate-500/20">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeModals()" class="px-5 py-2.5 rounded-full text-[#00a884] hover:bg-white/5 font-medium transition-colors text-[15px]">Cancelar</button>
+                <button onclick="proceedToQR()" class="wa-btn-primary px-5 py-2.5 rounded-full font-medium transition-colors text-[15px]">Gerar QR Code</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal QR Code -->
+<div id="modal-qr" class="fixed inset-0 modal-overlay z-50 flex items-center justify-center hidden opacity-0 transition-opacity">
+    <div class="wa-card w-full max-w-[800px] rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[500px]">
+        
+        <!-- Left Side: Instructions -->
+        <div class="p-10 flex-1 border-b md:border-b-0 md:border-r border-white/5 relative flex flex-col justify-center">
+            <button onclick="closeModals()" class="absolute top-6 left-6 wa-text-muted hover:text-[#e9edef] transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+            </button>
+            
+            <h3 class="text-[#e9edef] text-[28px] font-light mb-8 mt-4 leading-tight">Para usar o WhatsApp no seu computador:</h3>
+            <ol class="space-y-6 text-[#e9edef] text-[18px] list-decimal pl-5 font-light">
+                <li>Abra o WhatsApp no seu celular</li>
+                <li>Toque em <span class="font-medium">Mais opções</span> no Android ou em <span class="font-medium">Configurações</span> no iPhone</li>
+                <li>Toque em <span class="font-medium">Aparelhos conectados</span> e, em seguida, em <span class="font-medium">Conectar um aparelho</span></li>
+                <li>Aponte a câmera do seu celular para esta tela para capturar o código</li>
+            </ol>
+        </div>
+        
+        <!-- Right Side: QR Code -->
+        <div class="p-10 md:w-[400px] flex items-center justify-center bg-[#111b21]">
+            <div id="qrcode-display-area" class="w-full flex flex-col items-center justify-center text-center">
+                <!-- Loading -->
+                <div class="animate-spin text-[#00a884] mb-4">
+                    <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
                 </div>
-                <h4 class="text-slate-400 font-bold uppercase tracking-wider text-xs">Carregando Informações da Instância...</h4>
+                <p class="wa-text-muted text-sm uppercase tracking-widest font-semibold">Iniciando conexão...</p>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    let checkStatusInterval = null;
-    let isPolling = false;
-    let isConnecting = false;
+    let instancesData = [];
+    let pollingInterval = null;
+    let targetInstanceName = null;
+    const isAdmin = {{ 'true' if is_admin else 'false' }};
 
-    async function fetchStatus() {
+    async function loadInstances() {
         try {
-            const res = await fetch('/api/whatsapp/status');
-            const data = await res.json();
-            
-            const serverSpan = document.getElementById('config-server');
-            serverSpan.innerText = data.status === 'configured' || data.status === 'error' ? 'Conectado' : 'Não Configurado';
-            
-            if (data.status === 'unconfigured') {
-                isConnecting = false;
-                renderUnconfigured();
-                stopPolling();
-            } else if (data.status === 'configured') {
-                if (data.state === 'open') {
-                    isConnecting = false;
-                    renderConnected();
-                    stopPolling();
-                } else if (data.state === 'connecting') {
-                    isConnecting = true;
-                    renderConnectingState();
-                    startPolling();
-                } else {
-                    // Estado da Evolution é 'close' ou 'disconnected'
-                    if (isConnecting) {
-                        // Continuamos mostrando o estado de conexão/QR Code
-                        updateStatusIndicator('connecting', 'Aguardando Leitura...');
-                    } else {
-                        renderDisconnected();
-                        stopPolling();
-                    }
-                }
-            } else {
-                isConnecting = false;
-                renderError(data.message || 'Erro desconhecido na API.');
-                stopPolling();
+            const res = await fetch('/api/whatsapp/instances');
+            if (res.ok) {
+                const data = await res.json();
+                instancesData = data.instances || [];
+                const toggle = document.getElementById('auto-create-tickets');
+                if (toggle) toggle.checked = data.auto_create_tickets !== false;
+                const groupsToggle = document.getElementById('show-groups');
+                if (groupsToggle) groupsToggle.checked = data.show_groups === true;
+                renderInstancesList();
             }
-        } catch (e) {
-            isConnecting = false;
-            renderError('Falha ao se comunicar com o backend.');
-            stopPolling();
+        } catch(e) {
+            console.error("Erro ao carregar instâncias", e);
         }
     }
 
+    async function saveAutoCreateTickets(enabled) {
+        const toggle = document.getElementById('auto-create-tickets');
+        try {
+            const res = await fetch('/api/whatsapp/settings/auto-tickets', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({enabled})
+            });
+            if (!res.ok) throw new Error('Falha ao salvar configuração');
+        } catch (e) {
+            if (toggle) toggle.checked = !enabled;
+            alert('Não foi possível salvar a configuração.');
+        }
+    }
+
+    async function saveShowGroups(enabled) {
+        const toggle = document.getElementById('show-groups');
+        try {
+            const res = await fetch('/api/whatsapp/settings/groups', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({enabled})
+            });
+            if (!res.ok) throw new Error('Falha ao salvar');
+        } catch (e) {
+            if (toggle) toggle.checked = !enabled;
+            alert('Não foi possível salvar a configuração de grupos.');
+        }
+    }
+
+    function renderInstancesList() {
+        const listEl = document.getElementById('instances-list');
+        listEl.innerHTML = '';
+
+        if (instancesData.length === 0) {
+            listEl.innerHTML = `<div class="p-6 text-center wa-text-muted text-[15px]">Nenhum aparelho conectado ainda.</div>`;
+            return;
+        }
+
+        instancesData.forEach(inst => {
+            const isConnected = (inst.state === 'open' || inst.state === 'connected');
+            const iconColor = isConnected ? 'text-[#00a884]' : 'text-slate-500';
+            const statusText = isConnected ? 'Ativo' : 'Desconectado';
+            
+            // Ícone genérico de navegador/celular
+            const iconSvg = `<svg class="w-6 h-6 ${iconColor}" fill="currentColor" viewBox="0 0 24 24"><path d="M17 2H7C5.895 2 5 2.895 5 4V20C5 21.105 5.895 22 7 22H17C18.105 22 19 21.105 19 20V4C19 2.895 18.105 2 17 2ZM17 20H7V4H17V20Z"></path><path d="M12 19C12.5523 19 13 18.5523 13 18C13 17.4477 12.5523 17 12 17C11.4477 17 11 17.4477 11 18C11 18.5523 11.4477 19 12 19Z"></path></svg>`;
+
+            const row = document.createElement('div');
+            row.className = 'p-4 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer group';
+            
+            // Se clicar na linha (não no botão remover), não faz nada ou mostra detalhes
+            
+            const btnHtml = isAdmin ? `
+                <button onclick="disconnectInstance('${inst.instanceName}', event)" class="opacity-0 group-hover:opacity-100 transition-opacity w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 text-rose-400" title="Desconectar aparelho">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            ` : '';
+
+            row.innerHTML = `
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full bg-[#111b21] flex items-center justify-center border border-white/5 shadow-inner">
+                        ${iconSvg}
+                    </div>
+                    <div>
+                        <div class="text-[#e9edef] text-[16px] font-normal mb-0.5">${inst.label || inst.instanceName}</div>
+                        <div class="text-[13px] wa-text-muted flex items-center gap-1">
+                            <span>${statusText}</span>
+                            ${inst.connected_numbers && inst.connected_numbers.length > 0 ? `<span>• ${inst.connected_numbers[0]}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                ${btnHtml}
+            `;
+            listEl.appendChild(row);
+        });
+    }
+
+    function openConnectModal() {
+        if (!isAdmin) {
+            alert('Apenas administradores podem adicionar novas conexões.');
+            return;
+        }
+        
+        // Se só há o printdash (padrão) e ele está desconectado/inexistente, podemos usar ele.
+        // Mas para suportar múltiplos, pediremos sempre um nome se o admin quiser.
+        document.getElementById('instance-name-input').value = '';
+        const modal = document.getElementById('modal-name');
+        modal.classList.remove('hidden');
+        // setTimeout for transition
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            modal.firstElementChild.classList.remove('scale-95');
+        }, 10);
+        document.getElementById('instance-name-input').focus();
+    }
+
+    function closeModals() {
+        const m1 = document.getElementById('modal-name');
+        const m2 = document.getElementById('modal-qr');
+        m1.classList.add('opacity-0');
+        m1.firstElementChild.classList.add('scale-95');
+        m2.classList.add('opacity-0');
+        m2.firstElementChild.classList.add('scale-95');
+        setTimeout(() => {
+            m1.classList.add('hidden');
+            m2.classList.add('hidden');
+        }, 300);
+        
+        stopPolling();
+        targetInstanceName = null;
+    }
+
+    async function proceedToQR() {
+        let name = document.getElementById('instance-name-input').value.trim();
+        if (!name) name = 'printdash'; // fallback
+        
+        // Formata para lowercase sem espaços (ideal para API)
+        const safeName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+        targetInstanceName = safeName;
+        
+        // Verifica se a instância já existe na lista
+        let exists = instancesData.find(i => i.instanceName === safeName);
+        if (!exists) {
+            // Salvar na API
+            const allNames = instancesData.map(i => i.instanceName);
+            allNames.push(safeName);
+            
+            try {
+                await fetch('/api/whatsapp/instances/save', {
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ instances: allNames, default_instance: allNames[0] })
+                });
+            } catch(e) {
+                console.error('Erro ao salvar instância:', e);
+            }
+        }
+
+        // Transição de modais
+        const m1 = document.getElementById('modal-name');
+        const m2 = document.getElementById('modal-qr');
+        m1.classList.add('opacity-0');
+        m1.firstElementChild.classList.add('scale-95');
+        setTimeout(() => {
+            m1.classList.add('hidden');
+            m2.classList.remove('hidden');
+            setTimeout(() => {
+                m2.classList.remove('opacity-0');
+                m2.firstElementChild.classList.remove('scale-95');
+                startQRFlow();
+            }, 10);
+        }, 300);
+    }
+
+    async function startQRFlow() {
+        const qrArea = document.getElementById('qrcode-display-area');
+        qrArea.innerHTML = `
+            <div class="animate-spin text-[#00a884] mb-4">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </div>
+            <p class="wa-text-muted text-sm uppercase tracking-widest font-semibold">Gerando QR Code...</p>
+        `;
+
+        try {
+            // Chamamos /status para garantir que a Evolution cria a instância se não existir
+            await fetch('/api/whatsapp/status?instance=' + encodeURIComponent(targetInstanceName));
+            
+            // Busca o QR
+            const res = await fetch('/api/whatsapp/qrcode?instance=' + encodeURIComponent(targetInstanceName));
+            if (res.ok) {
+                const data = await res.json();
+                if (data.base64) {
+                    qrArea.innerHTML = `
+                        <div class="p-3 bg-white rounded-xl shadow-lg border border-slate-200">
+                            <img src="${data.base64}" alt="QR Code WhatsApp" class="w-[264px] h-[264px] select-none pointer-events-none">
+                        </div>
+                    `;
+                    startPolling();
+                } else if (data.code) {
+                    qrArea.innerHTML = `
+                        <div class="text-[#e9edef] text-[32px] font-light tracking-[0.2em] font-mono">${data.code}</div>
+                        <p class="wa-text-muted text-sm mt-4">Digite este código no seu celular</p>
+                    `;
+                    startPolling();
+                } else {
+                    qrArea.innerHTML = `<p class="text-rose-400">Falha ao obter QR. <button onclick="startQRFlow()" class="underline">Tentar novamente</button></p>`;
+                }
+            } else {
+                qrArea.innerHTML = `<p class="text-rose-400">API indisponível. <button onclick="startQRFlow()" class="underline">Tentar novamente</button></p>`;
+            }
+        } catch(e) {
+            qrArea.innerHTML = `<p class="text-rose-400">Erro de rede. <button onclick="startQRFlow()" class="underline">Tentar novamente</button></p>`;
+        }
+    }
+
+    async function checkStatusPoll() {
+        if (!targetInstanceName) return;
+        try {
+            const res = await fetch('/api/whatsapp/status?instance=' + encodeURIComponent(targetInstanceName));
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'configured' && data.state === 'open') {
+                    // Conectado com sucesso!
+                    stopPolling();
+                    const qrArea = document.getElementById('qrcode-display-area');
+                    qrArea.innerHTML = `
+                        <div class="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-500 mb-6">
+                            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        </div>
+                        <h3 class="text-[#e9edef] text-xl font-medium mb-2">Conectado com sucesso!</h3>
+                        <p class="wa-text-muted text-[15px]">O aparelho foi vinculado e está pronto para uso.</p>
+                    `;
+                    
+                    setTimeout(() => {
+                        closeModals();
+                        loadInstances();
+                    }, 2500);
+                } else if (data.status === 'configured' && data.state === 'close') {
+                     // Caso recuse no celular
+                     stopPolling();
+                     document.getElementById('qrcode-display-area').innerHTML = `<p class="text-rose-400">Conexão recusada ou falhou. <button onclick="startQRFlow()" class="underline">Tentar novamente</button></p>`;
+                }
+            }
+        } catch(e) {}
+    }
+
     function startPolling() {
-        if (!isPolling) {
-            isPolling = true;
-            if (checkStatusInterval) clearInterval(checkStatusInterval);
-            checkStatusInterval = setInterval(fetchStatus, 3000);
+        if (!pollingInterval) {
+            pollingInterval = setInterval(checkStatusPoll, 3000);
         }
     }
 
     function stopPolling() {
-        isPolling = false;
-        if (checkStatusInterval) {
-            clearInterval(checkStatusInterval);
-            checkStatusInterval = null;
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
         }
     }
 
-    // --- Renderizadores de Estados ---
-
-    function renderUnconfigured() {
-        updateStatusIndicator('unconfigured', 'Não Configurado');
-        
-        const qrcodeArea = document.getElementById('qrcode-display-area');
-        qrcodeArea.innerHTML = `
-            <div class="w-20 h-20 mx-auto bg-amber-500/10 rounded-full flex items-center justify-center text-amber-500 border border-amber-500/20 mb-4">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-            </div>
-            <h3 class="text-xl font-black text-white uppercase italic mb-2">Evolution API não configurada</h3>
-            <p class="text-slate-500 text-xs font-bold max-w-md mx-auto mb-6">Você precisa configurar a URL do Webhook do WhatsApp e o Token de Autorização nas Configurações do Sistema para poder conectar.</p>
-            <a href="/configuracoes" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg inline-block">Configurações do Sistema</a>
-        `;
-        
-        const actionArea = document.getElementById('action-area');
-        actionArea.innerHTML = '';
-    }
-
-    function renderDisconnected() {
-        updateStatusIndicator('disconnected', 'Desconectado');
-        
-        const qrcodeArea = document.getElementById('qrcode-display-area');
-        qrcodeArea.innerHTML = `
-            <div class="w-20 h-20 mx-auto bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 border border-indigo-500/20 mb-4">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            </div>
-            <h3 class="text-xl font-black text-white uppercase italic mb-2">WhatsApp Pronto para Conexão</h3>
-            <p class="text-slate-500 text-xs font-bold max-w-sm mx-auto mb-6">Gere um QR Code temporário para fazer a leitura com o seu aplicativo de celular do WhatsApp.</p>
-            <button onclick="generateQRCode()" class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg inline-block active:scale-95">Gerar QR Code</button>
-        `;
-        
-        const actionArea = document.getElementById('action-area');
-        actionArea.innerHTML = `
-            <button onclick="generateQRCode()" class="w-full py-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 text-xs font-black uppercase tracking-wider rounded-xl transition-all">Conectar Instância</button>
-        `;
-    }
-
-    function renderConnectingState() {
-        updateStatusIndicator('connecting', 'Conectando...');
-        loadQRCodeImage();
-    }
-
-    async function loadQRCodeImage() {
-        const qrcodeArea = document.getElementById('qrcode-display-area');
-        qrcodeArea.innerHTML = `
-            <div class="space-y-4">
-                <div class="w-12 h-12 mx-auto text-indigo-400 animate-spin flex items-center justify-center">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                </div>
-                <h4 class="text-white font-bold text-xs uppercase tracking-wider">Obtendo QR Code da Evolution API...</h4>
-            </div>
-        `;
+    async function disconnectInstance(instName, event) {
+        event.stopPropagation();
+        if (!confirm(`Deseja realmente desconectar o aparelho '${instName}'?`)) return;
         
         try {
-            const res = await fetch('/api/whatsapp/qrcode');
+            const res = await fetch('/api/whatsapp/disconnect?instance=' + encodeURIComponent(instName), { method: 'POST' });
             if (res.ok) {
-                const data = await res.json();
-                if (data.base64) {
-                    qrcodeArea.innerHTML = `
-                        <div class="p-6 bg-white rounded-3xl inline-block shadow-2xl mb-4 border border-slate-100">
-                            <img src="${data.base64}" alt="QR Code WhatsApp" class="w-64 h-64 mx-auto select-none pointer-events-none">
-                        </div>
-                        <h3 class="text-lg font-black text-white uppercase tracking-tight mb-1">Escaneie o QR Code</h3>
-                        <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest animate-pulse text-indigo-400">Aguardando leitura do celular...</p>
-                    `;
-                } else if (data.code) {
-                    qrcodeArea.innerHTML = `
-                        <p class="text-slate-400 text-xs font-bold mb-4">Código de pareamento obtido:</p>
-                        <div class="px-6 py-4 bg-slate-950/80 rounded-xl border border-white/5 font-mono text-2xl font-black tracking-widest text-indigo-400 mb-6">${data.code}</div>
-                        <p class="text-[10px] text-slate-500 uppercase tracking-widest animate-pulse">Digite este código no seu WhatsApp do celular.</p>
-                    `;
-                } else {
-                    qrcodeArea.innerHTML = `
-                        <p class="text-rose-400 text-xs font-bold">Falha ao decodificar resposta da API.</p>
-                        <button onclick="generateQRCode()" class="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold">Tentar novamente</button>
-                    `;
+                // Remove the instance from local data array and re-save
+                instancesData = instancesData.filter(i => i.instanceName !== instName);
+                const allNames = instancesData.map(i => i.instanceName);
+
+                const saveRes = await fetch('/api/whatsapp/instances/save', {
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ instances: allNames, default_instance: allNames[0] || '' })
+                });
+                if (!saveRes.ok) {
+                    const saveText = await saveRes.text();
+                    alert(`Erro ao atualizar configurações: ${saveRes.status} ${saveText}`);
+                    return;
                 }
+
+                loadInstances();
             } else {
-                qrcodeArea.innerHTML = `
-                    <p class="text-rose-400 text-xs font-bold">A API não pôde gerar o QR Code no momento.</p>
-                    <button onclick="generateQRCode()" class="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold">Tentar novamente</button>
-                `;
-            }
-        } catch (e) {
-            qrcodeArea.innerHTML = `
-                <p class="text-rose-400 text-xs font-bold">Erro de rede ao buscar QR Code.</p>
-                <button onclick="generateQRCode()" class="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-bold">Tentar novamente</button>
-            `;
-        }
-    }
-
-    function renderConnected() {
-        updateStatusIndicator('open', 'Conectado');
-        
-        const qrcodeArea = document.getElementById('qrcode-display-area');
-        qrcodeArea.innerHTML = `
-            <div class="w-20 h-20 mx-auto bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-500 border border-emerald-500/20 mb-4 shadow-lg shadow-emerald-500/10">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            </div>
-            <h3 class="text-xl font-black text-emerald-400 uppercase italic mb-2">WhatsApp Conectado com Sucesso!</h3>
-            <p class="text-slate-500 text-xs font-bold max-w-sm mx-auto mb-6">A instância está ativa e pronta para receber e enviar mensagens em tempo real no módulo Atendimento.</p>
-            <div class="flex gap-4 justify-center">
-                <a href="/atendimento" class="px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg">Ir para Atendimento</a>
-                <button onclick="disconnectWhatsApp()" class="px-6 py-3 bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 font-black text-xs uppercase tracking-widest rounded-xl transition-all">Desconectar</button>
-            </div>
-        `;
-        
-        const actionArea = document.getElementById('action-area');
-        actionArea.innerHTML = `
-            <button onclick="disconnectWhatsApp()" class="w-full py-3 bg-rose-600/10 hover:bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-black uppercase tracking-wider rounded-xl transition-all">Desconectar Aparelho</button>
-        `;
-    }
-
-    function renderError(msg) {
-        updateStatusIndicator('error', 'Erro');
-        
-        const qrcodeArea = document.getElementById('qrcode-display-area');
-        qrcodeArea.innerHTML = `
-            <div class="w-20 h-20 mx-auto bg-rose-500/10 rounded-full flex items-center justify-center text-rose-500 border border-rose-500/20 mb-4">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-            </div>
-            <h3 class="text-lg font-black text-white uppercase italic mb-2">Erro de Conexão com Evolution API</h3>
-            <p class="text-slate-500 text-xs font-bold max-w-sm mx-auto mb-6">${msg}</p>
-            <button onclick="fetchStatus()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg">Recarregar Status</button>
-        `;
-        
-        const actionArea = document.getElementById('action-area');
-        actionArea.innerHTML = `
-            <button onclick="fetchStatus()" class="w-full py-3 bg-white/5 hover:bg-white/10 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all">Tentar Conectar Novamente</button>
-        `;
-    }
-
-    function updateStatusIndicator(state, label) {
-        const textSpan = document.getElementById('status-text');
-        textSpan.innerText = label;
-        
-        const iconDiv = document.getElementById('status-icon-container');
-        
-        // Remove classes antigas
-        iconDiv.className = 'w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ';
-        
-        if (state === 'open') {
-            iconDiv.className += 'text-emerald-500 border border-emerald-500/20 bg-emerald-500/10';
-            iconDiv.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
-        } else if (state === 'connecting') {
-            iconDiv.className += 'text-amber-500 border border-amber-500/20 bg-amber-500/10';
-            iconDiv.innerHTML = '<svg class="w-6 h-6 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>';
-        } else if (state === 'unconfigured' || state === 'error') {
-            iconDiv.className += 'text-rose-500 border border-rose-500/20 bg-rose-500/10';
-            iconDiv.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>';
-        } else {
-            iconDiv.className += 'text-indigo-400 border border-indigo-500/20 bg-indigo-500/10';
-            iconDiv.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
-        }
-    }
-
-    async function generateQRCode() {
-        isConnecting = true;
-        updateStatusIndicator('connecting', 'Iniciando Conexão...');
-        
-        // Garante que o status é verificado primeiro (cria a instância se não existir)
-        const qrcodeArea = document.getElementById('qrcode-display-area');
-        qrcodeArea.innerHTML = `
-            <div class="space-y-4">
-                <div class="w-12 h-12 mx-auto text-indigo-400 animate-spin flex items-center justify-center">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                </div>
-                <h4 class="text-white font-bold text-xs uppercase tracking-wider">Preparando instância...</h4>
-            </div>
-        `;
-        
-        try {
-            // 1. Chama /status para garantir que a instância existe (ela é criada automaticamente se não existir)
-            await fetch('/api/whatsapp/status');
-        } catch(e) {
-            console.warn('[WhatsApp] Aviso ao verificar status antes de gerar QR:', e);
-        }
-        
-        // 2. Agora busca o QR Code (o backend já cuida de criar a instância se necessário)
-        await loadQRCodeImage();
-        startPolling();
-    }
-
-    async function disconnectWhatsApp() {
-        if (!confirm('Tem certeza de que deseja desconectar o WhatsApp do painel? Será necessário ler o QR Code novamente para reconectar.')) return;
-        
-        try {
-            const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
-            if (res.ok) {
-                mostrarToast('WhatsApp desconectado!');
-                fetchStatus();
-            } else {
-                alert('Erro ao desconectar.');
+                const errorText = await res.text();
+                // Oferece remoção local caso a Evolution não permita desconectar
+                const force = confirm(`Erro ao desconectar: ${res.status} ${errorText}\n\nDeseja remover a instância localmente mesmo assim? (A instância poderá permanecer ativa no Evolution)`);
+                if (force) {
+                    // Remove localmente e salva a lista atualizada
+                    instancesData = instancesData.filter(i => i.instanceName !== instName);
+                    const allNames = instancesData.map(i => i.instanceName);
+                    try {
+                        const saveRes2 = await fetch('/api/whatsapp/instances/save', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ instances: allNames, default_instance: allNames[0] || '' })
+                        });
+                        if (!saveRes2.ok) {
+                            const saveText = await saveRes2.text();
+                            alert(`Erro ao atualizar configurações: ${saveRes2.status} ${saveText}`);
+                            return;
+                        }
+                        loadInstances();
+                    } catch(errSave) {
+                        alert('Falha ao salvar configurações localmente.');
+                    }
+                } else {
+                    alert(`Erro ao desconectar: ${res.status} ${errorText}`);
+                }
             }
         } catch(e) {
-            alert('Falha na rede ao tentar desconectar.');
+            alert('Falha na rede.');
         }
     }
 
-    // Inicialização
     document.addEventListener('DOMContentLoaded', () => {
-        fetchStatus();
+        loadInstances();
+        // Fallback polling on the list
+        setInterval(loadInstances, 10000);
     });
 </script>
 {% endblock %}

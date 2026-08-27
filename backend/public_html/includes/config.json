@@ -1,4 +1,4 @@
-﻿{
+{
     "APP_NAME":  "Atual Contabilidade",
     "APP_TAGLINE":  "Core System",
     "APP_LOGO_URL":  "uploads/logo_customizada.jpg",
@@ -8,8 +8,9 @@
     "MODULO_IMPRESSAO":  true,
     "MODULO_SUPORTE":  true,
     "MODULO_ATENDIMENTO":  true,
-    "URL_ATENDIMENTO":  "http://192.168.1.236:3000",
+    "URL_ATENDIMENTO":  "http://192.168.1.230:3001/central-atendimento",
     "GUIA_SUPORTE_URL":  "uploads/guia_suporte_usuario.pdf",
-    "WHATSAPP_WEBHOOK_URL":  "http://192.168.1.230:8080",
-    "WHATSAPP_WEBHOOK_TOKEN":  ""
+    "WHATSAPP_WEBHOOK_URL":  "http://evolution-api:8080",
+    "WHATSAPP_WEBHOOK_TOKEN":  "printdash_evo_key_2024",
+    "WHATSAPP_WEBHOOK_TARGET":  "http://192.168.1.230:8000/api/whatsapp/webhook"
 }

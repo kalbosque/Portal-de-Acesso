@@ -162,94 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (isset($_POST['action']) && $_POST['action'] === 'abrir') {
-        $titulo = trim($_POST['titulo'] ?? '');
-        $titulo_custom = trim($_POST['titulo_custom'] ?? '');
-        if ($titulo === 'Outro Problema' && $titulo_custom) {
-            $titulo = $titulo_custom;
-        }
-
-        $descricao = trim($_POST['descricao'] ?? '');
-        $prioridade = $_POST['prioridade'] ?? 'Media';
-        $categoria = $_POST['categoria'] ?? 'Outros';
-        $eq_id = $_POST['equipamento_id'] ?? null;
-        $anexo_url = null;
-
-        // Processar Anexo
-        if (isset($_FILES['anexo']) && $_FILES['anexo']['error'] === UPLOAD_ERR_OK) {
-            $uploadDir = __DIR__ . '/uploads/tickets/';
-            $ext = strtolower(pathinfo($_FILES['anexo']['name'], PATHINFO_EXTENSION));
-            if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'])) {
-                $fileName = time() . '_' . uniqid() . '.' . $ext;
-                if (move_uploaded_file($_FILES['anexo']['tmp_name'], $uploadDir . $fileName)) {
-                    $anexo_url = 'uploads/tickets/' . $fileName;
-                }
-            }
-        }
-
-        if ($titulo && $descricao) {
-            // ANTI-DUPLICIDADE: Verificar se ja existe um chamado identico do mesmo usuario nos ultimos 10 segundos
-            $stmtCheck = $pdo->prepare("SELECT id FROM chamados WHERE usuario = ? AND titulo = ? AND data_abertura > NOW() - INTERVAL '10 seconds'");
-            $stmtCheck->execute([$currentUser, $titulo]);
-            if ($stmtCheck->rowCount() > 0) {
-                $message = "Ja recebemos sua solicitacao. Aguarde um momento.";
-                $tipo_msg = "warning";
-            } else {
-                $stmt = $pdo->prepare("INSERT INTO chamados (usuario, titulo, categoria, equipamento_id, descricao, anexo_url, prioridade, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'Aberto')");
-                $stmt->execute([$currentUser, $titulo, $categoria, $eq_id, $descricao, $anexo_url, $prioridade]);
-                $lastId = $pdo->lastInsertId();
-                
-                // Enviar E-mail de Alerta (Novo)
-                enviarEmailChamado($pdo, $lastId, 'novo');
-
-                // Redirecionar para evitar reenvio ao atualizar (F5)
-                header("Location: chamados.php?success=1");
-                exit;
-            }
-        } else {
-            $message = "E obrigatorio descrever o problema encontrado.";
-            $tipo_msg = "error";
-        }
-    } elseif (isset($_POST['action']) && $_POST['action'] === 'atender' && $isAdmin) {
-        $chamado_id = $_POST['chamado_id'] ?? 0;
-        if ($chamado_id) {
-            $stmt = $pdo->prepare("UPDATE chamados SET status = 'Em Atendimento' WHERE id = ?");
-            $stmt->execute([$chamado_id]);
-            $message = "Atendimento iniciado! O usuario sera notificado do progresso.";
-            $tipo_msg = "success";
-        }
-    } elseif (isset($_POST['action']) && $_POST['action'] === 'resolver' && $isAdmin) {
-        $chamado_id = $_POST['chamado_id'] ?? 0;
-        $nota = trim($_POST['nota_tecnica'] ?? '');
-        if ($chamado_id) {
-            $stmt = $pdo->prepare("UPDATE chamados SET status = 'Resolvido', nota_tecnica = ?, data_resolucao = CURRENT_TIMESTAMP WHERE id = ?");
-            $stmt->execute([$nota, $chamado_id]);
-            
-            // Enviar E-mail de Alerta (Finalizado)
-            enviarEmailChamado($pdo, $chamado_id, 'finalizado');
-
-            header("Location: chamados.php?resolved=1");
-            exit;
-        }
-    } elseif (isset($_POST['action']) && $_POST['action'] === 'interagir') {
-        $chamado_id = $_POST['chamado_id'] ?? 0;
-        $txt = trim($_POST['mensagem'] ?? '');
-        
-        // Seguranca: verificar se o chamado pertence ao usuario ou se e ADMIN
-        $stmtCheck = $pdo->prepare("SELECT usuario FROM chamados WHERE id = ?");
-        $stmtCheck->execute([$chamado_id]);
-        $owner = $stmtCheck->fetchColumn();
-
-        if ($chamado_id && $txt && ($isAdmin || $owner === $currentUser)) {
-            $stmt = $pdo->prepare("INSERT INTO chamados_interacoes (chamado_id, usuario, mensagem) VALUES (?, ?, ?)");
-            $stmt->execute([$chamado_id, $currentUser, $txt]);
-            $message = "Mensagem enviada para o mural!";
-            $tipo_msg = "success";
-        } else {
-            $message = "Erro de permissao: voce nao pode interagir neste chamado.";
-            $tipo_msg = "error";
-        }
-    }
+    // Fim Processamento de Atalhos
 }
 
 // Estatisticas rapidas ja carregadas no topo do arquivo (Variavel $stats)
@@ -670,17 +583,36 @@ require_once 'includes/header.php';
     </div>
 </div>
 
-<!-- Barra de Busca e Filtros -->
-<div class="mb-8 flex flex-col md:flex-row gap-4 items-center justify-between">
-    <div class="relative w-full md:max-w-md search-focus bg-slate-900/40 rounded-2xl border border-white/10 p-1 flex items-center transition-all shadow-inner">
-        <div class="pl-4 text-slate-500">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+<div class="mb-8 flex flex-col xl:flex-row gap-4 items-center justify-between">
+    <div class="flex flex-col md:flex-row gap-4 w-full xl:w-auto flex-1">
+        <div class="relative flex-1 search-focus bg-slate-900/40 rounded-2xl border border-white/10 p-1 flex items-center transition-all shadow-inner">
+            <div class="pl-4 text-slate-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+            <input type="text" id="ticketSearch" onkeyup="filterTickets()" placeholder="Pesquisar por titulo, usuario ou descricao..." 
+                   class="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-white px-4 py-3 placeholder-slate-600">
         </div>
-        <input type="text" id="ticketSearch" onkeyup="filterTickets()" placeholder="Pesquisar por titulo, usuario ou descricao..." 
-               class="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-white px-4 py-3 placeholder-slate-600">
+        
+        <div class="flex gap-4">
+            <div class="relative bg-slate-900/40 rounded-2xl border border-white/10 p-1 flex items-center transition-all shadow-inner">
+                <input type="date" id="ticketDateFilter" onchange="filterTickets()" class="bg-transparent border-none focus:ring-0 text-sm font-bold text-white px-4 py-3 placeholder-slate-600 color-scheme-dark">
+            </div>
+            
+            <div class="relative bg-slate-900/40 rounded-2xl border border-white/10 p-1 flex items-center transition-all shadow-inner">
+                <select id="ticketStatusFilter" onchange="filterTickets()" class="bg-transparent border-none focus:ring-0 text-sm font-bold text-white px-4 py-3 appearance-none pr-8">
+                    <option value="Todos">Todos os Status</option>
+                    <option value="Aberto">Abertos</option>
+                    <option value="Em Atendimento">Em Atendimento</option>
+                    <option value="Resolvido">Resolvidos</option>
+                </select>
+                <div class="absolute right-3 pointer-events-none text-slate-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+            </div>
+        </div>
     </div>
     
-    <div class="flex flex-wrap gap-2 justify-center">
+    <div class="flex flex-wrap gap-2 justify-center shrink-0">
         <button onclick="setFilter('Todos')" class="px-4 py-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all filter-btn active-filter shadow-lg" data-filter="Todos">Todos</button>
         <button onclick="setFilter('Alta')" class="px-4 py-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all filter-btn shadow-lg" data-filter="Alta">Urgente</button>
         <button onclick="setFilter('Impressora')" class="px-4 py-2.5 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all filter-btn shadow-lg" data-filter="Impressora">Impressão</button>
@@ -715,7 +647,7 @@ require_once 'includes/header.php';
                     <span id="wizard_step_label" class="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">Passo 1/2</span>
                 </div>
                 
-                <form id="formChamado" action="chamados.php" method="POST" enctype="multipart/form-data" onsubmit="return handleDoubleSubmit(this)">
+                <form id="formChamado" action="/api/tickets/abrir" method="POST" enctype="multipart/form-data" onsubmit="return handleDoubleSubmit(this)">
                     <input type="hidden" name="action" value="abrir">
                     <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
                     <input type="hidden" name="prioridade" id="input_prioridade" value="Media">
@@ -920,10 +852,21 @@ require_once 'includes/header.php';
                     <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest italic">Expressões Rápidas</span>
                     <button onclick="toggleEmojiPicker()" class="text-slate-600 hover:text-white">✕</button>
                 </div>
-                <div id="emoji_grid" class="grid grid-cols-6 gap-2 max-h-[180px] overflow-y-auto pr-1 custom-scrollbar">
+            <div id="emoji_grid" class="grid grid-cols-6 gap-2 max-h-[180px] overflow-y-auto pr-1 custom-scrollbar">
                     <!-- Emojis injetados via JS -->
                 </div>
             </div>
+
+            <?php if($isAdmin): ?>
+            <!-- Quick Replies (Admin) -->
+            <div class="flex gap-2 mb-3 overflow-x-auto custom-scrollbar pb-1">
+                <button onclick="sendQuickReply('Olá, estamos analisando a situação. Por favor, aguarde.')" class="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-bold whitespace-nowrap hover:bg-indigo-500 hover:text-white transition-all">Em análise</button>
+                <button onclick="sendQuickReply('Você poderia reiniciar o equipamento e testar novamente?')" class="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-bold whitespace-nowrap hover:bg-indigo-500 hover:text-white transition-all">Pedir p/ Reiniciar</button>
+                <button onclick="sendQuickReply('Precisarei de acesso remoto (AnyDesk). Pode confirmar se está disponível?')" class="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-bold whitespace-nowrap hover:bg-indigo-500 hover:text-white transition-all">Acesso Remoto</button>
+                <button onclick="sendQuickReply('Técnico a caminho do local.')" class="px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl text-[10px] font-bold whitespace-nowrap hover:bg-amber-500 hover:text-white transition-all">Técnico a Caminho</button>
+                <button onclick="sendQuickReply('Chamado resolvido. Por favor, avalie nosso atendimento fechando este ticket.')" class="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-bold whitespace-nowrap hover:bg-emerald-500 hover:text-white transition-all">Resolvido</button>
+            </div>
+            <?php endif; ?>
 
             <div class="flex gap-3 items-end">
                 <textarea id="mural_msg" rows="1" class="glass-input flex-grow px-5 py-4 rounded-2xl text-white font-medium text-sm leading-relaxed shadow-inner resize-none overflow-hidden" placeholder="Escreva algo... (Enter envia)" style="min-height:54px; max-height:150px;"></textarea>
@@ -1046,9 +989,8 @@ require_once 'includes/header.php';
             <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">O que foi realizado para fechar este Ticket?</p>
         </div>
         
-        <form action="chamados.php" method="POST" class="space-y-8">
+        <form id="formResolver" class="space-y-8" onsubmit="event.preventDefault(); resolverTicket();">
             <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
-            <input type="hidden" name="action" value="resolver">
             <input type="hidden" name="chamado_id" id="modal_chamado_id">
             
             <textarea name="nota_tecnica" required rows="5" class="glass-input w-full px-8 py-6 rounded-[2rem] text-white font-medium text-sm leading-relaxed shadow-inner" placeholder="Ex: Substituição de cilindro e limpeza de roletes efetuada..."></textarea>
@@ -1058,19 +1000,77 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<!-- Modal NPS -->
+<div id="npsModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4">
+    <div class="glass-panel w-full max-w-sm p-10 rounded-[3rem] border border-white/10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative animate-[slideIn_0.2s_ease-out]">
+        <button onclick="closeNpsModal()" class="absolute top-6 right-6 text-slate-500 hover:text-white transition-all hover:rotate-90 duration-300"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        
+        <div class="mb-6 text-center">
+            <h3 class="text-xl font-black text-white mb-2 uppercase tracking-tight italic">Avalie o Atendimento</h3>
+            <p class="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em]">O quão satisfeito você ficou?</p>
+        </div>
+        
+        <form action="/api/tickets/avaliar_nps" method="POST" class="space-y-6">
+            <input type="hidden" name="id" id="nps_chamado_id">
+            <input type="hidden" name="estrelas" id="nps_rating" value="5">
+            
+            <div class="flex justify-center gap-2 mb-4">
+                <?php for($i=1; $i<=5; $i++): ?>
+                    <button type="button" onclick="setNpsStar(<?= $i ?>)" class="nps-star text-yellow-400 fill-current hover:scale-110 transition-transform">
+                        <svg class="w-10 h-10" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                    </button>
+                <?php endfor; ?>
+            </div>
+
+            <textarea name="comentario" rows="3" class="glass-input w-full px-5 py-4 rounded-[1.5rem] text-white font-medium text-sm shadow-inner" placeholder="Deixe um comentário (opcional)..."></textarea>
+            
+            <button type="submit" class="w-full bg-gradient-to-br from-yellow-500 to-orange-500 text-white font-black text-xs uppercase tracking-[0.2em] py-4 rounded-xl shadow-lg hover:scale-105 transition-all border border-yellow-400/20">Enviar Avaliação</button>
+        </form>
+    </div>
+</div>
+
+
 <?php
 function renderChamadoCard($c, $isAdmin) {
     ob_start();
     $isEmAtendimento = $c['status'] === 'Em Atendimento';
     $isResolvido = $c['status'] === 'Resolvido';
 
-    // Cálculo de tempo decorrido (SLA)
+    // Cálculo de SLA (Service Level Agreement)
     $inicio = new DateTime($c['data_abertura']);
-    $agora = new DateTime();
-    $diff = $inicio->diff($agora);
-    if ($diff->d > 0) $tempoMsg = $diff->d . 'd ' . $diff->h . 'h';
-    elseif ($diff->h > 0) $tempoMsg = $diff->h . 'h ' . $diff->i . 'm';
-    else $tempoMsg = $diff->i . ' min';
+    $agora = $isResolvido ? new DateTime($c['data_resolucao'] ?? 'now') : new DateTime();
+    
+    $slaLimitHours = 8; // Media
+    if ($c['prioridade'] === 'Alta') $slaLimitHours = 2;
+    elseif ($c['prioridade'] === 'Baixa') $slaLimitHours = 24;
+    
+    $slaTarget = clone $inicio;
+    $slaTarget->modify("+{$slaLimitHours} hours");
+    $isSlaViolated = $agora > $slaTarget;
+    
+    if ($isResolvido) {
+        if ($isSlaViolated) {
+            $slaMsg = "SLA Violado";
+            $slaColor = "text-rose-500 bg-rose-500/10 border-rose-500/20";
+            $slaIcon = '<svg class="w-3 h-3 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        } else {
+            $slaMsg = "SLA Cumprido";
+            $slaColor = "text-emerald-500 bg-emerald-500/10 border-emerald-500/20";
+            $slaIcon = '<svg class="w-3 h-3 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+        }
+    } else {
+        if ($isSlaViolated) {
+            $diff = $slaTarget->diff($agora);
+            $slaMsg = "-" . ($diff->d > 0 ? $diff->d . 'd ' : '') . $diff->h . 'h ' . $diff->i . 'm';
+            $slaColor = "text-rose-500 bg-rose-500/10 border-rose-500/20 animate-pulse";
+            $slaIcon = '<svg class="w-3 h-3 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        } else {
+            $diff = $agora->diff($slaTarget);
+            $slaMsg = ($diff->d > 0 ? $diff->d . 'd ' : '') . $diff->h . 'h ' . $diff->i . 'm';
+            $slaColor = "text-amber-500 bg-amber-500/10 border-amber-500/20";
+            $slaIcon = '<svg class="w-3 h-3 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        }
+    }
 
     $priColor = 'text-slate-400';
     $priBorder = 'border-slate-800/50';
@@ -1089,7 +1089,9 @@ function renderChamadoCard($c, $isAdmin) {
          data-user="<?= strtolower(htmlspecialchars($c['usuario'])) ?>" 
          data-desc="<?= strtolower(htmlspecialchars($c['descricao'])) ?>"
          data-priority="<?= $c['prioridade'] ?>"
-         data-category="<?= $c['categoria'] ?>">
+         data-category="<?= $c['categoria'] ?>"
+         data-status="<?= $c['status'] ?>"
+         data-date="<?= date('Y-m-d', strtotime($c['data_abertura'])) ?>">
         <!-- Barra de Progresso Visual (Stepper) -->
         <div class="flex items-center mb-5 <?= $isResolvido ? 'text-emerald-500' : ($isEmAtendimento ? 'text-amber-500' : 'text-blue-500') ?>">
             <div class="stepper-dot active"></div>
@@ -1110,14 +1112,10 @@ function renderChamadoCard($c, $isAdmin) {
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.414a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </a>
                 <?php endif; ?>
-                <?php if(!$isResolvido): ?>
-                    <div class="text-[9px] text-slate-500 font-black uppercase tracking-widest bg-white/5 px-2.5 py-1 rounded-lg html-light:bg-slate-200 html-light:text-black flex items-center gap-1.5">
-                        <svg class="w-3 h-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Há <?= $tempoMsg ?>
-                    </div>
-                <?php else: ?>
-                    <div class="text-[9px] text-emerald-500 font-black uppercase tracking-widest bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/10">Resolvido</div>
-                <?php endif; ?>
+                <div class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 <?= $slaColor ?>">
+                    <?= $slaIcon ?>
+                    <?= $slaMsg ?>
+                </div>
             </div>
         </div>
         
@@ -1171,17 +1169,31 @@ function renderChamadoCard($c, $isAdmin) {
                     <?php endif; ?>
                 </button>
 
-                <?php if($isAdmin): ?>
-                    <?php if($c['status'] === 'Aberto'): ?>
-                        <form method="POST" action="chamados.php">
-                            <input type="hidden" name="action" value="atender">
-                            <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
-                            <input type="hidden" name="chamado_id" value="<?= $c['id'] ?>">
-                            <button type="submit" class="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center border border-indigo-500/20 shadow-lg html-light:bg-indigo-600 html-light:text-white html-light:border-indigo-700" title="Assumir Ticket"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></button>
-                        </form>
-                    <?php endif; ?>
-                    <?php if($c['status'] !== 'Resolvido'): ?>
-                        <button onclick="openSolutionModal(<?= $c['id'] ?>)" class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center border border-emerald-500/20 shadow-lg html-light:bg-emerald-600 html-light:text-white html-light:border-emerald-700" title="Finalizar e Registrar Solução"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>
+                <?php endif; ?>
+                
+                <?php if($isResolvido): ?>
+                    <!-- Reabrir -->
+                    <form method="POST" action="/api/tickets/reabrir" class="inline" onsubmit="return confirm('Tem certeza que deseja reabrir este chamado?');">
+                        <input type="hidden" name="id" value="<?= $c['id'] ?>">
+                        <button type="submit" class="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-400 hover:bg-orange-500 hover:text-white transition-all flex items-center justify-center border border-orange-500/20 shadow-lg html-light:bg-orange-100 html-light:text-orange-600 html-light:border-orange-300" title="Reabrir Chamado">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        </button>
+                    </form>
+                    
+                    <?php if(empty($c['avaliacao_estrelas'])): ?>
+                        <!-- NPS -->
+                        <button onclick="openNpsModal(<?= $c['id'] ?>)" class="w-9 h-9 rounded-xl bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-white transition-all flex items-center justify-center border border-yellow-500/20 shadow-lg html-light:bg-yellow-100 html-light:text-yellow-600 html-light:border-yellow-300" title="Avaliar Atendimento (NPS)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                        </button>
+                    <?php else: ?>
+                        <!-- NPS (Avaliado) -->
+                        <div class="flex flex-col items-center justify-center px-2">
+                            <div class="flex text-yellow-400 text-[10px]">
+                                <?php for($i=1;$i<=5;$i++): ?>
+                                    <svg class="w-2.5 h-2.5 <?= $i <= $c['avaliacao_estrelas'] ? 'fill-current' : 'text-slate-600 html-light:text-slate-300' ?>" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>
+                                <?php endfor; ?>
+                            </div>
+                        </div>
                     <?php endif; ?>
                 <?php endif; ?>
             </div>
@@ -1252,6 +1264,9 @@ function renderChamadoCard($c, $isAdmin) {
 
     function filterTickets() {
         const query = document.getElementById('ticketSearch').value.toLowerCase();
+        const dateFilter = document.getElementById('ticketDateFilter') ? document.getElementById('ticketDateFilter').value : '';
+        const statusFilter = document.getElementById('ticketStatusFilter') ? document.getElementById('ticketStatusFilter').value : 'Todos';
+        
         const cards = document.querySelectorAll('.ticket-card');
         const userItems = document.querySelectorAll('.user-ticket-item');
         
@@ -1262,11 +1277,15 @@ function renderChamadoCard($c, $isAdmin) {
             const desc = card.dataset.desc;
             const pri = card.dataset.priority;
             const cat = card.dataset.category;
+            const date = card.dataset.date;
+            const status = card.dataset.status;
 
             const matchesSearch = title.includes(query) || user.includes(query) || desc.includes(query);
             const matchesFilter = currentFilter === 'Todos' || pri === currentFilter || cat === currentFilter;
+            const matchesDate = !dateFilter || date === dateFilter;
+            const matchesStatus = statusFilter === 'Todos' || status === statusFilter;
 
-            if(matchesSearch && matchesFilter) {
+            if(matchesSearch && matchesFilter && matchesDate && matchesStatus) {
                 card.classList.remove('hidden');
                 card.style.animation = 'fadeIn 0.3s ease forwards';
             } else {
@@ -1278,13 +1297,18 @@ function renderChamadoCard($c, $isAdmin) {
         userItems.forEach(item => {
             const card = item.querySelector('.ticket-card');
             const status = item.dataset.status;
+            const date = card.dataset.date;
             
             const matchesSearch = card.dataset.title.includes(query) || card.dataset.desc.includes(query);
-            let matchesStatus = true;
-            if (currentStatusFilter === 'Ativos') matchesStatus = (status === 'Aberto' || status === 'Em Atendimento');
-            else if (currentStatusFilter !== 'Todos') matchesStatus = (status === currentStatusFilter);
+            const matchesDate = !dateFilter || date === dateFilter;
+            
+            let matchesTabStatus = true;
+            if (currentStatusFilter === 'Ativos') matchesTabStatus = (status === 'Aberto' || status === 'Em Atendimento');
+            else if (currentStatusFilter !== 'Todos') matchesTabStatus = (status === currentStatusFilter);
+            
+            const matchesStatusFilter = statusFilter === 'Todos' || status === statusFilter;
 
-            if (matchesSearch && matchesStatus) {
+            if (matchesSearch && matchesTabStatus && matchesDate && matchesStatusFilter) {
                 item.classList.remove('hidden');
             } else {
                 item.classList.add('hidden');
@@ -1403,6 +1427,55 @@ function renderChamadoCard($c, $isAdmin) {
         document.getElementById('solutionModal').classList.add('hidden');
     }
 
+    async function atenderTicket(id) {
+        try {
+            const res = await fetch('/api/tickets/atualizar_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: id, status: 'Em Atendimento' })
+            });
+            if (res.ok) window.location.href = 'chamados.php?success=Chamado em atendimento';
+        } catch(e) { alert('Erro ao atender chamado'); }
+    }
+
+    async function resolverTicket() {
+        const id = document.getElementById('modal_chamado_id').value;
+        const nota = document.querySelector('textarea[name="nota_tecnica"]').value;
+        if (!nota) return;
+        try {
+            const res = await fetch('/api/tickets/finalizar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: parseInt(id), nota_tecnica: nota })
+            });
+            if (res.ok) window.location.href = 'chamados.php?resolved=1';
+        } catch(e) { alert('Erro ao resolver chamado'); }
+    }
+
+    // Modal de NPS
+    function openNpsModal(id) {
+        document.getElementById('nps_chamado_id').value = id;
+        document.getElementById('npsModal').classList.remove('hidden');
+    }
+    
+    function closeNpsModal() {
+        document.getElementById('npsModal').classList.add('hidden');
+    }
+    
+    function setNpsStar(rating) {
+        document.getElementById('nps_rating').value = rating;
+        const stars = document.querySelectorAll('.nps-star');
+        stars.forEach((star, index) => {
+            if (index < rating) {
+                star.classList.add('fill-current', 'text-yellow-400');
+                star.classList.remove('text-slate-600');
+            } else {
+                star.classList.remove('fill-current', 'text-yellow-400');
+                star.classList.add('text-slate-600');
+            }
+        });
+    }
+
     // ── Chat em Tempo Real ─────────────────────────────────────────────
     const currentUser = "<?= $currentUser ?>";
     let chatChamadoId = null;
@@ -1437,7 +1510,20 @@ function renderChamadoCard($c, $isAdmin) {
         });
     }
 
-    function insertEmoji(emoji) {
+    function insertEmoji(e) {
+        const input = document.getElementById('mural_msg');
+        input.value += e;
+        toggleEmojiPicker();
+        input.focus();
+    }
+    
+    function sendQuickReply(msg) {
+        const input = document.getElementById('mural_msg');
+        input.value = msg;
+        chatSendMessage();
+    }
+
+    function insertEmojiIntoTextarea(emoji) {
         const textarea = document.getElementById('mural_msg');
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
@@ -1526,7 +1612,7 @@ function renderChamadoCard($c, $isAdmin) {
     async function chatPoll() {
         if (!chatChamadoId || chatIsSending) return;
         try {
-            const res = await fetch(`api_chat.php?action=get_messages&chamado_id=${chatChamadoId}&since_id=${chatLastId}`);
+            const res = await fetch(`/api/tickets/chat?chamado_id=${chatChamadoId}&since_id=${chatLastId}`);
             const data = await res.json();
             if (data.ok && data.messages.length > 0) {
                 data.messages.forEach(m => {
@@ -1538,9 +1624,9 @@ function renderChamadoCard($c, $isAdmin) {
             }
 
             // Indicador de digitação dentro da timeline
-            const resT = await fetch(`api_chat.php?action=get_typing&chamado_id=${chatChamadoId}`);
+            const resT = await fetch(`/api/tickets/chat/get_typing?chamado_id=${chatChamadoId}`);
             const dataT = await resT.json();
-            updateTypingIndicator(dataT.ok ? dataT.typing : []);
+            updateTypingIndicator(dataT.typing || []);
         } catch(e) {}
     }
 
@@ -1561,13 +1647,13 @@ function renderChamadoCard($c, $isAdmin) {
 
         // Para o indicador de digitação
         isTyping = false;
-        fetch(`api_chat.php?action=stop_typing&chamado_id=${chatChamadoId}`, { method: 'POST' });
+        // O Python API tem timeout automático de 4s, não precisa de stop_typing
 
         try {
             const form = new FormData();
             form.append('mensagem', msg);
             form.append('csrf_token', '<?= getCsrfToken() ?>');
-            const res = await fetch(`api_chat.php?action=send&chamado_id=${chatChamadoId}`, { method: 'POST', body: form });
+            const res = await fetch(`/api/tickets/chat/send?chamado_id=${chatChamadoId}`, { method: 'POST', body: form });
             const data = await res.json();
             if (data.ok) {
                 chatLastId = Math.max(chatLastId, data.message.id);
@@ -1768,11 +1854,11 @@ function renderChamadoCard($c, $isAdmin) {
                 if (this.scrollHeight > 150) this.style.overflowY = 'auto';
                 else this.style.overflowY = 'hidden';
 
-                // 2. Notificar Digitação (Tempo Real) - Com Throttle (Evita sobrecarga)
+                // 2. Notificações de Digitação (Tempo Real) - Com Throttle (Evita sobrecarga)
                 const now = Date.now();
                 if (chatChamadoId && (!window.lastTypingTime || now - window.lastTypingTime > 2000)) {
                     window.lastTypingTime = now;
-                    fetch(`api_chat.php?action=typing&chamado_id=${chatChamadoId}`, { method: 'POST' });
+                    fetch(`/api/tickets/chat/typing?chamado_id=${chatChamadoId}`, { method: 'POST' });
                 }
 
                 // 3. Parar status após 4 segundos sem digitar
@@ -1780,7 +1866,6 @@ function renderChamadoCard($c, $isAdmin) {
                 chatTypingTimer = setTimeout(() => {
                     isTyping = false;
                     window.lastTypingTime = 0;
-                    if (chatChamadoId) fetch(`api_chat.php?action=stop_typing&chamado_id=${chatChamadoId}`, { method: 'POST' });
                 }, 4000);
             });
 
@@ -1825,7 +1910,7 @@ function renderChamadoCard($c, $isAdmin) {
 
     async function checkNotifications() {
         try {
-            const response = await fetch('api_chamados_status.php');
+            const response = await fetch('/api/tickets/status_global');
             const data = await response.json();
             
             // 1. Notificações de Novos Chamados (Admin)

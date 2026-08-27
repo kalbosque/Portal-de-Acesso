@@ -7,28 +7,7 @@ $tipo_msg = '';
 $successState = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nome_solicitante = trim($_POST['nome_solicitante'] ?? '');
-    $maquina = trim($_POST['maquina'] ?? '');
-    $titulo = trim($_POST['titulo'] ?? '');
-    $descricao = trim($_POST['descricao'] ?? '');
-
-    if ($nome_solicitante && $titulo && $descricao) {
-        // Concatenando Máquina ao início da descrição para referência da TI
-        $descricao_final = $maquina ? "[Máquina: $maquina]\n\n" . $descricao : $descricao;
-        
-        $stmt = $pdo->prepare("INSERT INTO chamados (usuario, titulo, descricao) VALUES (?, ?, ?)");
-        if ($stmt->execute([$nome_solicitante, $titulo, $descricao_final])) {
-            $message = "Chamado registrado com sucesso! A TI resolve as ocorrências por ordem de chegada.";
-            $tipo_msg = "success";
-            $successState = true;
-        } else {
-            $message = "Ocorreu um erro técnico. Tente novamente.";
-            $tipo_msg = "error";
-        }
-    } else {
-        $message = "Por favor, preencha todos os campos obrigatórios.";
-        $tipo_msg = "error";
-    }
+    // Tratamento de POST legado removido; agora os dados vão direto para a API via Action do Form
 }
 
 $pageTitle = 'Abertura de Chamado | Suporte TI';
@@ -73,14 +52,18 @@ require_once 'includes/header.php';
                 </div>
             <?php endif; ?>
 
-            <?php if (!$successState): ?>
-                <form action="abertura-chamado.php" method="POST" class="space-y-6 relative z-10 w-full">
+            <?php if (!isset($_GET['success'])): ?>
+                <form action="/api/tickets/abrir" method="POST" class="space-y-6 relative z-10 w-full">
+                    <input type="hidden" name="custom_redirect" value="abertura-chamado.php">
+                    <input type="hidden" name="prioridade" value="Media">
+                    <input type="hidden" name="categoria" value="Outros">
+                    
                     <div>
                         <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
                             Seu Nome ou Setor
                             <span class="text-rose-500">*</span>
                         </label>
-                        <input type="text" name="nome_solicitante" required placeholder="Ex: João - Financeiro" class="glass-input w-full px-5 py-3.5 rounded-xl text-white transition-all">
+                        <input type="text" name="usuario_kiosk" required placeholder="Ex: João - Financeiro" class="glass-input w-full px-5 py-3.5 rounded-xl text-white transition-all">
                     </div>
 
                     <div>

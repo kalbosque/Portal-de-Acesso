@@ -21,6 +21,6 @@ define('APP_AGENT_TOKEN', getenv('APP_AGENT_TOKEN') ?: ($configData['APP_AGENT_T
 define('MODULO_IMPRESSAO',    (bool)($configData['MODULO_IMPRESSAO'] ?? true));
 define('MODULO_SUPORTE',      (bool)($configData['MODULO_SUPORTE'] ?? true));
 define('MODULO_ATENDIMENTO',  (bool)($configData['MODULO_ATENDIMENTO'] ?? false));
-define('URL_ATENDIMENTO',     (string)($configData['URL_ATENDIMENTO'] ?? 'http://192.168.1.236:3000'));
+define('URL_ATENDIMENTO',     (string)($configData['URL_ATENDIMENTO'] ?? 'http://192.168.1.230:3001/central-atendimento'));
 define('GUIA_SUPORTE_URL',    (string)($configData['GUIA_SUPORTE_URL'] ?? ''));
 

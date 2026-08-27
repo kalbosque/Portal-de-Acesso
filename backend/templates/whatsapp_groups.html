@@ -1,0 +1,16 @@
+{% extends "atendimento_base.html" %}
+{% block title %}Grupos WhatsApp | {{ config.APP_NAME }}{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-5xl">
+    <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div><p class="text-[10px] font-black uppercase tracking-[.3em] text-emerald-300">WhatsApp</p><h2 class="mt-1 text-2xl font-black text-white">Grupos</h2><p class="mt-1 text-sm text-slate-400">Consulte os grupos identificados nos atendimentos.</p></div>
+        <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-300">Voltar para conversas</a>
+    </div>
+    {% if not config.get('WHATSAPP_SHOW_GROUPS', false) %}<div class="mb-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">A exibição de grupos está desativada. Ative essa opção em Configurações para que eles também apareçam na Central.</div>{% endif %}
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {% for group in groups %}
+        <div class="rounded-2xl border border-white/10 bg-slate-900/70 p-4"><div class="flex items-center gap-3"><div class="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-300">◌</div><div class="min-w-0"><div class="truncate text-sm font-black text-white">{{ group.name }}</div><div class="truncate text-[10px] text-slate-500">{{ group.jid }}</div></div></div><div class="mt-4 text-[10px] text-slate-500">Última atividade: {{ group.last_activity }}</div></div>
+        {% else %}<div class="col-span-full rounded-2xl border border-white/10 bg-slate-900/60 p-10 text-center text-sm text-slate-500">Nenhum grupo encontrado.</div>{% endfor %}
+    </div>
+</div>
+{% endblock %}

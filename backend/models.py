@@ -101,8 +101,12 @@ class Chamado(SQLModel, table=True):
     avaliacao_estrelas: Optional[int] = None
     avaliacao_comentario: Optional[str] = None
     whatsapp_cliente: Optional[str] = Field(default=None, index=True)
+    whatsapp_instance: Optional[str] = Field(default=None, index=True)
+    whatsapp_typing_until: Optional[datetime] = None
+    whatsapp_typing_media: bool = Field(default=False)
     origem: str = Field(default="Web", index=True)
     assigned_user: Optional[str] = Field(default=None, index=True)
+    visivel_suporte: bool = Field(default=True, index=True)
     
     interacoes: List["ChamadoInteracao"] = Relationship(back_populates="chamado")
 
@@ -112,9 +116,28 @@ class ChamadoInteracao(SQLModel, table=True):
     chamado_id: int = Field(foreign_key="chamados.id")
     usuario: str
     mensagem: str
+    responde_a_id: Optional[int] = None
+    responde_a_usuario: Optional[str] = None
+    responde_a_texto: Optional[str] = None
+    whatsapp_message_id: Optional[str] = None
+    whatsapp_remote_jid: Optional[str] = None
+    reacao: Optional[str] = None
+    whatsapp_status: str = Field(default="sent")
     data_hora: datetime = Field(default_factory=datetime.now)
     
     chamado: Chamado = Relationship(back_populates="interacoes")
+
+
+class ContatoWhatsApp(SQLModel, table=True):
+    __tablename__ = "contatos_whatsapp"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str
+    numero: str = Field(index=True)
+    empresa: Optional[str] = None
+    observacao: Optional[str] = None
+    status_interno: str = Field(default="Normal", index=True)
+    whatsapp_instance: Optional[str] = None
+    data_cadastro: datetime = Field(default_factory=datetime.now)
 
 class StatusMaquina(SQLModel, table=True):
     __tablename__ = "status_maquinas"

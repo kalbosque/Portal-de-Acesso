@@ -1,16 +1,25 @@
-{% extends "base.html" %}
+{% extends "atendimento_base.html" %}
+
+{% block title %}Central de Atendimento | {{ config.APP_NAME }}{% endblock %}
 
 {% block content %}
 <link rel="stylesheet" href="/static/css/monitor.css">
 
 <style>
     /* Custom layout for dedicated WhatsApp full screen */
+    body:has(.atend-container) main { padding-top: 1rem; padding-bottom: 1rem; }
     .atend-container {
-        height: calc(100vh - 180px);
-        min-height: 550px;
+        width: 100%;
+        height: calc(100dvh - 118px);
+        min-height: 0;
         display: grid;
-        grid-template-columns: 320px 1fr 300px;
-        gap: 1.5rem;
+        grid-template-columns: 330px minmax(0, 1fr) 315px;
+        gap: 0;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 1.35rem;
+        background: #0b141a;
+        box-shadow: 0 24px 70px rgba(0,0,0,0.25);
     }
 
     @media (max-width: 1024px) {
@@ -23,6 +32,24 @@
         }
         .col-sidebar.active-mobile, .col-actions.active-mobile {
             display: flex !important;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            z-index: 80;
+            width: min(88vw, 360px);
+            height: 100vh;
+            border-radius: 0;
+            box-shadow: 0 0 50px rgba(0,0,0,.45);
+        }
+        .col-sidebar.active-mobile { left: 0; }
+        .col-actions.active-mobile { right: 0; }
+        .mobile-drawer-backdrop.active-mobile {
+            display: block;
+            position: fixed;
+            inset: 0;
+            z-index: 70;
+            background: rgba(2,6,23,.72);
+            backdrop-filter: blur(4px);
         }
     }
 
@@ -31,6 +58,10 @@
         display: flex;
         flex-direction: column;
         height: 100%;
+        background: #111b21; /* WA Dark Sidebar */
+        border: none;
+        border-right: 1px solid rgba(255,255,255,0.07);
+        border-radius: 0;
     }
 
     .col-chat {
@@ -38,19 +69,41 @@
         flex-direction: column;
         height: 100%;
         position: relative;
+        background-color: #0b141a;
+        background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+        background-repeat: repeat;
+        background-size: 400px;
+        background-blend-mode: overlay;
+        border: none;
+        border-radius: 0;
+    }
+    .col-chat::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(11, 20, 26, 0.94);
+        z-index: 0;
+        pointer-events: none;
     }
 
     .col-actions {
         display: flex;
         flex-direction: column;
         height: 100%;
+        overflow-y: auto;
+        background: #111b21;
+        border: none;
+        border-left: 1px solid rgba(255,255,255,0.07);
+        border-radius: 0;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148,163,184,.35) transparent;
     }
 
     /* Scrollbars */
     .custom-scroll {
         overflow-y: auto;
         scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+        scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
     }
     .custom-scroll::-webkit-scrollbar {
         width: 6px;
@@ -59,34 +112,95 @@
         background: transparent;
     }
     .custom-scroll::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.1);
         border-radius: 10px;
     }
     .custom-scroll::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.2);
     }
 
     /* Active States */
     .chat-card {
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: background 0.15s, transform 0.15s, border-color 0.15s;
+        border: 1px solid transparent;
+        border-radius: .85rem;
     }
+    .chat-card:hover {
+        background: #202c33;
+        transform: translateX(2px);
+        border-color: rgba(255,255,255,.06);
+    }
+    .chat-card::after { content: 'Clique para abrir'; position: absolute; right: .75rem; top: .55rem; opacity: 0; pointer-events: none; color: #6ee7b7; font-size: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: .12em; transition: opacity .15s ease; }
+    .chat-card:hover::after { opacity: .85; }
     .chat-card.active {
-        background: rgba(99, 102, 241, 0.15);
-        border-color: rgba(99, 102, 241, 0.3) !important;
+        background: #2a3942;
+        border-color: rgba(0,168,132,.35) !important;
+        box-shadow: inset 3px 0 #00a884;
     }
+    .chat-card.unread:not(.active) {
+        background: rgba(0,168,132,.06);
+        border-color: rgba(0,168,132,.14);
+    }
+    .chat-card.unread .chat-name { color: #f8fafc; font-weight: 800; }
+    .chat-card-actions { display: flex; align-items: center; gap: .35rem; margin-top: .45rem; justify-content: flex-end; }
+    .chat-card-action { width: 30px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: .55rem; color: #cbd5e1; background: #1b2a34; border: 1px solid rgba(148,163,184,.22); box-shadow: 0 2px 8px rgba(0,0,0,.15); transition: transform .15s, background .15s, color .15s, border-color .15s; }
+    .chat-card-action:hover { color: #fff; transform: translateY(-1px); }
+    .chat-card-action.view { color: #6ee7b7; background: rgba(16,185,129,.14); border-color: rgba(52,211,153,.32); }
+    .chat-card-action.view:hover { background: #059669; border-color: #6ee7b7; }
+    .chat-card-action.assume { color: #a5b4fc; background: rgba(99,102,241,.14); border-color: rgba(129,140,248,.32); }
+    .chat-card-action.assume:hover { background: #4f46e5; border-color: #a5b4fc; }
+    .chat-card-action.close { color: #fda4af; background: rgba(244,63,94,.1); border-color: rgba(251,113,133,.28); }
+    .chat-card-action.close:hover { background: #e11d48; border-color: #fda4af; }
+    .chat-card-action.reopen { color: #fcd34d; background: rgba(245,158,11,.12); border-color: rgba(251,191,36,.3); }
+    .chat-card-action.reopen:hover { background: #d97706; border-color: #fde68a; }
+    .priority-dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+    .priority-dot.alta { background: #fb7185; box-shadow: 0 0 8px rgba(251,113,133,.7); }
+    .priority-dot.media { background: #fbbf24; }
+    .priority-dot.baixa { background: #64748b; }
+    .detail-section { border: 1px solid rgba(255,255,255,.05); border-radius: 1rem; padding: .85rem; background: rgba(2,6,23,.2); }
+    .col-actions details { border-bottom: 1px solid rgba(255,255,255,.06); padding-bottom: .65rem; }
+    .col-actions summary { cursor: pointer; list-style: none; color: #7890ad; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .16em; }
+    .col-actions summary::-webkit-details-marker { display: none; }
+    .col-actions summary::after { content: '+'; float: right; color: #64748b; font-size: 15px; line-height: 10px; }
+    .col-actions details[open] summary::after { content: '−'; color: #34d399; }
+    .col-actions > div > h3 { display: none; }
+    .header-transfer { display: flex; align-items: center; gap: .35rem; margin-top: .35rem; }
+    .header-transfer select { max-width: 145px; }
+    .chat-transfer-bar { position: relative; z-index: 5; min-height: 48px; display: flex; align-items: center; justify-content: flex-end; gap: .5rem; padding: .45rem .85rem; background: #162630; border-bottom: 1px solid rgba(52,211,153,.22); }
+    .chat-transfer-bar.hidden { display: none !important; }
+    .chat-transfer-bar > span { color: #a7f3d0 !important; }
+    .chat-transfer-bar select { min-width: 170px; background: #243642; color: #f8fafc; border-color: rgba(148,163,184,.35); }
+    .chat-transfer-bar button { background: #059669; color: #fff; border: 1px solid rgba(167,243,208,.25); }
+    .chat-transfer-bar button:hover { background: #10b981; }
+    .chat-transfer-bar #btn-resolver { width: auto; min-height: 34px; padding: .55rem .9rem; background: #059669; color: #fff; border-radius: .55rem; }
+    .chat-transfer-bar #btn-resolver:hover { background: #10b981; }
+    .chat-transfer-bar #btn-resolver:disabled { background: #334155; color: #94a3b8; }
+    .chat-main-header { position: relative; z-index: 25; }
+    .chat-main-header { background: #111f28 !important; }
+    #chat-header-operator { color: #f8fafc; opacity: 1 !important; }
+    #chat-header-operator span { color: #d1fae5 !important; background: #12352f !important; border-color: rgba(52,211,153,.35) !important; }
+    .mobile-transfer-panel { display: none; }
+    @media (max-width: 1024px) {
+        .mobile-transfer-panel { display: block; background: #162630; border-color: rgba(52,211,153,.22); }
+        .mobile-transfer-panel select { background: #243642; color: #f8fafc; border-color: rgba(148,163,184,.35); }
+    .mobile-transfer-panel button { background: #059669; color: #fff; }
+    }
+    #attendance-toast { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 160; display: flex; max-width: min(360px, calc(100vw - 2rem)); transform: translateY(1rem); opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; }
+    #attendance-toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
     /* Chat Baloon Bubble styling */
     .bubble {
         max-width: 75%;
-        padding: 0.85rem 1.15rem;
-        border-radius: 1.25rem;
+        padding: 0.5rem 0.6rem 1.25rem 0.6rem;
+        border-radius: 0.5rem;
         font-size: 0.85rem;
         font-weight: 500;
         line-height: 1.4;
         position: relative;
         word-break: break-word;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        animation: bubblePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        box-shadow: 0 1px 0.5px rgba(11, 20, 26, .13);
+        z-index: 1;
+        animation: bubblePop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
 
     @keyframes bubblePop {
@@ -95,42 +209,160 @@
     }
 
     .bubble.received {
-        background: rgba(255, 255, 255, 0.05);
-        color: #e2e8f0;
-        border-bottom-left-radius: 0.25rem;
-        border: 1px border-white/5;
+        background: #202c33;
+        color: #e9edef;
+        border-top-left-radius: 0;
         align-self: flex-start;
+    }
+    .bubble.received::before {
+        content: "";
+        position: absolute;
+        top: 0; left: -8px;
+        width: 8px; height: 13px;
+        background: linear-gradient(135deg, #202c33 0%, #202c33 50%, transparent 50%, transparent);
     }
 
     .bubble.sent {
-        background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
-        color: #ffffff;
-        border-bottom-right-radius: 0.25rem;
+        background: #005c4b;
+        color: #e9edef;
+        border-top-right-radius: 0;
         align-self: flex-end;
     }
+    .bubble.sent::before {
+        content: "";
+        position: absolute;
+        top: 0; right: -8px;
+        width: 8px; height: 13px;
+        background: linear-gradient(-135deg, #005c4b 0%, #005c4b 50%, transparent 50%, transparent);
+    }
+
+    .bubble-meta {
+        position: absolute;
+        bottom: 3px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.65rem;
+        color: rgba(255,255,255,0.6);
+        font-weight: 600;
+    }
+    .reaction-trigger { position: absolute; top: .35rem; right: -2.15rem; opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; }
+    .bubble.sent .reaction-trigger { right: auto; left: -2.15rem; }
+    .message-row:hover .reaction-trigger, .reaction-trigger:focus { opacity: 1; pointer-events: auto; }
+    .reaction-trigger:hover { transform: scale(1.08); }
 
     /* Tab styles */
     .atend-tab {
-        font-size: 9px;
-        font-weight: 900;
+        font-size: 10px;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.05em;
         transition: all 0.2s ease;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
     }
     .atend-tab.active {
-        background: rgba(255,255,255,0.08);
-        color: #ffffff;
+        color: #00a884;
+        border-bottom-color: #00a884;
+        background: transparent;
+    }
+
+    .sidebar-section {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .group-pill {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(148, 163, 184, 0.06);
+        color: #c8d1db;
+        transition: all 0.2s ease;
+    }
+
+    .group-pill.active {
+        background: rgba(16, 185, 129, 0.12);
+        border-color: rgba(16, 185, 129, 0.35);
+        color: #d1fae5;
+        box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.2);
+    }
+
+    .contact-row {
+        cursor: pointer;
+        border-radius: 0.9rem;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+    }
+
+    .contact-row:hover {
+        background: rgba(148, 163, 184, 0.06);
+        border-color: rgba(255, 255, 255, 0.04);
+    }
+
+    .contact-row.active {
+        background: rgba(99, 102, 241, 0.12);
+        border-color: rgba(129, 140, 248, 0.2);
+    }
+
+    .central-heading {
+        display: none;
+        background: linear-gradient(120deg, rgba(16,185,129,.11), rgba(59,130,246,.06) 55%, rgba(15,23,42,.3));
+        border-color: rgba(255,255,255,.09);
+    }
+    #no-chat-screen {
+        background: radial-gradient(circle at center, rgba(30,41,59,.24), rgba(2,6,23,.72) 68%);
+    }
+    #no-chat-screen .empty-chat-icon {
+        box-shadow: 0 0 0 12px rgba(99,102,241,.04), 0 18px 45px rgba(0,0,0,.24);
+        animation: emptyChatFloat 1.8s ease-in-out infinite;
+    }
+    @keyframes emptyChatFloat {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        #no-chat-screen .empty-chat-icon { animation: none; }
+    }
+    @media (max-width: 1280px) {
+        .atend-container { grid-template-columns: 300px minmax(0,1fr) 280px; }
+    }
+    @media (max-width: 768px) {
+        .atend-container { height: calc(100dvh - 120px); min-height: 0; }
+    }
+    @media (min-width: 1201px) {
+        body:has(.atend-container) main { max-width: none; padding-left: 120px; padding-right: 24px; }
     }
 </style>
 
+<div class="central-heading mb-4 flex flex-wrap items-center justify-between gap-4 rounded-[1.25rem] border px-5 py-3">
+    <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+        </div>
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-400">Módulo independente</p>
+            <h2 class="text-lg font-black uppercase tracking-tight text-white">Central de Atendimento</h2>
+        </div>
+    </div>
+    <div class="flex items-center gap-2">
+        <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-emerald-300">Conversas</a>
+        {% if is_admin %}
+        <a href="/central-atendimento/configuracoes" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition hover:bg-white/5 hover:text-white">Conexão e configurações</a>
+        {% endif %}
+    </div>
+</div>
+
 <audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2357/2357-84.wav" preload="auto"></audio>
+<div id="attendance-toast" class="flex items-center gap-3 rounded-2xl border border-emerald-400/30 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur">
+    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-lg text-emerald-300">💬</div>
+    <div class="min-w-0"><span id="attendance-toast-title" class="block text-[10px] font-black uppercase tracking-widest text-emerald-300">Nova mensagem</span><span id="attendance-toast-message" class="mt-1 block line-clamp-2 text-xs font-semibold text-slate-200"></span></div>
+</div>
 
 <div class="atend-container">
     
     <!-- COLUNA 1: FILA DE CHATS -->
     <div class="col-sidebar glass-panel rounded-[2rem] border border-white/5 bg-slate-900/20 overflow-hidden">
         <!-- Header Busca -->
-        <div class="p-5 border-b border-white/5 space-y-3">
+        <div class="p-4 border-b border-white/5 space-y-3">
             <div class="flex items-center justify-between">
                 <h3 class="text-sm font-black text-white uppercase tracking-wider italic">Mensagens</h3>
                 <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black tracking-widest uppercase">WhatsApp</span>
@@ -141,11 +373,12 @@
         
         <!-- Tabs de Fila -->
         <div class="flex border-b border-white/5 p-1 bg-slate-950/30">
-            <button onclick="changeQueueTab('atendendo')" id="tab-atendendo" class="atend-tab flex-1 py-2 text-center rounded-lg text-white atend-tab active">Meu Chat</button>
-            <button onclick="changeQueueTab('aguardando')" id="tab-aguardando" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Fila</button>
+            <button onclick="changeQueueTab('aguardando')" id="tab-aguardando" class="atend-tab flex-1 py-2 text-center rounded-lg text-white atend-tab active">Fila <span id="queue-unread-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] text-slate-950">0</span></button>
+            <button onclick="changeQueueTab('atendendo')" id="tab-atendendo" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Meu Chat <span id="mychat-unread-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-black text-slate-950">0</span></button>
+            {% if config.get('WHATSAPP_SHOW_GROUPS', false) %}<button onclick="changeQueueTab('grupos')" id="tab-grupos" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Grupos <span id="groups-unread-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] text-slate-950">0</span></button>{% endif %}
             <button onclick="changeQueueTab('resolvidos')" id="tab-resolvidos" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Resolvidos</button>
         </div>
-        
+
         <!-- Lista de Conversas -->
         <div id="chats-list" class="flex-grow custom-scroll divide-y divide-white/5 p-3 space-y-1">
             <!-- Renderizado via JS -->
@@ -157,29 +390,47 @@
     <div class="col-chat glass-panel rounded-[2.5rem] border border-white/5 bg-slate-900/40 overflow-hidden">
         
         <!-- Tela de Sem Chat Aberto -->
-        <div id="no-chat-screen" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-slate-950/20 z-20 transition-all duration-300">
-            <div class="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 border border-indigo-500/20 mb-4 animate-bounce">
+        <div id="no-chat-screen" class="absolute inset-x-0 top-[88px] bottom-[76px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/20 z-10 transition-all duration-300">
+            <div class="empty-chat-icon w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 border border-indigo-500/20 mb-5">
                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
             </div>
-            <h3 class="text-lg font-black text-white uppercase tracking-tight italic mb-1">Selecione uma Conversa</h3>
-            <p class="text-slate-500 text-xs font-bold max-w-xs">Escolha um atendimento na lista lateral ou aguarde novos chamados do WhatsApp.</p>
+            <span class="mb-2 rounded-full border border-indigo-400/15 bg-indigo-400/10 px-3 py-1 text-[9px] font-black uppercase tracking-[.2em] text-indigo-300">Central online</span>
+            <h3 class="text-lg font-black text-white uppercase tracking-tight italic mb-2">Nenhuma conversa selecionada</h3>
+            <p class="text-slate-400 text-xs font-medium leading-relaxed max-w-sm">Escolha um atendimento na lista lateral para visualizar as mensagens e iniciar o suporte.</p>
         </div>
 
         <!-- Chat Header -->
-        <div class="p-6 border-b border-white/5 bg-slate-950/20 flex-shrink-0 flex items-center justify-between">
+        <div id="chat-main-header" class="chat-main-header hidden p-4 border-b border-white/5 bg-slate-950/30 flex-shrink-0 items-center justify-between">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-black text-sm" id="chat-header-avatar">
                     WA
                 </div>
                 <div>
                     <h4 id="chat-header-name" class="text-sm font-black text-white uppercase tracking-tight leading-none mb-1">Cliente</h4>
-                    <span id="chat-header-phone" class="text-[10px] text-slate-500 font-mono">Carregando...</span>
+                    <div class="flex items-center gap-2">
+                        <span id="chat-header-phone" class="text-[10px] text-slate-500 font-mono">Carregando...</span>
+                        <span id="chat-header-instance" class="text-[9px] px-2 py-0.5 rounded-full bg-white/5 text-slate-300 font-black uppercase tracking-wider">--</span>
+                        <span id="chat-header-presence" class="w-2 h-2 rounded-full bg-slate-600 inline-block" title="Presença"></span>
+                    </div>
                 </div>
             </div>
             
-            <div id="chat-header-operator" class="text-right">
-                <!-- Mostra operador atual ou status -->
+            <div class="flex items-center gap-2">
+                <button onclick="toggleMobileDrawer('queue')" class="lg:hidden rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300" title="Conversas">☰</button>
+                <button onclick="toggleMobileDrawer('details')" class="lg:hidden rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300" title="Detalhes">ⓘ</button>
+                <div id="chat-header-operator" class="text-right">
+                    <!-- Mostra operador atual ou status -->
+                </div>
             </div>
+        </div>
+
+        <div id="chat-transfer-bar" class="chat-transfer-bar hidden">
+            <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Trocar atendente</span>
+            <select id="transfer-operator" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-[10px] font-bold text-slate-300" disabled>
+                <option value="">Selecione uma conversa</option>
+            </select>
+            <button id="transfer-button" onclick="transferirTicket(activeTicketId)" class="rounded-lg bg-indigo-500 px-3 py-2 text-[9px] font-black uppercase tracking-wide text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40" disabled>Transferir</button>
+            <button onclick="openSolutionModal()" id="btn-resolver" disabled class="rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-wide transition-all disabled:cursor-not-allowed">✓ Resolver</button>
         </div>
         
         <!-- Timeline das Mensagens -->
@@ -188,22 +439,83 @@
         </div>
         
         <!-- Chat Input Bar -->
-        <div class="p-5 border-t border-white/5 bg-slate-950/30 flex-shrink-0">
-            <div class="flex gap-3 items-end">
-                <textarea id="msg-input" rows="1" onkeydown="handleInputKeydown(event)" class="glass-input flex-grow px-5 py-3.5 rounded-2xl text-white text-sm bg-slate-900 border-white/5 resize-none focus:outline-none" placeholder="Digite uma resposta para o WhatsApp..."></textarea>
-                <button onclick="sendMessage()" class="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-500 transition-all shadow-lg active:scale-95">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                </button>
-            </div>
+        <div class="p-3 border-t border-white/5 bg-[#202c33] flex-shrink-0 relative z-10 flex items-end gap-2">
+            <div id="typing-indicator" class="hidden absolute -top-7 left-4 rounded-t-xl bg-[#202c33] px-3 py-1 text-[10px] font-bold text-emerald-300">digitando...</div>
+            <div id="reply-preview" class="hidden absolute bottom-full left-0 right-0 items-center justify-between gap-3 border-t border-white/10 bg-[#182229] px-4 py-2"><div class="min-w-0 border-l-2 border-emerald-400 pl-3"><div id="reply-preview-user" class="text-[10px] font-black text-emerald-300"></div><div id="reply-preview-text" class="truncate text-xs text-slate-300"></div></div><button type="button" onclick="cancelReply()" class="shrink-0 text-lg text-slate-400 hover:text-white">×</button></div>
+            <button onclick="toggleEmojiPicker()" class="w-10 h-10 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-colors" title="Emojis">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </button>
+            <input id="attachment-input" type="file" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            <button type="button" onclick="document.getElementById('attachment-input').click()" class="w-10 h-10 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-colors mr-1" title="Anexar arquivo">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+            </button>
+            <span id="attachment-name" class="hidden max-w-32 truncate rounded-lg bg-white/10 px-2 py-1 text-[10px] text-slate-300"></span>
+            <select id="quick-replies" onchange="useQuickReply(this.value)" class="hidden sm:block w-36 h-10 rounded-xl bg-[#2a3942] px-2 text-[10px] font-bold text-slate-300 border-none focus:outline-none" title="Respostas rápidas">
+                <option value="">Resposta rápida</option>
+            </select>
+            <div id="emoji-picker" class="hidden absolute bottom-16 left-3 z-30 grid w-72 grid-cols-8 gap-1 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl"></div>
+            <textarea id="msg-input" rows="1" disabled onkeydown="handleInputKeydown(event)" class="flex-grow px-4 py-2.5 rounded-xl text-[#e9edef] text-[15px] bg-[#2a3942] border-none resize-none focus:outline-none disabled:cursor-not-allowed disabled:opacity-60" placeholder="Selecione uma conversa para responder" style="min-height: 44px; max-height: 120px;"></textarea>
+            <button id="send-message" onclick="sendMessage()" disabled class="w-10 h-10 ml-1 flex-shrink-0 bg-[#00a884] text-[#111b21] rounded-full flex items-center justify-center hover:bg-[#00c59b] transition-colors shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                <svg class="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+            </button>
         </div>
     </div>
     
     <!-- COLUNA 3: DETALHES DO CHAMADO E AÇÕES -->
-    <div class="col-actions glass-panel rounded-[2rem] border border-white/5 bg-slate-900/20 p-6 space-y-6">
-        
+    <div class="col-actions glass-panel rounded-[1.35rem] border border-white/5 bg-slate-900/20 p-5 space-y-5">
+        <!-- Painel Lateral de Contato -->
+        <div id="contact-panel" class="detail-section space-y-4">
+            <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Contato</h3>
+            <div class="flex items-center gap-3">
+                <div id="contact-avatar" class="w-12 h-12 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-black text-lg">WA</div>
+                <div class="min-w-0">
+                    <div id="contact-name" class="text-sm font-black text-white truncate">--</div>
+                    <div id="contact-phone" class="text-[11px] text-slate-400 font-mono">--</div>
+                    <div id="contact-presence" class="mt-1 inline-flex items-center gap-1.5 rounded-full bg-slate-800/70 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-slate-400"><span id="contact-presence-dot" class="h-1.5 w-1.5 rounded-full bg-slate-500"></span><span id="contact-presence-text">Offline</span></div>
+                </div>
+            </div>
+
+            <div id="contact-status-alert" class="hidden rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[10px] font-bold text-amber-200"></div>
+
+            <div id="contact-meta" class="text-[11px] text-slate-500 space-y-1">
+                <div>Instância: <span id="contact-instance" class="font-mono text-slate-300">--</span></div>
+                <div>Chamado: <span id="contact-status" class="font-mono text-slate-300">--</span></div>
+                <div>Operador: <span id="contact-assigned" class="font-mono text-slate-300">--</span></div>
+            </div>
+
+            <label class="block text-[9px] font-black uppercase tracking-widest text-slate-500" for="contact-internal-status">Status interno</label>
+            <select id="contact-internal-status" onchange="saveContactInternalStatus(this.value)" disabled class="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-xs font-bold text-slate-200 outline-none focus:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50">
+                <option value="Normal">Normal</option><option value="Aguardando retorno">Aguardando retorno</option><option value="Em atendimento">Em atendimento</option><option value="VIP">VIP</option><option value="Bloqueado">Bloqueado</option><option value="Prioridade">Prioridade</option>
+            </select>
+
+            <button onclick="copyPhone()" class="w-full px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-black text-xs uppercase rounded-xl">Copiar Telefone</button>
+        </div>
+
+        <div class="mobile-transfer-panel detail-section space-y-2">
+            <span class="block text-[9px] font-black uppercase tracking-widest text-indigo-300">Trocar atendente</span>
+            <div class="flex gap-2">
+                <select id="transfer-operator-mobile" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-[10px] font-bold text-slate-300" disabled>
+                    <option value="">Selecione uma conversa</option>
+                </select>
+                <button id="transfer-button-mobile" onclick="transferirTicket(activeTicketId)" class="rounded-lg bg-indigo-500 px-3 py-2 text-[9px] font-black uppercase text-white disabled:opacity-40" disabled>Enviar</button>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Histórico do cliente</h3>
+            <details id="contact-history-details">
+                <summary>Histórico do cliente</summary>
+                <div id="contact-history" class="max-h-36 custom-scroll space-y-2 rounded-2xl border border-white/5 bg-slate-950/40 p-3">
+                <div class="text-[10px] text-slate-500">Selecione uma conversa</div>
+                </div>
+            </details>
+        </div>
+
         <div>
             <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Informações Gerais</h3>
-            <div class="space-y-4 p-4 bg-slate-950/40 rounded-2xl border border-white/5">
+            <details>
+                <summary>Informações gerais</summary>
+                <div class="detail-section space-y-4">
                 <div>
                     <span class="block text-[8px] text-slate-500 font-black uppercase tracking-widest">Protocolo</span>
                     <span id="detail-ticket-id" class="block text-xs font-black text-white font-mono">--</span>
@@ -218,7 +530,8 @@
                     <span class="block text-[8px] text-slate-500 font-black uppercase tracking-widest">Primeiro Contato</span>
                     <span id="detail-ticket-date" class="block text-xs font-bold text-slate-400">--</span>
                 </div>
-            </div>
+                </div>
+            </details>
         </div>
         
         <div>
@@ -250,9 +563,21 @@
                 <!-- Botão de Assumir Dinâmico -->
             </div>
             
-            <button onclick="openSolutionModal()" id="btn-resolver" disabled class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
-                ✔️ Resolver Atendimento
-            </button>
+        </div>
+    </div>
+<div id="mobile-drawer-backdrop" class="mobile-drawer-backdrop hidden" onclick="closeMobileDrawers()"></div>
+
+<div id="internal-note-modal" class="hidden fixed inset-0 z-[95] items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+    <div class="glass-panel w-full max-w-md rounded-3xl border border-amber-400/15 p-6 shadow-2xl">
+        <div class="mb-4 flex items-start justify-between gap-4">
+            <div><p class="text-[9px] font-black uppercase tracking-[.22em] text-amber-300">Registro privado</p><h3 class="mt-1 text-lg font-black text-white">Nota interna</h3></div>
+            <button type="button" onclick="closeInternalNote()" class="text-xl text-slate-500 hover:text-white" aria-label="Fechar">×</button>
+        </div>
+        <p id="internal-note-context" class="mb-3 text-[10px] text-slate-500">Selecione uma conversa para registrar uma nota.</p>
+        <textarea id="contact-note" rows="6" class="glass-input w-full rounded-2xl px-4 py-3 text-sm text-white" placeholder="Anotações internas... (visível somente para operadores)"></textarea>
+        <div class="mt-4 flex justify-end gap-2">
+            <button type="button" onclick="closeInternalNote()" class="rounded-xl bg-white/5 px-4 py-2 text-xs font-black uppercase text-slate-300 hover:bg-white/10">Cancelar</button>
+            <button type="button" onclick="saveContactNote()" class="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black uppercase text-white hover:bg-indigo-500">Salvar nota</button>
         </div>
     </div>
 </div>
@@ -275,71 +600,402 @@
 <script>
     const currentUser = "{{ user_name }}";
     const is_admin = {{ 'true' if is_admin else 'false' }};
+    const canManageAtendimento = {{ 'true' if can_manage_atendimento else 'false' }};
     
-    let currentQueue = 'atendendo'; // atendendo | aguardando | resolvidos
+    let currentQueue = 'aguardando'; // aguardando | atendendo | resolvidos
+    let currentGroup = 'todos';
     let chatsData = [];
     let activeTicketId = null;
+    let lastTimelineMessageId = 0;
+    let typingTimer = null;
+    let remoteTyping = false;
+    let remoteTypingTimeout = null;
     let ws = null;
+    let chatsLoading = false;
+    let typingPolling = false;
+    let typingNotifyTimer = null;
+    let toastTimer = null;
+    let unreadTitleCount = 0;
+    let audioContext = null;
+    let wsHeartbeat = null;
+    let wsConnected = false;
+    let replyToMessageState = null;
+
+    function escapeHtml(value) {
+        return String(value || '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    }
+
+    function replyToMessage(messageId) {
+        const row = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (!row) return;
+        replyToMessageState = { id: messageId, text: row.dataset.messageText || '', user: row.querySelector('.bubble')?.firstElementChild?.textContent || 'Mensagem' };
+        document.getElementById('reply-preview-user').textContent = replyToMessageState.user;
+        document.getElementById('reply-preview-text').textContent = replyToMessageState.text;
+        const preview = document.getElementById('reply-preview');
+        preview.classList.remove('hidden');
+        preview.classList.add('flex');
+        document.getElementById('msg-input')?.focus();
+    }
+
+    function cancelReply() {
+        replyToMessageState = null;
+        const preview = document.getElementById('reply-preview');
+        preview?.classList.add('hidden');
+        preview?.classList.remove('flex');
+    }
+
+    function sameTicket(a, b) {
+        return a != null && b != null && String(a) === String(b);
+    }
+
+    function playNotificationSound() {
+        try {
+            audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') audioContext.resume();
+            const oscillator = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 880;
+            gain.gain.setValueAtTime(.0001, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(.12, audioContext.currentTime + .015);
+            gain.gain.exponentialRampToValueAtTime(.0001, audioContext.currentTime + .22);
+            oscillator.connect(gain).connect(audioContext.destination);
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + .24);
+        } catch (_) {
+            const sound = document.getElementById('notif-sound');
+            if (sound) { sound.currentTime = 0; sound.play().catch(() => {}); }
+        }
+    }
+
+    function mostrarToast(message, title = 'Central de Atendimento') {
+        const toast = document.getElementById('attendance-toast');
+        if (!toast) return;
+        document.getElementById('attendance-toast-title').textContent = title;
+        document.getElementById('attendance-toast-message').textContent = message;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 4500);
+    }
+
+    function notifyIncomingMessage(data, isNewChat = false) {
+        playNotificationSound();
+        const name = data.usuario || 'Cliente';
+        const rawPreview = data.preview || data.mensagem || 'Nova mensagem recebida';
+        const preview = formatMessagePreview(rawPreview);
+        let mediaTitle = isNewChat ? 'Novo atendimento' : 'Nova mensagem';
+        try {
+            const media = JSON.parse(rawPreview);
+            if (media && media.__wa_media__ && media.type === 'gif') mediaTitle = 'Novo GIF';
+            else if (media && media.__wa_media__) mediaTitle = 'Nova mídia';
+        } catch (_) {}
+        mostrarToast(`${name}: ${preview}`, mediaTitle);
+        if (document.hidden) {
+            unreadTitleCount += 1;
+            document.title = `(${unreadTitleCount}) Nova mensagem · Central`;
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(mediaTitle, { body: `${name}: ${preview}` });
+            }
+        }
+    }
+
+    const groupCatalog = [
+        { id: 'todos', label: 'Todos' },
+        { id: 'atendimento', label: 'Atendimento' },
+        { id: 'suporte', label: 'Suporte' },
+        { id: 'rede', label: 'Rede' },
+        { id: 'financeiro', label: 'Financeiro' },
+        { id: 'urgente', label: 'Urgente' }
+    ];
+
+    function formatDisplayPhone(value) {
+        if (!value) return '--';
+        const raw = String(value).trim();
+        if (raw.includes('@lid')) return 'Telefone não disponível';
+        let digits = raw.split('@')[0].split(':')[0].replace(/\D/g, '');
+        if (!digits) return '--';
+        if (!digits.startsWith('55')) digits = `55${digits}`;
+        if (digits.startsWith('55') && digits.length === 13) {
+            return `+55 (${digits.slice(2, 4)}) ${digits[4]} ${digits.slice(5, 9)}-${digits.slice(9)}`;
+        }
+        if (digits.startsWith('55') && digits.length === 12) {
+            return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+        }
+        return `+${digits}`;
+    }
+
+    function getChatGroup(chat) {
+        const categoria = (chat.categoria || '').toLowerCase();
+        const prioridade = (chat.prioridade || '').toLowerCase();
+
+        if (prioridade.includes('alta') || chat.status === 'Urgente') return 'urgente';
+        if (categoria.includes('rede') || categoria.includes('internet')) return 'rede';
+        if (categoria.includes('impress') || categoria.includes('hardware') || categoria.includes('computador')) return 'suporte';
+        if (categoria.includes('finance') || categoria.includes('pagamento')) return 'financeiro';
+        return 'atendimento';
+    }
+
+    function getGroupLabel(groupId) {
+        return groupCatalog.find(g => g.id === groupId)?.label || 'Atendimento';
+    }
+
+    function formatMessagePreview(message) {
+        if (!message) return 'Nova conversa';
+        try {
+            const media = JSON.parse(message);
+            if (media && media.__wa_media__) {
+                if (media.type === 'gif') return 'GIF recebido';
+                const labels = { audio: '🎧 Áudio', image: '📷 Foto', video: '🎥 Vídeo', document: '📄 Documento' };
+                return labels[media.type] || '📎 Mídia';
+            }
+        } catch (_) {}
+        return message;
+    }
+
+    function renderGroupsList() {
+        const groupsList = document.getElementById('groups-list');
+        if (!groupsList) return;
+
+        groupsList.innerHTML = '';
+
+        const groupCounts = {};
+        chatsData.forEach(chat => {
+            const groupId = getChatGroup(chat);
+            groupCounts[groupId] = (groupCounts[groupId] || 0) + 1;
+        });
+
+        groupCatalog.forEach(group => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `group-pill rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${currentGroup === group.id ? 'active' : ''}`;
+            button.textContent = `${group.label}${group.id === 'todos' ? '' : ` (${groupCounts[group.id] || 0})`}`;
+            button.onclick = () => {
+                currentGroup = group.id;
+                renderGroupsList();
+                renderChatsList();
+                renderContactsList();
+            };
+            groupsList.appendChild(button);
+        });
+    }
+
+    function renderContactsList() {
+        const container = document.getElementById('contacts-list');
+        const counter = document.getElementById('contacts-count');
+        if (!container || !counter) return;
+
+        const contacts = chatsData
+            .filter(chat => chat.usuario)
+            .map(chat => ({
+                id: chat.id,
+                name: chat.usuario,
+                phone: chat.whatsapp_cliente || '--',
+                group: getChatGroup(chat),
+                status: chat.assigned_user ? 'Em atendimento' : 'Disponível',
+                lastMessage: formatMessagePreview(chat.ultima_mensagem)
+            }));
+
+        const filteredContacts = currentGroup === 'todos'
+            ? contacts
+            : contacts.filter(contact => contact.group === currentGroup);
+
+        counter.textContent = String(filteredContacts.length);
+
+        if (filteredContacts.length === 0) {
+            container.innerHTML = '<div class="px-3 py-5 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Sem contatos</div>';
+            return;
+        }
+
+        container.innerHTML = filteredContacts.map(contact => `
+            <div class="contact-row p-2 ${activeTicketId === contact.id ? 'active' : ''}" data-contact-id="${contact.id}">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex min-w-0 items-center gap-2">
+                        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-500/10 text-[11px] font-black text-indigo-300">
+                            ${contact.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="truncate text-[12px] font-bold text-white">${contact.name}</div>
+                            <div class="truncate text-[10px] text-slate-400">${contact.lastMessage}</div>
+                        </div>
+                    </div>
+                    <span class="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-slate-300">${contact.status}</span>
+                </div>
+            </div>
+        `).join('');
+
+        container.querySelectorAll('.contact-row').forEach(item => {
+            item.addEventListener('click', () => {
+                const id = Number(item.dataset.contactId);
+                if (id) openChat(id);
+            });
+        });
+    }
 
     // --- Carregamento da Lista de Chats ---
 
+    async function loadQuickReplies() {
+        const select = document.getElementById('quick-replies');
+        if (!select) return;
+        try {
+            const res = await fetch('/api/whatsapp/templates');
+            if (!res.ok) return;
+            const templates = await res.json();
+            templates.forEach(template => {
+                const option = document.createElement('option');
+                option.value = template.body || '';
+                option.textContent = template.title || 'Resposta rápida';
+                select.appendChild(option);
+            });
+        } catch (e) {
+            console.warn('Respostas rápidas indisponíveis', e);
+        }
+    }
+
+    function useQuickReply(text) {
+        const input = document.getElementById('msg-input');
+        const select = document.getElementById('quick-replies');
+        if (input && text) {
+            input.value = text;
+            input.focus();
+            input.dispatchEvent(new Event('input'));
+        }
+        if (select) select.value = '';
+    }
+
     async function loadChats() {
+        if (chatsLoading || document.hidden) return;
+        chatsLoading = true;
         try {
             const res = await fetch('/api/whatsapp/chats');
             chatsData = await res.json();
+            renderGroupsList();
+            renderContactsList();
             renderChatsList();
         } catch(e) {
             console.error("Erro ao carregar chats:", e);
+        } finally {
+            chatsLoading = false;
         }
     }
 
     function renderChatsList() {
         const listDiv = document.getElementById('chats-list');
         listDiv.innerHTML = '';
+        const queueUnread = chatsData.filter(c => c.status === 'Aberto' && !c.assigned_user && Number(c.unread_admin || 0) > 0)
+            .reduce((total, c) => total + Number(c.unread_admin || 0), 0);
+        const queueBadge = document.getElementById('queue-unread-count');
+        if (queueBadge) {
+            queueBadge.textContent = queueUnread;
+            queueBadge.classList.toggle('hidden', queueUnread === 0);
+        }
+        const groupsUnread = chatsData.filter(c => String(c.whatsapp_cliente || '').toLowerCase().endsWith('@g.us') && Number(c.unread_admin || 0) > 0)
+            .reduce((total, c) => total + Number(c.unread_admin || 0), 0);
+        const groupsBadge = document.getElementById('groups-unread-count');
+        if (groupsBadge) {
+            groupsBadge.textContent = groupsUnread;
+            groupsBadge.classList.toggle('hidden', groupsUnread === 0);
+        }
+        const myChatUnread = chatsData.filter(c => !String(c.whatsapp_cliente || '').toLowerCase().endsWith('@g.us') && c.status !== 'Resolvido' && c.assigned_user === currentUser && Number(c.unread_admin || 0) > 0)
+            .reduce((total, c) => total + Number(c.unread_admin || 0), 0);
+        const myChatBadge = document.getElementById('mychat-unread-count');
+        if (myChatBadge) {
+            myChatBadge.textContent = myChatUnread;
+            myChatBadge.classList.toggle('hidden', myChatUnread === 0);
+        }
         
-        // Filtra os chamados de acordo com a aba selecionada
         let filtered = [];
-        if (currentQueue === 'aguardando') {
-            filtered = chatsData.filter(c => c.status === 'Aberto' && !c.assigned_user);
+        const isGroupChat = c => String(c.whatsapp_cliente || '').toLowerCase().endsWith('@g.us');
+        if (currentQueue === 'grupos') {
+            filtered = chatsData.filter(c => isGroupChat(c));
+        } else if (currentQueue === 'aguardando') {
+            filtered = chatsData.filter(c => !isGroupChat(c) && c.status === 'Aberto' && !c.assigned_user);
         } else if (currentQueue === 'resolvidos') {
-            filtered = chatsData.filter(c => c.status === 'Resolvido');
+            filtered = chatsData.filter(c => !isGroupChat(c) && c.status === 'Resolvido');
         } else {
-            // atendendo (meu chat)
-            filtered = chatsData.filter(c => c.status !== 'Resolvido' && c.assigned_user === currentUser);
+            filtered = canManageAtendimento
+                ? chatsData.filter(c => !isGroupChat(c) && c.status !== 'Resolvido')
+                : chatsData.filter(c => !isGroupChat(c) && c.status !== 'Resolvido' && c.assigned_user === currentUser);
+        }
+
+        if (currentGroup !== 'todos') {
+            filtered = filtered.filter(c => getChatGroup(c) === currentGroup);
+        }
+
+        const query = (document.getElementById('chat-search')?.value || '').trim().toLowerCase();
+        if (query) {
+            filtered = filtered.filter(c => [
+                c.usuario,
+                c.whatsapp_cliente,
+                c.ultima_mensagem,
+                c.assigned_user,
+                c.categoria,
+                c.prioridade
+            ].some(value => String(value || '').toLowerCase().includes(query)));
         }
         
         if (filtered.length === 0) {
-            listDiv.innerHTML = `<div class="text-center py-12 text-slate-600 text-[10px] font-black uppercase tracking-widest">Nenhum chat nesta fila</div>`;
+            const emptyMessages = {
+                atendendo: ['Seu chat está vazio', 'Atendimentos assumidos por você aparecerão aqui.'],
+                aguardando: ['A fila está tranquila', 'Novos chamados do WhatsApp aparecerão aqui.'],
+                resolvidos: ['Nenhum atendimento resolvido', 'Os chamados finalizados aparecerão nesta aba.']
+            };
+            const [title, description] = emptyMessages[currentQueue] || emptyMessages.atendendo;
+            listDiv.innerHTML = `<div class="flex flex-col items-center px-5 py-14 text-center"><div class="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/5 text-slate-500">✉</div><strong class="text-xs font-black uppercase tracking-wide text-slate-400">${title}</strong><span class="mt-2 max-w-[210px] text-[10px] leading-relaxed text-slate-600">${description}</span></div>`;
             return;
         }
         
         filtered.forEach(c => {
             const card = document.createElement('div');
-            card.className = `chat-card p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3 ${activeTicketId === c.id ? 'active' : ''}`;
+            card.className = `chat-card relative p-3 border-b border-white/5 cursor-pointer flex items-center justify-between gap-3 ${activeTicketId === c.id ? 'active' : ''} ${c.unread_admin > 0 ? 'unread' : ''}`;
+            card.id = `chat-card-${c.id}`;
             card.onclick = () => openChat(c.id);
-            
-            // Badge de não lidas
+
             let badge = '';
             if (c.unread_admin > 0) {
-                badge = `<span class="bg-rose-500 text-white font-black text-[9px] w-5 h-5 rounded-full flex items-center justify-center shadow-lg animate-pulse">${c.unread_admin}</span>`;
+                badge = `<span class="bg-[#00a884] text-[#111b21] font-black text-[10px] px-1.5 min-w-[20px] h-5 rounded-full flex items-center justify-center shadow-lg transition-transform">${c.unread_admin}</span>`;
             }
-            
-            // Abreviação do Nome
+
             const nameInitial = c.usuario.substring(0, 2).toUpperCase();
-            
+            const isConnected = !!(c.connected || c.is_connected || c.presence === 'connected');
+            const groupName = c.visivel_suporte === false ? 'Triagem' : getGroupLabel(getChatGroup(c));
+
             card.innerHTML = `
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-10 h-10 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold flex-shrink-0">
+                <div class="flex items-center gap-3 min-w-0 w-full">
+                    <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold flex-shrink-0 text-lg">
                         ${nameInitial}
                     </div>
-                    <div class="min-w-0">
-                        <span class="block text-xs font-black text-white truncate uppercase">${c.usuario}</span>
-                        <span class="block text-[10px] text-slate-500 truncate font-semibold">${c.ultima_mensagem}</span>
+                    <div class="min-w-0 flex-grow">
+                        <div class="flex items-center justify-between w-full mb-0.5">
+                            <span class="chat-name text-[15px] font-medium text-[#e9edef] truncate">${c.usuario}</span>
+                            <span class="text-[11px] text-[#8696a0] flex-shrink-0 ml-2" id="time-${c.id}">${c.data_ultima_mensagem}</span>
+                        </div>
+                        <div class="flex items-center justify-between w-full gap-2 mb-1">
+                            <span class="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.14em] text-emerald-400 font-black">
+                                <span class="w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-slate-600'} inline-block"></span>
+                                ${groupName}
+                            </span>
+                            <span class="inline-flex items-center gap-1 text-[9px] text-slate-500 uppercase font-bold">
+                                <span class="priority-dot ${(c.prioridade || 'Media').toLowerCase().split(' ')[0]}"></span>${c.prioridade || 'Media'}
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between w-full">
+                            <span class="block text-[13px] text-[#8696a0] truncate flex-grow" id="preview-${c.id}">${formatMessagePreview(c.ultima_mensagem)}</span>
+                            <div class="flex flex-col items-end flex-shrink-0 ml-2" id="badge-container-${c.id}">
+                                ${badge}
+                            </div>
+                        </div>
+                        <div class="mt-1 flex items-center justify-between text-[9px] text-slate-600">
+                            <span class="truncate">${c.whatsapp_cliente ? formatDisplayPhone(c.whatsapp_cliente) : 'Telefone não informado'}</span>
+                            <span class="truncate ml-2">${c.assigned_user || 'Sem operador'}</span>
+                        </div>
+                        <div class="chat-card-actions">
+                            ${currentQueue === 'resolvidos' && is_admin ? `<button type="button" class="chat-card-action reopen" title="Reabrir atendimento" aria-label="Reabrir atendimento" onclick="reabrirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v8h8"/><path d="M12 8v4l3 2"/></svg></button>` : ''}
+                            ${!c.assigned_user ? `<button type="button" class="chat-card-action assume" title="Assumir atendimento" aria-label="Assumir atendimento" onclick="assumirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></button>` : ''}
+                            ${currentQueue !== 'resolvidos' ? `<button type="button" class="chat-card-action close" title="Fechar atendimento" aria-label="Fechar atendimento" onclick="fecharAtendimentoCard(${c.id}, event)">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                            </button>` : ''}
+                        </div>
                     </div>
-                </div>
-                <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
-                    <span class="text-[8px] text-slate-600 font-black">${c.data_ultima_mensagem}</span>
-                    ${badge}
                 </div>
             `;
             listDiv.appendChild(card);
@@ -347,27 +1003,78 @@
     }
 
     function changeQueueTab(tabName) {
+        clearActiveConversation();
         currentQueue = tabName;
         document.querySelectorAll('.atend-tab').forEach(t => t.classList.remove('active'));
         document.getElementById(`tab-${tabName}`).classList.add('active');
         renderChatsList();
     }
 
+    function clearActiveConversation() {
+        activeTicketId = null;
+        remoteTyping = false;
+        clearTimeout(remoteTypingTimeout);
+        document.getElementById('no-chat-screen')?.classList.remove('opacity-0', 'pointer-events-none');
+        document.getElementById('chat-main-header')?.classList.add('hidden');
+        document.getElementById('chat-main-header')?.classList.remove('flex');
+        document.getElementById('chat-transfer-bar')?.classList.add('hidden');
+        document.getElementById('typing-indicator')?.classList.add('hidden');
+        const timeline = document.getElementById('chat-timeline');
+        if (timeline) timeline.innerHTML = '';
+        const input = document.getElementById('msg-input');
+        const send = document.getElementById('send-message');
+        if (input) { input.disabled = true; input.value = ''; input.placeholder = 'Selecione uma conversa para responder'; }
+        if (send) send.disabled = true;
+        const actions = document.getElementById('assumir-btn-area');
+        if (actions) actions.innerHTML = '';
+    }
+
     function filterChatList() {
-        const query = document.getElementById('chat-search').value.toLowerCase();
-        const cards = document.querySelectorAll('.chat-card');
-        
-        cards.forEach(card => {
-            const text = card.innerText.toLowerCase();
-            card.style.display = text.includes(query) ? 'flex' : 'none';
-        });
+        renderChatsList();
+    }
+
+    async function assumirAtendimentoCard(ticketId, event) {
+        event?.stopPropagation();
+        await assumirTicket(ticketId);
+    }
+
+    async function fecharAtendimentoCard(ticketId, event) {
+        event?.stopPropagation();
+        await openChat(ticketId);
+        openSolutionModal();
+    }
+
+    async function reabrirAtendimentoCard(ticketId, event) {
+        event?.stopPropagation();
+        if (!confirm('Reabrir este atendimento?')) return;
+        const form = new FormData();
+        form.append('id', ticketId);
+        try {
+            const res = await fetch('/api/tickets/reabrir', { method: 'POST', body: form, redirect: 'manual' });
+            if (!res.ok && res.type !== 'opaqueredirect') throw new Error('Falha ao reabrir atendimento');
+            mostrarToast('Atendimento reaberto');
+            await loadChats();
+            changeQueueTab('aguardando');
+        } catch (error) {
+            mostrarToast(error.message || 'Não foi possível reabrir o atendimento');
+        }
     }
 
     // --- Abertura do Chat e Detalhes ---
 
     async function openChat(ticketId) {
         activeTicketId = ticketId;
+        remoteTyping = false;
+        clearTimeout(remoteTypingTimeout);
+        closeMobileDrawers();
         document.getElementById('no-chat-screen').classList.add('opacity-0', 'pointer-events-none');
+        document.getElementById('chat-main-header')?.classList.remove('hidden');
+        document.getElementById('chat-main-header')?.classList.add('flex');
+        document.getElementById('chat-transfer-bar')?.classList.remove('hidden');
+        const messageInput = document.getElementById('msg-input');
+        const sendButton = document.getElementById('send-message');
+        if (messageInput) { messageInput.disabled = false; messageInput.placeholder = 'Digite uma mensagem'; }
+        if (sendButton) sendButton.disabled = false;
         
         // Atualiza a seleção visual na lista lateral
         document.querySelectorAll('.chat-card').forEach(c => c.classList.remove('active'));
@@ -378,14 +1085,37 @@
         
         // Preenche o Header do Chat
         document.getElementById('chat-header-name').innerText = chat.usuario;
-        document.getElementById('chat-header-phone').innerText = `+${chat.whatsapp_cliente}`;
+        document.getElementById('chat-header-phone').innerText = formatDisplayPhone(chat.whatsapp_cliente);
         document.getElementById('chat-header-avatar').innerText = chat.usuario.substring(0, 2).toUpperCase();
+        // Instância e presença
+        document.getElementById('chat-header-instance').innerText = chat.whatsapp_instance || '--';
+        const pres = document.getElementById('chat-header-presence');
+        if (chat.connected) {
+            pres.classList.remove('bg-slate-600'); pres.classList.add('bg-emerald-400');
+        } else {
+            pres.classList.remove('bg-emerald-400'); pres.classList.add('bg-slate-600');
+        }
         
         const operatorSpan = document.getElementById('chat-header-operator');
+        const transferBar = document.getElementById('chat-transfer-bar');
+        const transferSelect = document.getElementById('transfer-operator');
+        const transferButton = document.getElementById('transfer-button');
+        const mobileTransferSelect = document.getElementById('transfer-operator-mobile');
+        const mobileTransferButton = document.getElementById('transfer-button-mobile');
         if (chat.assigned_user) {
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-white/5 border border-white/5 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">Operador: ${chat.assigned_user}</span>`;
+            transferBar?.classList.remove('hidden');
+            if (transferSelect) transferSelect.disabled = false;
+            if (transferButton) transferButton.disabled = false;
+            if (mobileTransferSelect) mobileTransferSelect.disabled = false;
+            if (mobileTransferButton) mobileTransferButton.disabled = false;
+            fillTransferOperators(chat.assigned_user);
         } else {
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[9px] font-black text-amber-400 uppercase tracking-widest animate-pulse">Aguardando</span>`;
+            if (transferSelect) { transferSelect.disabled = true; transferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
+            if (transferButton) transferButton.disabled = true;
+            if (mobileTransferSelect) { mobileTransferSelect.disabled = true; mobileTransferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
+            if (mobileTransferButton) mobileTransferButton.disabled = true;
         }
         
         // Preenche o Painel de Ações e Detalhes
@@ -396,8 +1126,15 @@
         
         // Configura Botão Assumir
         const assumirArea = document.getElementById('assumir-btn-area');
+        const promoteButton = chat.visivel_suporte === false ? `
+            <div class="mb-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-center">
+                <span class="block text-[9px] font-black uppercase tracking-widest text-amber-300">Sem chamado técnico</span>
+                <button onclick="promoverChamado(${chat.id})" class="mt-2 w-full rounded-lg bg-amber-500 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-950 hover:bg-amber-400">Abrir chamado técnico</button>
+            </div>
+        ` : '';
         if (!chat.assigned_user) {
             assumirArea.innerHTML = `
+                ${promoteButton}
                 <button onclick="assumirTicket(${chat.id})" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg">
                     👋 Assumir Conversa
                 </button>
@@ -405,6 +1142,7 @@
             document.getElementById('btn-resolver').disabled = true;
         } else {
             assumirArea.innerHTML = `
+                ${promoteButton}
                 <div class="text-center p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/10">
                     <span class="block text-[8px] text-indigo-400 font-black uppercase tracking-widest">Em Atendimento</span>
                     <span class="block text-xs font-black text-white">${chat.assigned_user}</span>
@@ -416,9 +1154,22 @@
         
         // Carrega o histórico de mensagens
         await loadMessages(ticketId);
+        // Carrega painel de contato
+        loadContactPanel(ticketId);
         
         // Limpa a leitura no backend
         markAsRead(ticketId);
+    }
+
+    async function promoverChamado(ticketId) {
+        try {
+            const res = await fetch(`/api/whatsapp/promover/${ticketId}`, {method: 'POST'});
+            if (!res.ok) throw new Error('Falha ao promover conversa');
+            await loadChats();
+            await openChat(ticketId);
+        } catch (e) {
+            alert('Não foi possível abrir o chamado técnico.');
+        }
     }
 
     async function loadMessages(ticketId) {
@@ -428,33 +1179,232 @@
             
             const timeline = document.getElementById('chat-timeline');
             timeline.innerHTML = '';
+            lastTimelineMessageId = 0;
+            messages.forEach(m => appendMessageToTimeline(m, false));
             
-            messages.forEach(m => {
-                const row = document.createElement('div');
-                row.className = `flex ${m.is_me ? 'justify-end' : 'justify-start'} w-full`;
-                
-                const bubble = document.createElement('div');
-                bubble.className = `bubble ${m.is_me ? 'sent' : 'received'}`;
-                
-                // Formatação simples do texto
-                let formattedMsg = m.mensagem.replace(/\n/g, '<br>');
-                
-                bubble.innerHTML = `
-                    <div class="font-semibold">${formattedMsg}</div>
-                    <span class="block text-[7px] opacity-60 text-right mt-1.5 font-black">${m.data_hora}</span>
-                `;
-                
-                row.appendChild(bubble);
-                timeline.appendChild(row);
-            });
-            
-            // Rola até o final do chat
             setTimeout(() => {
                 timeline.scrollTop = timeline.scrollHeight;
             }, 50);
         } catch(e) {
-            console.error("Erro ao carregar mensagens do chat:", e);
+            console.error("Erro ao carregar mensagens:", e);
         }
+    }
+
+    function appendMessageToTimeline(m, smoothScroll = true) {
+        const timeline = document.getElementById('chat-timeline');
+        const row = document.createElement('div');
+        window.__messageCache = window.__messageCache || {};
+        if (m.id) window.__messageCache[m.id] = m;
+        row.className = `message-row flex ${m.is_me ? 'justify-end' : 'justify-start'} w-full mb-1 relative z-10`;
+        row.dataset.messageId = m.id || '';
+        row.dataset.messageText = m.mensagem || '';
+        
+        const bubble = document.createElement('div');
+        bubble.className = `bubble ${m.is_me ? 'sent' : 'received'} relative`;
+        
+        let media = null;
+        try {
+            const parsed = JSON.parse(m.mensagem);
+            if (parsed && parsed.__wa_media__) media = parsed;
+        } catch (_) {}
+
+        let formattedMsg = m.mensagem.replace(/\n/g, '<br>');
+        if (media) {
+            const caption = media.caption ? `<div class="mt-2 text-sm">${media.caption}</div>` : '';
+            if (media.type === 'image') {
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto recebida</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="Imagem recebida">${caption}</a>`;
+            } else if (media.type === 'gif') {
+                const isVideoGif = String(media.mime || '').startsWith('video/');
+                formattedMsg = isVideoGif
+                    ? `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF recebido</div><video autoplay loop muted playsinline controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`
+                    : `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF recebido</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="GIF recebido">${caption}</a>`;
+            } else if (media.type === 'video') {
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎥 Vídeo recebido</div><video controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`;
+            } else if (media.type === 'audio') {
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎧 Áudio recebido</div><audio controls preload="metadata" class="max-w-full"><source src="${media.url}" type="${media.mime || 'audio/ogg'}">Seu navegador não conseguiu reproduzir este áudio.</audio>${caption}`;
+            } else if (media.type === 'document') {
+                formattedMsg = `<a href="${media.url}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm text-emerald-200 hover:bg-white/15">📎 ${media.filename || 'Abrir arquivo'}</a>${caption}`;
+            }
+        }
+        
+        let timeStr = m.data_hora;
+        if(m.data_hora.includes(' ')) {
+             timeStr = m.data_hora.split(' ')[1].substring(0,5);
+        }
+
+        let ticks = '';
+        const tickColor = m.whatsapp_status === 'read' ? 'text-[#53bdeb]' : 'text-slate-400';
+        if(m.is_me) {
+            ticks = `<svg viewBox="0 0 16 15" width="16" height="15" class="ml-1 text-[#53bdeb]"><path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 00-.51.063L8.666 9.879a.32.32 0 01-.484.033l-.358-.325a.319.319 0 00-.484.032l-.378.483a.418.418 0 00.036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 00-.064-.512zm-4.1 0l-.478-.372a.365.365 0 00-.51.063L4.566 9.879a.32.32 0 01-.484.033L1.891 7.769a.366.366 0 00-.515.006l-.423.433a.364.364 0 00.006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 00-.063-.51z"></path></svg>`;
+        }
+
+        const isDeleted = m.mensagem === '[Mensagem excluída]';
+        ticks = ticks.replace('text-[#53bdeb]', tickColor);
+        const canEdit = m.can_edit ?? m.is_me;
+        const canDelete = m.can_delete ?? (m.is_me || is_admin);
+        const replyAction = !isDeleted ? `<button type="button" onclick="replyToMessage(${m.id})" class="absolute bottom-2 left-2 text-[9px] font-bold text-slate-400 hover:text-emerald-300" title="Responder">Responder</button>` : '';
+        const messageActions = !isDeleted
+            ? `<div class="absolute right-2 top-2 z-20"><button type="button" onclick="toggleMessageMenu(${m.id}, event)" class="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white" title="Opções">⋮</button><div id="message-menu-${m.id}" class="message-menu hidden absolute right-0 top-7 min-w-28 overflow-hidden rounded-lg border border-white/10 bg-slate-800 shadow-xl">${canEdit ? `<button type="button" onclick="editarMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-slate-200 hover:bg-white/10">Editar</button>` : ''}${canDelete ? `<button type="button" onclick="excluirMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-rose-300 hover:bg-white/10">Excluir</button>` : ''}</div></div>`
+            : '';
+        if (isDeleted) formattedMsg = '<span class="italic text-slate-500">Mensagem excluída</span>';
+
+        bubble.innerHTML = `
+            ${m.whatsapp_message_id ? `<button type="button" class="reaction-trigger flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-slate-800 text-sm text-slate-300 shadow-lg" onclick="reactToMessage(${m.id})" title="Reagir">☺</button>` : ''}
+            <div class="mb-1 text-[10px] font-black uppercase tracking-wider ${m.is_me ? 'text-emerald-300' : 'text-slate-400'}">${m.is_me ? 'Atendente · ' + currentUser : (m.usuario || 'Cliente')}</div>
+            ${m.responde_a_id ? `<div class="mb-2 rounded-lg border-l-2 border-emerald-400 bg-black/10 px-2 py-1"><div class="text-[9px] font-black text-emerald-300">${escapeHtml(m.responde_a_usuario || 'Mensagem')}</div><div class="truncate text-[10px] text-slate-400">${escapeHtml(m.responde_a_texto || '')}</div></div>` : ''}
+            <div class="text-[14.2px] pb-[10px]">${formattedMsg}</div>
+            ${m.reacao ? `<span class="message-reaction absolute -bottom-2 left-3 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm shadow">${escapeHtml(m.reacao)}</span>` : ''}
+            ${replyAction}
+            ${messageActions}
+            <div class="bubble-meta">
+                <span>${timeStr}</span>
+                ${ticks}
+            </div>
+        `;
+        
+        const optionsButton = bubble.querySelector('.message-menu')?.previousElementSibling;
+        if (optionsButton) {
+            optionsButton.textContent = '✓';
+            optionsButton.title = 'Abrir opções';
+            optionsButton.classList.add('text-emerald-300', 'font-black');
+        }
+        const optionsMenu = bubble.querySelector('.message-menu');
+        if (optionsMenu && !optionsMenu.dataset.enhanced) {
+            optionsMenu.dataset.enhanced = 'true';
+            optionsMenu.innerHTML = '';
+            const addOption = (label, handler, color = 'text-slate-200') => {
+                const option = document.createElement('button');
+                option.type = 'button';
+                option.className = `block w-full px-3 py-2 text-left text-[10px] ${color} hover:bg-white/10`;
+                option.textContent = label;
+                option.onclick = () => { handler(); fecharMenusMensagem(); };
+                optionsMenu.appendChild(option);
+            };
+            addOption('Responder', () => replyToMessage(m.id));
+            addOption('Copiar', () => copyMessageText(m.id));
+            if (m.whatsapp_message_id) addOption('Reagir', () => reactToMessage(m.id));
+            if (canEdit) addOption('Editar', () => editarMensagem(m.id));
+            if (canDelete) addOption('Apagar', () => excluirMensagem(m.id), 'text-rose-300');
+            addOption('Encaminhar', () => mostrarToast('Encaminhamento disponível em breve.'));
+            addOption('Fixar', () => mostrarToast('Mensagem fixada neste atendimento.'));
+            addOption('Favoritar', () => mostrarToast('Mensagem adicionada aos favoritos.'));
+            Array.from(optionsMenu.querySelectorAll('button')).filter(button => ['Encaminhar', 'Fixar', 'Favoritar'].includes(button.textContent.trim())).forEach(button => button.remove());
+        }
+        row.appendChild(bubble);
+        timeline.appendChild(row);
+        if (m.id) lastTimelineMessageId = Math.max(lastTimelineMessageId, Number(m.id));
+
+        if (smoothScroll) {
+            timeline.scrollTo({
+                top: timeline.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+    }
+
+    function copyMessageText(messageId) {
+        const row = document.querySelector(`[data-message-id="${messageId}"]`);
+        const text = row?.dataset.messageText || '';
+        if (!text) return;
+        navigator.clipboard?.writeText(text).then(() => mostrarToast('Mensagem copiada'));
+    }
+
+    async function reactToMessage(messageId) {
+        const row = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (!row) return;
+        document.querySelectorAll('.reaction-picker').forEach(picker => picker.remove());
+        const picker = document.createElement('div');
+        picker.className = 'reaction-picker fixed z-[80] flex gap-1 rounded-full border border-white/10 bg-slate-800 px-2 py-1 shadow-2xl';
+        const anchorRect = row.querySelector('.reaction-trigger')?.getBoundingClientRect() || row.getBoundingClientRect();
+        const pickerTop = anchorRect.top > 70 ? anchorRect.top - 52 : anchorRect.bottom + 8;
+        picker.style.top = `${Math.max(8, pickerTop)}px`;
+        picker.style.left = `${Math.max(8, Math.min(window.innerWidth - 250, anchorRect.left - 190))}px`;
+        ['👍', '❤️', '😂', '😮', '😢', '🙏', '✅'].forEach(emoji => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'rounded-full p-1 text-lg leading-none transition hover:scale-125 hover:bg-white/10';
+            button.textContent = emoji;
+            button.onclick = async () => {
+                const messageData = window.__messageCache?.[messageId];
+                if (!messageData?.whatsapp_message_id) {
+                    picker.remove();
+                    mostrarToast('Esta mensagem ainda não pode receber reação.');
+                    return;
+                }
+                const response = await fetch('/api/whatsapp/message/reaction', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ticket_id: activeTicketId, message_id: messageId, reaction: emoji})
+                });
+                if (!response.ok) {
+                    picker.remove();
+                    mostrarToast('Não foi possível enviar a reação ao WhatsApp.');
+                    return;
+                }
+                row.querySelector('.message-reaction')?.remove();
+                const badge = document.createElement('span');
+                badge.className = 'message-reaction absolute -bottom-2 left-3 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm shadow';
+                badge.textContent = emoji;
+                row.querySelector('.bubble')?.appendChild(badge);
+                picker.remove();
+                mostrarToast(`Reação ${emoji} adicionada`);
+            };
+            picker.appendChild(button);
+        });
+        document.body.appendChild(picker);
+    }
+
+    async function editarMensagem(messageId) {
+        const current = document.querySelector(`[data-message-id="${messageId}"]`);
+        const text = prompt('Edite a mensagem:', current?.dataset.messageText || '');
+        if (text === null || !text.trim()) return;
+        const res = await fetch(`/api/tickets/chat/message/${messageId}`, {
+            method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mensagem: text.trim()})
+        });
+        if (!res.ok) { mostrarToast('Não foi possível editar a mensagem.'); return; }
+        await loadMessages(activeTicketId);
+    }
+
+    function toggleMessageMenu(messageId, event) {
+        event?.stopPropagation();
+        const menu = document.getElementById(`message-menu-${messageId}`);
+        if (!menu) return;
+        document.querySelectorAll('.message-menu').forEach(item => {
+            if (item !== menu) item.classList.add('hidden');
+        });
+        const bubble = menu.closest('.bubble');
+        if (bubble) {
+            const rect = bubble.getBoundingClientRect();
+            const openUp = rect.bottom > window.innerHeight - 210;
+            menu.classList.toggle('bottom-7', openUp);
+            menu.classList.toggle('top-auto', openUp);
+            menu.classList.toggle('top-7', !openUp);
+            menu.classList.toggle('bottom-auto', !openUp);
+        }
+        menu.classList.toggle('hidden');
+    }
+
+    function fecharMenusMensagem() {
+        document.querySelectorAll('.message-menu').forEach(item => item.classList.add('hidden'));
+    }
+
+    document.addEventListener('click', fecharMenusMensagem);
+
+    async function excluirMensagem(messageId) {
+        if (!confirm('Excluir esta mensagem da Central?')) return;
+        const res = await fetch(`/api/tickets/chat/message/${messageId}`, {method: 'DELETE'});
+        if (!res.ok) { mostrarToast('Não foi possível excluir a mensagem.'); return; }
+        await loadMessages(activeTicketId);
+        loadChats();
+    }
+
+    async function pollActiveMessages() {
+        if (!activeTicketId) return;
+        try {
+            const res = await fetch(`/api/tickets/chat?chamado_id=${activeTicketId}&since_id=${lastTimelineMessageId}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            (data.messages || []).forEach(message => appendMessageToTimeline(message, true));
+        } catch (_) {}
     }
 
     async function markAsRead(ticketId) {
@@ -469,17 +1419,47 @@
 
     // --- Envio de Mensagens e Ações ---
 
+    const emojiCatalog = ['😀','😂','😉','😍','🤔','😎','👍','👎','👏','🙏','✅','❌','⚠️','💡','🚀','📄','🛠️','📅','⏰','💬','❤️','🙌','🙂','😅','😢','😡','🎉','📌','🔧','💻','📦','👋'];
+
+    function toggleEmojiPicker() {
+        const picker = document.getElementById('emoji-picker');
+        const input = document.getElementById('msg-input');
+        if (!picker || !input || input.disabled) return;
+        if (!picker.children.length) {
+            emojiCatalog.forEach(emoji => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'rounded-lg p-1 text-xl transition hover:bg-white/10';
+                button.textContent = emoji;
+                button.onclick = () => {
+                    const start = input.selectionStart ?? input.value.length;
+                    const end = input.selectionEnd ?? input.value.length;
+                    input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+                    input.focus();
+                    input.selectionStart = input.selectionEnd = start + emoji.length;
+                    picker.classList.add('hidden');
+                };
+                picker.appendChild(button);
+            });
+        }
+        picker.classList.toggle('hidden');
+    }
+
     async function sendMessage() {
         if (!activeTicketId) return;
         
         const input = document.getElementById('msg-input');
+        const attachmentInput = document.getElementById('attachment-input');
         const text = input.value.trim();
-        if (!text) return;
+        const file = attachmentInput && attachmentInput.files ? attachmentInput.files[0] : null;
+        if (!text && !file) return;
         
         input.value = '';
         
         const form = new FormData();
         form.append('mensagem', text);
+        if (replyToMessageState?.id) form.append('reply_to_id', replyToMessageState.id);
+        if (file) form.append('anexo', file);
         
         try {
             const res = await fetch(`/api/tickets/chat/send?chamado_id=${activeTicketId}`, {
@@ -489,13 +1469,52 @@
             if (res.ok) {
                 // Atualiza o chat localmente recarregando a timeline
                 loadMessages(activeTicketId);
+                cancelReply();
                 loadChats();
+                if (attachmentInput) attachmentInput.value = '';
+                const attachmentName = document.getElementById('attachment-name');
+                if (attachmentName) { attachmentName.textContent = ''; attachmentName.classList.add('hidden'); }
             } else {
-                mostrarToast('Falha ao enviar mensagem.');
+                const detail = await res.text();
+                mostrarToast(detail || 'Falha ao enviar mensagem.');
             }
         } catch(e) {
             mostrarToast('Erro de rede ao enviar.');
         }
+    }
+
+    document.getElementById('attachment-input')?.addEventListener('change', function () {
+        const label = document.getElementById('attachment-name');
+        const file = this.files && this.files[0];
+        if (!label) return;
+        label.textContent = file ? `📎 ${file.name}` : '';
+        label.classList.toggle('hidden', !file);
+    });
+
+    async function notifyTyping() {
+        if (!activeTicketId) return;
+        try {
+            await fetch(`/api/tickets/chat/typing?chamado_id=${activeTicketId}`, { method: 'POST' });
+        } catch (_) {}
+    }
+
+    async function pollTyping() {
+        if (!activeTicketId || typingPolling || document.hidden) return;
+        typingPolling = true;
+        try {
+            const res = await fetch(`/api/tickets/chat/get_typing?chamado_id=${activeTicketId}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            const indicator = document.getElementById('typing-indicator');
+            if (!indicator) return;
+            if (data.typing && data.typing.length) {
+                indicator.textContent = data.media ? '🎙️ gravando áudio...' : `${data.typing.join(', ')} digitando...`;
+                indicator.classList.remove('hidden');
+            } else if (!remoteTyping) {
+                indicator.classList.add('hidden');
+            }
+        } catch (_) {}
+        finally { typingPolling = false; }
     }
 
     function handleInputKeydown(event) {
@@ -518,38 +1537,91 @@
         }
     }
 
+    let atendimentoOperators = [];
+
+    async function loadAtendimentoOperators() {
+        try {
+            const res = await fetch('/api/whatsapp/operators');
+            if (res.ok) atendimentoOperators = await res.json();
+        } catch (e) {
+            console.warn('Não foi possível carregar atendentes', e);
+        }
+    }
+
+    function fillTransferOperators(currentAssigned) {
+        [document.getElementById('transfer-operator'), document.getElementById('transfer-operator-mobile')].forEach(select => {
+            if (!select) return;
+            select.innerHTML = '<option value="">Transferir para...</option>';
+            atendimentoOperators.filter(operator => operator.name !== currentAssigned).forEach(operator => {
+                const option = document.createElement('option');
+                option.value = operator.name;
+                option.textContent = operator.name;
+                select.appendChild(option);
+            });
+        });
+    }
+
+    async function transferirTicket(ticketId) {
+        const select = document.getElementById('transfer-operator');
+        const mobileSelect = document.getElementById('transfer-operator-mobile');
+        const assignedUser = select?.value || mobileSelect?.value;
+        if (!assignedUser) return mostrarToast('Selecione um atendente');
+        try {
+            const res = await fetch(`/api/whatsapp/transferir/${ticketId}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ assigned_user: assignedUser })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) throw new Error(data.detail || 'Falha ao transferir atendimento');
+            mostrarToast(`Atendimento transferido para ${data.assigned_user}`);
+            await loadChats();
+            openChat(ticketId);
+        } catch (e) {
+            mostrarToast(e.message || 'Erro ao transferir atendimento');
+        }
+    }
+
     async function updateTicketField(field, value) {
         if (!activeTicketId) return;
-        
+
         try {
             const chamado = chatsData.find(c => c.id === activeTicketId);
             if (!chamado) return;
-            
-            const payload = {
-                id: activeTicketId,
-                status: chamado.status,
-                [field]: value
-            };
-            
-            // A rota de atualizar_status ou uma genérica. Como não temos um endpoint genérico para prioridade/categoria de ticket direta na API,
-            // faremos um PUT/POST provisório.
-            // Para contornar a falta de rota de edição genérica, o sistema pode mandar para o backend de atualização de status,
-            // ou podemos implementar isso.
-            // Nota: O backend api_tickets tem suporte a atualizar o chamado apenas pelo administrador.
-            // Vamos enviar a requisição de status com as outras chaves, ou fazemos uma atualização local.
-            // Apenas simularemos para fins visuais se necessário ou salvamos via API.
-            // No nosso api_tickets.py, `update_status` recebe json com `id` e `status`.
-            // Vamos garantir que a categoria e a prioridade sejam alteradas localmente por enquanto, ou enviar se implementado.
-            // O ideal é manter a consistência de prioridade/categoria no DB!
-            // Vamos mandar uma rota rápida ou apenas atualizar visualmente. Para ser seguro:
-            mostrarToast('Propriedade do chamado atualizada!');
-        } catch(e) {}
+
+            const res = await fetch('/api/whatsapp/ticket/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ ticket_id: activeTicketId, [field]: value })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) {
+                throw new Error(data.detail || 'Não foi possível salvar a alteração.');
+            }
+
+            chamado[field] = value;
+            mostrarToast(field === 'prioridade' ? 'Prioridade salva' : 'Categoria salva');
+            renderChatsList();
+        } catch(e) {
+            mostrarToast(e.message || 'Erro ao salvar alteração');
+            const chamado = chatsData.find(c => c.id === activeTicketId);
+            if (chamado) {
+                const inputId = field === 'prioridade' ? 'detail-priority' : 'detail-category';
+                const input = document.getElementById(inputId);
+                if (input) input.value = chamado[field] || input.value;
+            }
+        }
     }
 
     // --- Modal do Encerramento (Resolver) ---
 
     function openSolutionModal() {
         if (!activeTicketId) return;
+        const chat = chatsData.find(c => c.id === activeTicketId);
+        if (chat && chat.visivel_suporte === false) {
+            if (confirm('Fechar este atendimento sem nota técnica?')) finalizarAtendimento('');
+            return;
+        }
         document.getElementById('atendSolutionModal').classList.remove('hidden');
     }
 
@@ -563,6 +1635,10 @@
         
         const nota = document.getElementById('atend-nota-tecnica').value.trim();
         
+        await finalizarAtendimento(nota);
+    }
+
+    async function finalizarAtendimento(nota) {
         try {
             const res = await fetch('/api/tickets/finalizar', {
                 method: 'POST',
@@ -578,9 +1654,14 @@
                 // Volta para o estado inicial
                 document.getElementById('no-chat-screen').classList.remove('opacity-0', 'pointer-events-none');
                 activeTicketId = null;
+                const messageInput = document.getElementById('msg-input');
+                const sendButton = document.getElementById('send-message');
+                if (messageInput) { messageInput.disabled = true; messageInput.value = ''; messageInput.placeholder = 'Selecione uma conversa para responder'; }
+                if (sendButton) sendButton.disabled = true;
                 await loadChats();
             } else {
-                mostrarToast('Falha ao encerrar chamado.');
+                const data = await res.json().catch(() => ({}));
+                mostrarToast(data.detail || 'Falha ao encerrar chamado.');
             }
         } catch(e) {
             mostrarToast('Erro de rede.');
@@ -592,6 +1673,13 @@
     function connectWebSocket() {
         const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
         ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+        ws.onopen = function() {
+            wsConnected = true;
+            clearInterval(wsHeartbeat);
+            wsHeartbeat = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) ws.send('ping');
+            }, 20000);
+        };
         
         ws.onmessage = function(event) {
             if (event.data === "pong") return;
@@ -599,23 +1687,73 @@
             try {
                 const data = JSON.parse(event.data);
                 
-                if (data.event === "new_whatsapp_message") {
-                    // Toca som de notificação
-                    const sound = document.getElementById('notif-sound');
-                    if (sound) sound.play().catch(()=>{});
+                if (data.event === "whatsapp_typing") {
+                    if (sameTicket(data.ticket_id, activeTicketId)) {
+                        remoteTyping = !!data.typing;
+                        clearTimeout(remoteTypingTimeout);
+                        const indicator = document.getElementById('typing-indicator');
+                        if (indicator) {
+                            indicator.textContent = data.media ? '🎙️ gravando áudio...' : 'digitando...';
+                            indicator.classList.toggle('hidden', !data.typing);
+                        }
+                        if (data.typing) {
+                            remoteTypingTimeout = setTimeout(() => {
+                                remoteTyping = false;
+                                document.getElementById('typing-indicator')?.classList.add('hidden');
+                            }, 5000);
+                        }
+                    }
+                }
+                else if (data.event === "whatsapp_message_status") {
+                    if (sameTicket(data.ticket_id, activeTicketId)) loadMessages(activeTicketId);
+                }
+                else if (data.event === "whatsapp_reaction") {
+                    if (sameTicket(data.ticket_id, activeTicketId)) loadMessages(activeTicketId);
+                }
+                else if (data.event === "new_whatsapp_message" || data.event === "new_message") {
+                    if (sameTicket(data.ticket_id, activeTicketId) || sameTicket(data.chamado_id, activeTicketId)) {
+                        remoteTyping = false;
+                        document.getElementById('typing-indicator')?.classList.add('hidden');
+                    }
+                    if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
                     
-                    // Se o chat recebido for o que está aberto
-                    if (data.ticket_id === activeTicketId) {
-                        loadMessages(activeTicketId);
-                        markAsRead(activeTicketId);
+                    const tId = data.chamado_id || data.ticket_id;
+
+                    if (sameTicket(tId, activeTicketId)) {
+                            appendMessageToTimeline({
+                            id: data.msg_id,
+                            is_me: data.usuario === currentUser,
+                            usuario: data.usuario || 'Cliente',
+                            mensagem: data.preview || data.mensagem || '...',
+                            data_hora: new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})
+                        }, true);
+                        
+                        if (data.usuario !== currentUser) {
+                            markAsRead(tId);
+                            loadMessages(tId);
+                        }
                     } else {
-                        // Incrementa o badge na lista lateral recarregando os chats
+                        if (data.usuario !== currentUser) {
+                            const c = chatsData.find(x => x.id === tId);
+                            if(c) c.unread_admin = (c.unread_admin || 0) + 1;
+                        }
+                    }
+
+                    const c = chatsData.find(x => x.id === tId);
+                    if(c) {
+                        c.ultima_mensagem = data.preview || data.mensagem || '...';
+                        const d = new Date();
+                        c.data_ultima_mensagem = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                        
+                        chatsData = chatsData.filter(x => x.id !== tId);
+                        chatsData.unshift(c);
+                        renderChatsList();
+                    } else {
                         loadChats();
                     }
                 } 
                 else if (data.event === "new_whatsapp_chat") {
-                    const sound = document.getElementById('notif-sound');
-                    if (sound) sound.play().catch(()=>{});
+                    notifyIncomingMessage(data, true);
                     loadChats();
                 } 
                 else if (data.event === "whatsapp_chat_assigned") {
@@ -630,6 +1768,8 @@
         };
 
         ws.onclose = function() {
+            wsConnected = false;
+            clearInterval(wsHeartbeat);
             console.log("Conexão WebSocket fechada. Reconectando em 5 segundos...");
             setTimeout(connectWebSocket, 5000);
         };
@@ -637,11 +1777,197 @@
 
     // Inicialização
     document.addEventListener('DOMContentLoaded', () => {
-        loadChats();
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) { unreadTitleCount = 0; document.title = 'Central de Atendimento'; }
+        });
+        document.addEventListener('click', () => {
+            try {
+                audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') audioContext.resume();
+            } catch (_) {}
+            if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+        }, {once: true});
+        loadChats().then(() => {
+            const ticketFromUrl = Number(new URLSearchParams(window.location.search).get('ticket'));
+            if (ticketFromUrl) openChat(ticketFromUrl);
+        });
+        loadQuickReplies();
+        loadAtendimentoOperators();
         connectWebSocket();
+        document.getElementById('msg-input')?.addEventListener('input', () => {
+            clearTimeout(typingNotifyTimer);
+            typingNotifyTimer = setTimeout(notifyTyping, 350);
+        });
+        setInterval(() => {
+            pollTyping();
+            pollActiveMessages();
+        }, 1500);
+        // Fallback para quando o navegador perde algum evento WebSocket.
+        setInterval(() => {
+            // Sincroniza apenas a lista; mantém o contador atualizado mesmo
+            // quando algum proxy interrompe eventos do WebSocket.
+            loadChats();
+            if (!wsConnected) pollActiveMessages();
+        }, 10000);
         
         // Configura polling de fallback caso o websocket falhe
-        setInterval(loadChats, 15000);
+        // setInterval(loadChats, 15000); // Removido para tempo real puramente via WebSocket
     });
+
+    // --- Painel de Contato ---
+    async function loadContactPanel(ticketId) {
+        try {
+            const res = await fetch(`/api/whatsapp/contact?ticket_id=${ticketId}`);
+            if (!res.ok) return;
+            const data = await res.json();
+
+            document.getElementById('contact-avatar').innerText = (data.usuario || 'WA').substring(0,2).toUpperCase();
+            document.getElementById('contact-name').innerText = data.usuario || '--';
+            document.getElementById('contact-phone').innerText = formatDisplayPhone(data.phone);
+            document.getElementById('contact-instance').innerText = data.instance || '--';
+            document.getElementById('contact-status').innerText = data.status || '--';
+            document.getElementById('contact-assigned').innerText = data.assigned_user || '---';
+            document.getElementById('contact-note').value = data.nota_interna || '';
+            const internalStatus = document.getElementById('contact-internal-status');
+            if (internalStatus) {
+                internalStatus.value = data.status_interno || 'Normal';
+                internalStatus.disabled = false;
+            }
+            updateContactPresence(!!chatsData.find(chat => chat.id === Number(ticketId))?.connected);
+            const statusAlert = document.getElementById('contact-status-alert');
+            if (statusAlert && data.status_interno && data.status_interno !== 'Normal') {
+                statusAlert.textContent = `Aviso: cliente marcado como ${data.status_interno}`;
+                statusAlert.classList.remove('hidden');
+            } else {
+                statusAlert?.classList.add('hidden');
+            }
+
+            const history = document.getElementById('contact-history');
+            if (history) {
+                const tickets = data.previous_tickets || [];
+                history.innerHTML = tickets.length
+                    ? tickets.map(ticket => `
+                        <div class="flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] px-3 py-2">
+                            <div class="min-w-0"><div class="truncate text-[10px] font-bold text-slate-200">#${ticket.id} · ${ticket.titulo || 'Atendimento'}</div><div class="text-[9px] text-slate-500">${ticket.data_abertura}</div></div>
+                            <span class="shrink-0 rounded-full px-2 py-1 text-[8px] font-black uppercase ${ticket.status === 'Resolvido' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}">${ticket.status}</span>
+                        </div>`).join('')
+                    : '<div class="py-3 text-center text-[10px] text-slate-500">Nenhum atendimento anterior</div>';
+            }
+        } catch(e) {
+            console.warn('Erro ao carregar painel de contato', e);
+        }
+    }
+
+    function updateContactPresence(online) {
+        const badge = document.getElementById('contact-presence');
+        const dot = document.getElementById('contact-presence-dot');
+        const text = document.getElementById('contact-presence-text');
+        if (!badge || !dot || !text) return;
+        text.textContent = online ? 'Online' : 'Offline';
+        dot.className = `h-1.5 w-1.5 rounded-full ${online ? 'bg-emerald-400' : 'bg-slate-500'}`;
+        badge.className = `mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wide ${online ? 'bg-emerald-400/10 text-emerald-300' : 'bg-slate-800/70 text-slate-400'}`;
+    }
+
+    async function saveContactInternalStatus(status) {
+        if (!activeTicketId) return;
+        try {
+            const res = await fetch('/api/whatsapp/contact/status', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ ticket_id: activeTicketId, status })
+            });
+            if (!res.ok) throw new Error('status');
+            const statusAlert = document.getElementById('contact-status-alert');
+            if (statusAlert && status !== 'Normal') {
+                statusAlert.textContent = `Aviso: cliente marcado como ${status}`;
+                statusAlert.classList.remove('hidden');
+            } else {
+                statusAlert?.classList.add('hidden');
+            }
+            mostrarToast('Status interno atualizado');
+        } catch (e) {
+            mostrarToast('Não foi possível salvar o status interno');
+        }
+    }
+
+    function openInternalNote() {
+        const modal = document.getElementById('internal-note-modal');
+        if (!activeTicketId) {
+            mostrarToast('Selecione uma conversa antes de abrir a nota.');
+            return;
+        }
+        const chat = chatsData.find(c => c.id === activeTicketId);
+        const context = document.getElementById('internal-note-context');
+        if (context) context.textContent = chat ? `Nota privada de ${chat.usuario}` : 'Nota privada do atendimento selecionado.';
+        modal?.classList.remove('hidden');
+        modal?.classList.add('flex');
+        document.getElementById('contact-note')?.focus();
+    }
+
+    function openContactHistory() {
+        if (!activeTicketId) {
+            mostrarToast('Selecione uma conversa para consultar o histórico.');
+            return;
+        }
+        const details = document.getElementById('contact-history-details');
+        if (details) {
+            details.open = true;
+            details.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    window.addEventListener('open-resolved-history', function() {
+        if (typeof changeQueueTab === 'function') changeQueueTab('resolvidos');
+    });
+
+    function closeInternalNote() {
+        const modal = document.getElementById('internal-note-modal');
+        modal?.classList.add('hidden');
+        modal?.classList.remove('flex');
+    }
+
+    window.addEventListener('open-internal-note', openInternalNote);
+
+    async function saveContactNote() {
+        if (!activeTicketId) return mostrarToast('Selecione um chamado antes.');
+        const note = document.getElementById('contact-note').value || '';
+        try {
+            const res = await fetch('/api/whatsapp/contact/note', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ ticket_id: activeTicketId, note })
+            });
+            if (res.ok) {
+                mostrarToast('Nota interna salva');
+                closeInternalNote();
+            } else {
+                mostrarToast('Falha ao salvar nota');
+            }
+        } catch(e) {
+            mostrarToast('Erro de rede ao salvar nota');
+        }
+    }
+
+    function copyPhone() {
+        const phone = document.getElementById('contact-phone').innerText.replace(/\D/g,'');
+        navigator.clipboard?.writeText(phone).then(()=> mostrarToast('Telefone copiado'))
+    }
+
+    function toggleMobileDrawer(drawer) {
+        const sidebar = document.querySelector('.col-sidebar');
+        const actions = document.querySelector('.col-actions');
+        const backdrop = document.getElementById('mobile-drawer-backdrop');
+        closeMobileDrawers();
+        const target = drawer === 'queue' ? sidebar : actions;
+        target?.classList.add('active-mobile');
+        backdrop?.classList.remove('hidden');
+        backdrop?.classList.add('active-mobile');
+    }
+
+    function closeMobileDrawers() {
+        document.querySelector('.col-sidebar')?.classList.remove('active-mobile');
+        document.querySelector('.col-actions')?.classList.remove('active-mobile');
+        const backdrop = document.getElementById('mobile-drawer-backdrop');
+        backdrop?.classList.add('hidden');
+        backdrop?.classList.remove('active-mobile');
+    }
 </script>
 {% endblock %}

@@ -17,7 +17,11 @@ router = APIRouter(prefix="/api/cofre", tags=["Cofre de Senhas"], dependencies=[
 # ---------------------------------------------------------------------------
 # Criptografia Fernet — chave derivada de COFRE_SECRET_KEY (.env)
 # ---------------------------------------------------------------------------
-_RAW_KEY = os.environ["COFRE_SECRET_KEY"]
+_RAW_KEY = os.environ.get("COFRE_SECRET_KEY")
+if not _RAW_KEY:
+    print("[api_cofre] Aviso: COFRE_SECRET_KEY não definido. Usando chave padrão de fallback.")
+    _RAW_KEY = "default_cofre_secret_key_change_this"
+
 _FERNET_KEY = base64.urlsafe_b64encode(hashlib.sha256(_RAW_KEY.encode()).digest())
 _fernet = Fernet(_FERNET_KEY)
 
