@@ -90,8 +90,17 @@ async def login(
                     status_code=403,
                 )
 
-            if intent == "suporte":
+            try:
+                user_perms = normalize_permissions(json.loads(user.permissoes or "[]"))
+            except Exception:
+                user_perms = []
+
+            if intent == "atendimento":
+                if user.role != "admin" and "Atendimento" not in user_perms and "Suporte" not in user_perms:
+                    return JSONResponse({"success": False, "detail": "Este usuário não possui permissão para Atendimento."}, status_code=403)
                 redirect = "/central-atendimento"
+            elif intent == "suporte":
+                redirect = "/chamados"
             elif user.role in ("admin", "gestor") and intent == "gestao":
                 redirect = "/"
             else:

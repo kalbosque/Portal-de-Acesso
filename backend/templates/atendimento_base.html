@@ -16,10 +16,14 @@
         .attendance-nav a { text-decoration: none; }
         .attendance-action { background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(255,255,255,0.08); }
         .attendance-action:hover { background: rgba(15, 23, 42, 0.9); }
-        .attendance-menu-toggle { display: inline-flex; position: fixed; left: 22px; top: 109px; width: 90px; height: 40px; padding: 0; justify-content: center; z-index: 80; }
+        .attendance-menu-toggle { display: inline-flex; position: fixed; left: 22px; top: 109px; width: 58px; height: 40px; padding: 0; justify-content: center; z-index: 80; font-size: 0; }
+        .attendance-menu-toggle::before { content: '☰'; font-size: 1rem; line-height: 1; }
         .attendance-menu-toggle span { display: none; }
         .attendance-nav { display: flex !important; position: fixed; left: 22px; top: 196px; transform: none; z-index: 90; flex-direction: column; align-items: stretch; gap: .15rem; width: 218px; min-width: 218px; padding: .55rem; border: 1px solid rgba(148,163,184,.22); border-radius: 1rem; background: #101827; box-shadow: 0 22px 48px rgba(0,0,0,.55); }
-        .attendance-nav.mobile-open { display: flex !important; }
+        .attendance-menu-toggle { display: inline-flex !important; visibility: visible !important; opacity: 1 !important; }
+        .attendance-nav { display: none !important; visibility: hidden; opacity: 0; }
+        .attendance-nav.menu-collapsed,
+        .attendance-nav.mobile-open { display: flex !important; visibility: visible; opacity: 1; }
         .attendance-nav a, .attendance-nav button { width: 100%; justify-content: flex-start; min-height: 42px; padding: .55rem .85rem; border-radius: .7rem; white-space: nowrap; border: 1px solid transparent; cursor: pointer; }
         .attendance-nav.menu-collapsed { width: 58px; min-width: 58px; }
         .attendance-nav.menu-collapsed a, .attendance-nav.menu-collapsed button { justify-content: center; padding-left: .35rem; padding-right: .35rem; font-size: 0; }
@@ -35,14 +39,13 @@
         .attendance-nav a[href="/central-atendimento/configuracoes"]::before { content: none !important; display: none; }
         .attendance-nav.menu-collapsed a::before, .attendance-nav.menu-collapsed button::before { content: none !important; display: none; }
         .attendance-nav .menu-icon svg { width: 1.1rem; height: 1.1rem; display: block; }
-        body.attendance-subpage .attendance-nav, body.attendance-subpage .attendance-menu-toggle { display: none !important; }
         .attendance-nav a:hover, .attendance-nav button:hover, .attendance-nav .menu-current { background: rgba(13,148,136,.28); border-color: rgba(45,212,191,.12); color: #f8fafc; }
         .attendance-nav .menu-logout:hover { background: rgba(244,63,94,.16); border-color: rgba(251,113,133,.2); color: #fecdd3; }
         body.attendance-menu-expanded main { padding-left: 250px !important; transition: none !important; }
         .attendance-nav a[href="/central-atendimento/configuracoes"]::before { content: '⚙'; margin-right: .55rem; font-size: 1rem; }
         @media (max-width: 1200px) {
             .attendance-nav { left: 22px; top: 196px; }
-            .attendance-menu-toggle { left: 22px; top: 109px; width: 90px; height: 40px; }
+            .attendance-menu-toggle { left: 22px; top: 109px; width: 58px; height: 40px; }
             header > div { position: relative; padding-left: 1rem; }
         }
         @media (min-width: 1201px) {
@@ -50,26 +53,29 @@
         }
     </style>
 </head>
-<body class="page-shell{% if request.url.path != '/central-atendimento' %} attendance-subpage{% endif %}">
+<body class="page-shell">
     {% if authenticated|default(false) %}
     <header class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl shadow-[0_10px_40px_-24px_rgba(0,0,0,0.5)]">
         <div class="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
             <div class="attendance-brand flex items-center gap-4">
-                <div class="flex h-12 w-12 items-center justify-center rounded-3xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 shadow-sm">
+                <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded-3xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 shadow-sm">
+                    {% if config.APP_LOGO_URL %}<img src="/static/{{ config.APP_LOGO_URL }}" alt="Logo" class="h-full w-full object-contain p-1">{% else %}
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                    {% endif %}
                 </div>
                 <div>
                     <p class="text-[10px] uppercase tracking-[0.35em] text-emerald-300 font-black">Central de Atendimento</p>
                     <h1 class="text-lg font-black tracking-tight">{{ config.APP_NAME }}</h1>
                 </div>
             </div>
-            <button type="button" class="attendance-menu-toggle items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200" onclick="toggleAttendanceMenu(event)" aria-label="Abrir menu">☰ Menu</button>
-            <div class="flex flex-wrap items-center gap-2 attendance-nav mobile-open menu-collapsed">
+            <button type="button" class="attendance-menu-toggle items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200" onclick="toggleAttendanceMenu(event)" aria-label="Abrir menu"></button>
+            <div class="flex flex-wrap items-center gap-2 attendance-nav menu-collapsed">
                 <a href="/central-atendimento" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">💬</span>Conversas</a>
+                {% if user_role == 'admin' %}<a href="/central-atendimento/dashboard" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-indigo-500/15"><span class="menu-icon shrink-0" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>Painel</a>{% endif %}
                 <a href="/central-atendimento/contatos" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">👥</span>Contatos</a>
                 <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-internal-note'))" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-amber-500/15"><span aria-hidden="true">📝</span>Nota interna</button>
-                <a href="/central-atendimento/configuracoes" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15">Configurações</a>
-                <a href="/login?intent=" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-white/10"><span aria-hidden="true">↩</span>Portal Geral</a>
+                {% if user_role != 'cliente_atendimento' %}<a href="/central-atendimento/configuracoes" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15">Configurações</a>{% endif %}
+                {% if user_role != 'cliente_atendimento' %}<a href="/login?intent=" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-white/10"><span aria-hidden="true">↩</span>Portal Geral</a>{% endif %}
                 <button type="button" onclick="sairDaCentral(event)" class="menu-logout inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-rose-200 transition"><span aria-hidden="true">⏻</span>Sair</button>
             </div>
         </div>
@@ -83,27 +89,27 @@
             event?.stopPropagation();
             const menu = document.querySelector('.attendance-nav');
             if (!menu) return;
-            if (!menu.classList.contains('mobile-open')) {
+            const isOpen = menu.classList.contains('menu-collapsed');
+            if (isOpen) {
                 menu.classList.add('mobile-open');
                 menu.classList.remove('menu-collapsed');
                 document.body.classList.add('attendance-menu-expanded');
-            } else if (!menu.classList.contains('menu-collapsed')) {
+            } else {
+                menu.classList.remove('mobile-open');
                 menu.classList.add('menu-collapsed');
                 document.body.classList.remove('attendance-menu-expanded');
-            } else {
-                menu.classList.remove('menu-collapsed');
-                document.body.classList.add('attendance-menu-expanded');
             }
         }
         function closeAttendanceMenu(event) {
             event?.stopPropagation();
-            document.querySelector('.attendance-nav')?.classList.add('mobile-open', 'menu-collapsed');
+            document.querySelector('.attendance-nav')?.classList.remove('mobile-open');
+            document.querySelector('.attendance-nav')?.classList.add('menu-collapsed');
             document.body.classList.remove('attendance-menu-expanded');
         }
         async function sairDaCentral(event) {
             event?.stopPropagation();
             try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
-            window.location.href = '/login?intent=';
+            window.location.href = '/atendimento/login';
         }
         document.addEventListener('click', function(event) {
             const menu = document.querySelector('.attendance-nav');

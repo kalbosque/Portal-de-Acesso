@@ -569,6 +569,15 @@ def get_chat_legacy(chamado_id: int, request: Request):
             .where(ChamadoInteracao.chamado_id == chamado_id)
             .order_by(ChamadoInteracao.data_hora)
         ).all()
+        seen_whatsapp_ids = set()
+        unique_msgs = []
+        for message in msgs:
+            external_id = str(message.whatsapp_message_id or '').strip()
+            if external_id and external_id in seen_whatsapp_ids:
+                continue
+            if external_id:
+                seen_whatsapp_ids.add(external_id)
+            unique_msgs.append(message)
         return [
             {
                 "id": m.id,
@@ -586,7 +595,7 @@ def get_chat_legacy(chamado_id: int, request: Request):
                 "can_delete": _message_can_delete(m, user_name, user_role),
                 "whatsapp_status": m.whatsapp_status or "sent",
             }
-            for m in msgs
+            for m in unique_msgs
         ]
 
 

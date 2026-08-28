@@ -1,6 +1,16 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    #field-role option {
+        background-color: #0f172a !important;
+        color: #f8fafc !important;
+    }
+    #field-role option:checked {
+        background-color: #4f46e5 !important;
+        color: #ffffff !important;
+    }
+</style>
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12 animate-fade-in">
     
     <!-- Header Executivo Modernizado -->
@@ -44,7 +54,7 @@
                         <div class="flex items-center gap-2">
                             <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">@{{ u.username }}</span>
                             <span class="w-1 h-1 rounded-full bg-slate-700"></span>
-                            <span class="text-[9px] font-bold text-slate-500 uppercase">{{ u.role }}</span>
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">{{ 'Cliente Atendimento' if u.role == 'cliente_atendimento' else u.role }}</span>
                         </div>
                     </div>
                 </div>
@@ -118,6 +128,20 @@
                     <input type="email" name="email" placeholder="email@empresa.com" required class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
                 </div>
             </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Nome da empresa do cliente</label>
+                    <input type="text" name="empresa_nome" id="field-empresa-nome" placeholder="Ex.: Empresa Cliente" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Logo da empresa</label>
+                    <input type="file" name="empresa_logo_upload" id="field-empresa-logo" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" class="w-full text-xs text-slate-500 file:mr-4 file:rounded-xl file:border-0 file:bg-indigo-500/10 file:px-4 file:py-2 file:text-indigo-300">
+                    <div id="empresa-logo-current" class="mt-2 hidden items-center gap-2 text-[10px] text-slate-400">
+                        <img id="empresa-logo-preview" src="" alt="Logo atual" class="h-8 w-8 rounded-lg border border-white/10 bg-slate-900 object-contain p-1">
+                        <span>Logo atual cadastrada. Selecione outra para substituir.</span>
+                    </div>
+                </div>
+            </div>
 
             <div id="auth-fields" class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
@@ -136,8 +160,10 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div class="md:col-span-1">
                     <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Nível Hierárquico</label>
-                    <select name="role" id="field-role" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none">
+                    <select name="role" id="field-role" style="color-scheme: dark" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none [&>option]:bg-slate-900 [&>option]:text-white">
                         <option value="operator">Operador</option>
+                        <option value="recepcao">Recepção / Triagem</option>
+                        <option value="cliente_atendimento">Cliente Atendimento</option>
                         <option value="admin">Administrador</option>
                     </select>
                 </div>
@@ -203,6 +229,9 @@
         document.getElementById('field-uid').value = '';
         document.getElementById('auth-fields').classList.remove('hidden');
         document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+        document.getElementById('empresa-logo-current')?.classList.add('hidden');
+        document.getElementById('empresa-logo-current')?.classList.remove('flex');
+        toggleClientAttendanceProfile();
         openModal('modal-user');
     }
 
@@ -211,6 +240,18 @@
         document.getElementById('field-uid').value = u.id;
         document.getElementById('form-user').nome.value = u.nome || '';
         document.getElementById('form-user').email.value = u.email || '';
+        document.getElementById('field-empresa-nome').value = u.empresa_nome || '';
+        document.getElementById('field-empresa-logo').value = '';
+        const logoBox = document.getElementById('empresa-logo-current');
+        const logoPreview = document.getElementById('empresa-logo-preview');
+        if (u.empresa_logo_url && logoPreview && logoBox) {
+            logoPreview.src = '/static/' + u.empresa_logo_url;
+            logoBox.classList.remove('hidden');
+            logoBox.classList.add('flex');
+        } else {
+            logoBox?.classList.add('hidden');
+            logoBox?.classList.remove('flex');
+        }
         document.getElementById('field-role').value = u.role || 'operator';
         document.getElementById('auth-fields').classList.add('hidden'); // Esconde login/senha na edição rápida
         
@@ -223,6 +264,7 @@
                 if(cb) cb.checked = true;
             });
         } catch(e) {}
+        toggleClientAttendanceProfile();
         
         openModal('modal-user');
     }
@@ -252,8 +294,11 @@
         console.log('Enviando permissões:', perms);
         
         try {
-            const res = await fetch(endpoint, { method: 'POST', body: fd }).then(r => r.json());
-            if(res.success) {
+            const response = await fetch(endpoint, { method: 'POST', body: fd });
+            const raw = await response.text();
+            let res;
+            try { res = JSON.parse(raw); } catch (_) { res = {success: false, detail: raw}; }
+            if(response.ok && res.success) {
                 alert('Configurações salvas com sucesso!');
                 window.location.reload();
             } else {
@@ -278,5 +323,19 @@
         const res = await fetch('/api/usuarios/delete', { method: 'POST', body: fd }).then(r => r.json());
         if(res.success) window.location.reload(); else alert(res.detail || 'Erro ao excluir');
     }
+
+    function toggleClientAttendanceProfile() {
+        const role = document.getElementById('field-role');
+        const isClient = role?.value === 'cliente_atendimento';
+        document.querySelectorAll('input[name="perms"]').forEach(input => {
+            if (isClient) {
+                input.checked = input.value === 'Atendimento';
+                input.disabled = input.value !== 'Atendimento';
+            } else {
+                input.disabled = false;
+            }
+        });
+    }
+    document.getElementById('field-role')?.addEventListener('change', toggleClientAttendanceProfile);
 </script>
 {% endblock %}

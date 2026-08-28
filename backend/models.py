@@ -12,6 +12,8 @@ class Usuario(SQLModel, table=True):
     role: str = Field(default="operator")
     status_conta: str = Field(default="ativo")
     permissoes: str = Field(default="[]")
+    empresa_nome: Optional[str] = None
+    empresa_logo_url: Optional[str] = None
     senha_temp: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
 

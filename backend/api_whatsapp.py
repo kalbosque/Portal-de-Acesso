@@ -3,11 +3,12 @@ import json
 import time
 import base64
 import re
+import uuid
 import requests
 from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
-from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Body
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Body, UploadFile, File
 from sqlalchemy import text
 from sqlmodel import Session, select, desc
 
@@ -414,6 +415,11 @@ def _can_manage_atendimento(request: Request, role: str = "") -> bool:
         return False
 
 
+def _is_reception_role(role: str = "") -> bool:
+    normalized = (role or "").strip().lower()
+    return normalized in {"recepcao", "recepção", "recepcionista"}
+
+
 def _require_atendimento_access(request: Request):
     """Protege as operações do módulo sem bloquear o webhook da Evolution API."""
     user_id = get_signed_cookie(request, "user_id")
@@ -421,6 +427,8 @@ def _require_atendimento_access(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Não autenticado")
     if user_role == "admin":
+        return
+    if _is_reception_role(user_role):
         return
 
     try:
@@ -490,6 +498,8 @@ def list_whatsapp_instances(request: Request):
         "default_instance": default_instance,
         "auto_create_tickets": bool(get_whatsapp_config().get("WHATSAPP_AUTO_CREATE_TICKETS", True)),
         "show_groups": bool(get_whatsapp_config().get("WHATSAPP_SHOW_GROUPS", False)),
+        "chat_background_color": get_whatsapp_config().get("WHATSAPP_CHAT_BACKGROUND_COLOR", "#0b141a"),
+        "chat_background_image": get_whatsapp_config().get("WHATSAPP_CHAT_BACKGROUND_IMAGE", ""),
         "total": len(detailed),
         "connected": connected_count
     }
@@ -549,6 +559,51 @@ def save_groups_setting(request: Request, payload: dict = Body(...)):
     config["WHATSAPP_SHOW_GROUPS"] = bool(payload.get("enabled", False))
     save_whatsapp_config(config)
     return {"success": True, "enabled": config["WHATSAPP_SHOW_GROUPS"]}
+
+
+@router.post("/settings/chat-background")
+def save_chat_background_setting(request: Request, payload: dict = Body(...)):
+    _require_admin(request)
+    color = str(payload.get("color") or "#0b141a").strip()
+    image = str(payload.get("image") or "").strip()
+    if not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+        raise HTTPException(status_code=400, detail="Cor de fundo inválida")
+    if image and not image.lower().startswith(("https://", "http://")):
+        raise HTTPException(status_code=400, detail="A imagem deve usar uma URL http ou https")
+    config = get_whatsapp_config()
+    config["WHATSAPP_CHAT_BACKGROUND_COLOR"] = color
+    config["WHATSAPP_CHAT_BACKGROUND_IMAGE"] = image
+    save_whatsapp_config(config)
+    return {"success": True, "color": color, "image": image}
+
+
+@router.post("/settings/chat-background/upload")
+async def upload_chat_background(request: Request, file: UploadFile = File(...)):
+    _require_admin(request)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Selecione uma imagem")
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Use uma imagem JPG, PNG, WEBP ou GIF")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="A imagem está vazia")
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="A imagem deve ter no máximo 8 MB")
+
+    extension = os.path.splitext(file.filename)[1].lower() or ".img"
+    upload_dir = os.path.join(_BASE_DIR, "public_html", "uploads", "chat_background")
+    os.makedirs(upload_dir, exist_ok=True)
+    stored_name = f"chat-bg-{uuid.uuid4().hex}{extension}"
+    stored_path = os.path.join(upload_dir, stored_name)
+    with open(stored_path, "wb") as output:
+        output.write(content)
+
+    config = get_whatsapp_config()
+    config["WHATSAPP_CHAT_BACKGROUND_IMAGE"] = f"/uploads/chat_background/{stored_name}"
+    save_whatsapp_config(config)
+    return {"success": True, "image": config["WHATSAPP_CHAT_BACKGROUND_IMAGE"]}
 
 
 @router.post("/schema/upgrade")
@@ -1110,7 +1165,10 @@ def get_whatsapp_chats(request: Request):
         stmt = select(Chamado).where(Chamado.origem == "WhatsApp")
         
         # Filtro de visibilidade baseado em privilégio
-        if not _can_manage_atendimento(request, user_role):
+        if _is_reception_role(user_role):
+            # A recepção trabalha exclusivamente com a fila inicial de triagem.
+            stmt = stmt.where(Chamado.assigned_user == None, Chamado.status != "Resolvido")
+        elif not _can_manage_atendimento(request, user_role):
             # Operador: Vê chamados não atribuídos OU atribuídos a ele mesmo
             stmt = stmt.where(
                 (Chamado.assigned_user == user_name) | 
@@ -1122,14 +1180,20 @@ def get_whatsapp_chats(request: Request):
         
         resultado = []
         for c in chamados:
-            if not show_groups and str(c.whatsapp_cliente or "").lower().endswith("@g.us"):
-                continue
             # Busca a última mensagem do chamado
             last_msg_stmt = select(ChamadoInteracao).where(
                 ChamadoInteracao.chamado_id == c.id
             ).order_by(desc(ChamadoInteracao.data_hora)).limit(1)
             
             last_msg = session.exec(last_msg_stmt).first()
+            if last_msg and not str(c.whatsapp_cliente or "").lower().endswith("@g.us"):
+                interaction_jid = str(last_msg.whatsapp_remote_jid or "")
+                if interaction_jid.lower().endswith("@g.us"):
+                    c.whatsapp_cliente = interaction_jid
+                    session.add(c)
+                    session.commit()
+            if not show_groups and str(c.whatsapp_cliente or "").lower().endswith("@g.us"):
+                continue
             
             # determina presença: se o chamado tem `whatsapp_instance`, checa lá, senão checa em todas
             is_connected = False
@@ -1343,7 +1407,10 @@ def list_atendimento_operators(request: Request):
     with Session(engine) as session:
         users = session.exec(
             select(Usuario)
-            .where(Usuario.status_conta == "ativo")
+            .where(
+                Usuario.status_conta == "ativo",
+                Usuario.role.notin_(["recepcao", "recepção", "recepcionista", "cliente_atendimento"]),
+            )
             .order_by(Usuario.nome, Usuario.username)
         ).all()
         return [
@@ -1471,7 +1538,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 message_status = "delivered"
             else:
                 continue
-            phone = remote.split("@")[0].split(":")[0] if remote else ""
+            is_group_remote = str(remote).lower().endswith("@g.us")
+            phone = str(remote) if is_group_remote else (remote.split("@")[0].split(":")[0] if remote else "")
             if remote.endswith("@lid"):
                 phone = remote.split(":")[0]
             if not phone:
@@ -1576,8 +1644,25 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
             continue
         is_group = str(remote_jid).lower().endswith("@g.us")
 
+        # A Evolution API pode reenviar o mesmo webhook. Evita duplicar a interação.
+        incoming_message_id = str(key.get("id") or "").strip()
+        if incoming_message_id:
+            with Session(engine) as dedupe_session:
+                already_saved = dedupe_session.exec(
+                    select(ChamadoInteracao).where(
+                        ChamadoInteracao.whatsapp_message_id == incoming_message_id
+                    )
+                ).first()
+            if already_saved:
+                print(f"[Webhook] Mensagem duplicada ignorada: {incoming_message_id}")
+                continue
+
         # Extrai o número limpo
-        if remote_jid.endswith("@lid"):
+        if is_group:
+            # Preserve the complete group JID so the Central can identify it
+            # and replies are sent back to the group, not to a participant.
+            phone_number = str(remote_jid).strip()
+        elif remote_jid.endswith("@lid"):
             phone_number = (
                 key.get("senderPn") or key.get("phoneNumber") or data.get("senderPn")
                 or data.get("phoneNumber") or remote_jid

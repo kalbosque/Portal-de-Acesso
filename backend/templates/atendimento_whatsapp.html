@@ -69,11 +69,11 @@
         flex-direction: column;
         height: 100%;
         position: relative;
-        background-color: #0b141a;
-        background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+        background-color: var(--chat-bg-color, #0b141a);
+        background-image: var(--chat-bg-image, url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'));
         background-repeat: repeat;
         background-size: 400px;
-        background-blend-mode: overlay;
+        background-blend-mode: normal;
         border: none;
         border-radius: 0;
     }
@@ -81,7 +81,7 @@
         content: "";
         position: absolute;
         inset: 0;
-        background: rgba(11, 20, 26, 0.94);
+        background: rgba(11, 20, 26, 0.38);
         z-index: 0;
         pointer-events: none;
     }
@@ -445,15 +445,20 @@
             <button onclick="toggleEmojiPicker()" class="w-10 h-10 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-colors" title="Emojis">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </button>
+            <button type="button" onclick="toggleGifPicker()" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black text-slate-400 transition-colors hover:text-white" title="GIF">GIF</button>
             <input id="attachment-input" type="file" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
             <button type="button" onclick="document.getElementById('attachment-input').click()" class="w-10 h-10 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-colors mr-1" title="Anexar arquivo">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
             </button>
+            <button id="record-audio" type="button" onclick="toggleAudioRecording()" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-white" title="Gravar áudio" aria-label="Gravar áudio">
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"/><path d="M17.5 11a5.5 5.5 0 0 1-11 0h1.5a4 4 0 0 0 8 0h1.5ZM11.25 17.92V21H8.5v1.5h7V21h-2.75v-3.08A7.01 7.01 0 0 0 19 11h-1.5a5.5 5.5 0 0 1-11 0H5a7.01 7.01 0 0 0 6.25 6.92Z"/></svg>
+            </button>
+            <span id="audio-recording-time" class="hidden min-w-10 text-[10px] font-black text-rose-300">00:00</span>
             <span id="attachment-name" class="hidden max-w-32 truncate rounded-lg bg-white/10 px-2 py-1 text-[10px] text-slate-300"></span>
-            <select id="quick-replies" onchange="useQuickReply(this.value)" class="hidden sm:block w-36 h-10 rounded-xl bg-[#2a3942] px-2 text-[10px] font-bold text-slate-300 border-none focus:outline-none" title="Respostas rápidas">
-                <option value="">Resposta rápida</option>
-            </select>
             <div id="emoji-picker" class="hidden absolute bottom-16 left-3 z-30 grid w-72 grid-cols-8 gap-1 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl"></div>
+            <div id="gif-picker" class="hidden absolute bottom-16 left-12 z-30 w-80 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl">
+                <div id="gif-grid" class="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto"></div>
+            </div>
             <textarea id="msg-input" rows="1" disabled onkeydown="handleInputKeydown(event)" class="flex-grow px-4 py-2.5 rounded-xl text-[#e9edef] text-[15px] bg-[#2a3942] border-none resize-none focus:outline-none disabled:cursor-not-allowed disabled:opacity-60" placeholder="Selecione uma conversa para responder" style="min-height: 44px; max-height: 120px;"></textarea>
             <button id="send-message" onclick="sendMessage()" disabled class="w-10 h-10 ml-1 flex-shrink-0 bg-[#00a884] text-[#111b21] rounded-full flex items-center justify-center hover:bg-[#00c59b] transition-colors shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                 <svg class="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
@@ -601,6 +606,7 @@
     const currentUser = "{{ user_name }}";
     const is_admin = {{ 'true' if is_admin else 'false' }};
     const canManageAtendimento = {{ 'true' if can_manage_atendimento else 'false' }};
+    const isReception = {{ 'true' if is_reception else 'false' }};
     
     let currentQueue = 'aguardando'; // aguardando | atendendo | resolvidos
     let currentGroup = 'todos';
@@ -957,7 +963,11 @@
 
             const nameInitial = c.usuario.substring(0, 2).toUpperCase();
             const isConnected = !!(c.connected || c.is_connected || c.presence === 'connected');
-            const groupName = c.visivel_suporte === false ? 'Triagem' : getGroupLabel(getChatGroup(c));
+            const groupName = c.status === 'Resolvido'
+                ? 'Finalizado'
+                : (c.assigned_user || c.status === 'Em Atendimento')
+                    ? 'Em atendimento'
+                    : 'Triagem';
 
             card.innerHTML = `
                 <div class="flex items-center gap-3 min-w-0 w-full">
@@ -990,7 +1000,7 @@
                         </div>
                         <div class="chat-card-actions">
                             ${currentQueue === 'resolvidos' && is_admin ? `<button type="button" class="chat-card-action reopen" title="Reabrir atendimento" aria-label="Reabrir atendimento" onclick="reabrirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v8h8"/><path d="M12 8v4l3 2"/></svg></button>` : ''}
-                            ${!c.assigned_user ? `<button type="button" class="chat-card-action assume" title="Assumir atendimento" aria-label="Assumir atendimento" onclick="assumirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></button>` : ''}
+                            ${!c.assigned_user && !isReception ? `<button type="button" class="chat-card-action assume" title="Assumir atendimento" aria-label="Assumir atendimento" onclick="assumirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></button>` : ''}
                             ${currentQueue !== 'resolvidos' ? `<button type="button" class="chat-card-action close" title="Fechar atendimento" aria-label="Fechar atendimento" onclick="fecharAtendimentoCard(${c.id}, event)">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
                             </button>` : ''}
@@ -1112,10 +1122,19 @@
             fillTransferOperators(chat.assigned_user);
         } else {
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[9px] font-black text-amber-400 uppercase tracking-widest animate-pulse">Aguardando</span>`;
-            if (transferSelect) { transferSelect.disabled = true; transferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
-            if (transferButton) transferButton.disabled = true;
-            if (mobileTransferSelect) { mobileTransferSelect.disabled = true; mobileTransferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
-            if (mobileTransferButton) mobileTransferButton.disabled = true;
+            if (isReception) {
+                transferBar?.classList.remove('hidden');
+                fillTransferOperators('');
+                if (transferSelect) transferSelect.disabled = false;
+                if (transferButton) transferButton.disabled = false;
+                if (mobileTransferSelect) mobileTransferSelect.disabled = false;
+                if (mobileTransferButton) mobileTransferButton.disabled = false;
+            } else {
+                if (transferSelect) { transferSelect.disabled = true; transferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
+                if (transferButton) transferButton.disabled = true;
+                if (mobileTransferSelect) { mobileTransferSelect.disabled = true; mobileTransferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
+                if (mobileTransferButton) mobileTransferButton.disabled = true;
+            }
         }
         
         // Preenche o Painel de Ações e Detalhes
@@ -1133,7 +1152,11 @@
             </div>
         ` : '';
         if (!chat.assigned_user) {
-            assumirArea.innerHTML = `
+            assumirArea.innerHTML = isReception ? `
+                <div class="w-full py-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 font-black text-xs uppercase tracking-widest rounded-xl text-center">
+                    Triagem: selecione o atendente acima
+                </div>
+            ` : `
                 ${promoteButton}
                 <button onclick="assumirTicket(${chat.id})" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg">
                     👋 Assumir Conversa
@@ -1192,6 +1215,8 @@
 
     function appendMessageToTimeline(m, smoothScroll = true) {
         const timeline = document.getElementById('chat-timeline');
+        if (!timeline) return;
+        if (m.id && Array.from(timeline.querySelectorAll('.message-row')).some(row => String(row.dataset.messageId) === String(m.id))) return;
         const row = document.createElement('div');
         window.__messageCache = window.__messageCache || {};
         if (m.id) window.__messageCache[m.id] = m;
@@ -1445,6 +1470,68 @@
         picker.classList.toggle('hidden');
     }
 
+    const gifCatalog = [
+        'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif',
+        'https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif',
+        'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif',
+        'https://media.giphy.com/media/26BRrSvJUa0crqw4E/giphy.gif',
+        'https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif',
+        'https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif',
+        'https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif',
+        'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy.gif',
+        'https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif',
+        'https://media.giphy.com/media/3o7TKRkkgqUK3oNw8g/giphy.gif',
+        'https://media.giphy.com/media/3o7abldj0b3i5b6ZyE/giphy.gif',
+        'https://media.giphy.com/media/3oKIPf3C7HqqYBVcCk/giphy.gif',
+        'https://media.giphy.com/media/12gdy2b6O2W7bG/giphy.gif',
+        'https://media.giphy.com/media/14aUO0Mf7dWDXW/giphy.gif',
+        'https://media.giphy.com/media/OkJat1YNdoD3W/giphy.gif',
+        'https://media.giphy.com/media/2tRloHD0GpkGoiaX4k/giphy.gif',
+        'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif'
+    ];
+
+    function renderGifCatalog() {
+        const grid = document.getElementById('gif-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        gifCatalog.forEach(url => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'overflow-hidden rounded-lg border border-white/10 bg-black/20 transition hover:border-emerald-400';
+            button.innerHTML = `<img src="${url}" alt="GIF" loading="lazy" class="h-20 w-full object-cover">`;
+            button.onclick = () => sendGif(url);
+            grid.appendChild(button);
+        });
+    }
+
+    function toggleGifPicker() {
+        const picker = document.getElementById('gif-picker');
+        const input = document.getElementById('msg-input');
+        if (!picker || !input || input.disabled) return;
+        document.getElementById('emoji-picker')?.classList.add('hidden');
+        renderGifCatalog();
+        picker.classList.toggle('hidden');
+    }
+
+    async function sendGif(url) {
+        const picker = document.getElementById('gif-picker');
+        if (!activeTicketId) return;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('GIF indisponível');
+            const blob = await response.blob();
+            const file = new File([blob], `gif-${Date.now()}.gif`, { type: 'image/gif' });
+            const transfer = new DataTransfer();
+            transfer.items.add(file);
+            const attachmentInput = document.getElementById('attachment-input');
+            attachmentInput.files = transfer.files;
+            picker?.classList.add('hidden');
+            await sendMessage();
+        } catch (_) {
+            mostrarToast('Não foi possível carregar este GIF.');
+        }
+    }
+
     async function sendMessage() {
         if (!activeTicketId) return;
         
@@ -1481,6 +1568,75 @@
         } catch(e) {
             mostrarToast('Erro de rede ao enviar.');
         }
+    }
+
+    let audioRecorder = null;
+    let audioStream = null;
+    let audioChunks = [];
+    let audioTimer = null;
+    let audioStartedAt = 0;
+
+    async function toggleAudioRecording() {
+        if (audioRecorder && audioRecorder.state === 'recording') {
+            audioRecorder.stop();
+            return;
+        }
+        if (!activeTicketId) return mostrarToast('Selecione uma conversa primeiro.');
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            mostrarToast('A gravação direta exige HTTPS. Selecione um áudio já gravado pelo botão de anexo.');
+            document.getElementById('attachment-input')?.click();
+            return;
+        }
+        if (!window.MediaRecorder) {
+            return mostrarToast('Seu navegador não suporta gravação de áudio. Use o botão de anexo.');
+        }
+        try {
+            audioStream = await navigator.mediaDevices.getUserMedia({audio: true});
+            const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(type => MediaRecorder.isTypeSupported(type)) || '';
+            audioRecorder = new MediaRecorder(audioStream, mimeType ? {mimeType} : undefined);
+            audioChunks = [];
+            audioRecorder.ondataavailable = event => { if (event.data.size) audioChunks.push(event.data); };
+            audioRecorder.onstop = async () => {
+                clearInterval(audioTimer);
+                const blob = new Blob(audioChunks, {type: audioRecorder.mimeType || 'audio/webm'});
+                audioStream?.getTracks().forEach(track => track.stop());
+                audioStream = null;
+                const input = document.getElementById('attachment-input');
+                if (blob.size && input) {
+                    const file = new File([blob], `audio-${Date.now()}.webm`, {type: blob.type});
+                    const transfer = new DataTransfer();
+                    transfer.items.add(file);
+                    input.files = transfer.files;
+                    await sendMessage();
+                }
+                finishAudioRecordingUi();
+            };
+            audioRecorder.start();
+            audioStartedAt = Date.now();
+            const timer = document.getElementById('audio-recording-time');
+            const button = document.getElementById('record-audio');
+            timer?.classList.remove('hidden');
+            if (button) { button.classList.add('bg-rose-500/20', 'text-rose-300'); button.title = 'Parar gravação'; }
+            audioTimer = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - audioStartedAt) / 1000);
+                if (timer) timer.textContent = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
+            }, 250);
+        } catch (_) {
+            audioStream?.getTracks().forEach(track => track.stop());
+            audioStream = null;
+            mostrarToast('Permita o acesso ao microfone para gravar áudio.');
+        }
+    }
+
+    function finishAudioRecordingUi() {
+        clearInterval(audioTimer);
+        const timer = document.getElementById('audio-recording-time');
+        const button = document.getElementById('record-audio');
+        timer?.classList.add('hidden');
+        if (timer) timer.textContent = '00:00';
+        button?.classList.remove('bg-rose-500/20', 'text-rose-300');
+        if (button) button.title = 'Gravar áudio';
+        audioRecorder = null;
     }
 
     document.getElementById('attachment-input')?.addEventListener('change', function () {
@@ -1522,6 +1678,38 @@
             event.preventDefault();
             sendMessage();
         }
+    }
+
+    async function loadChatBackground() {
+        try {
+            const localBackground = JSON.parse(localStorage.getItem('whatsapp_chat_background') || 'null');
+            if (localBackground) {
+                const localChat = document.querySelector('.col-chat');
+                localChat?.style.setProperty('--chat-bg-color', localBackground.color || '#0b141a');
+                if (localChat) {
+                    localChat.style.setProperty('--chat-bg-image', localBackground.image ? `url("${localBackground.image}")` : 'none');
+                    if (localBackground.image) {
+                        localChat.style.backgroundRepeat = 'no-repeat';
+                        localChat.style.backgroundPosition = 'center';
+                        localChat.style.backgroundSize = 'cover';
+                    }
+                }
+                return;
+            }
+            const res = await fetch('/api/whatsapp/instances');
+            if (!res.ok) return;
+            const data = await res.json();
+            const chat = document.querySelector('.col-chat');
+            if (!chat) return;
+            chat.style.setProperty('--chat-bg-color', data.chat_background_color || '#0b141a');
+            const image = String(data.chat_background_image || '').trim();
+            chat.style.setProperty('--chat-bg-image', image ? `url("${image.replace(/["\\)]/g, '')}")` : 'none');
+            if (image) {
+                chat.style.backgroundRepeat = 'no-repeat';
+                chat.style.backgroundPosition = 'center';
+                chat.style.backgroundSize = 'cover';
+            }
+        } catch (_) {}
     }
 
     async function assumirTicket(ticketId) {
@@ -1791,7 +1979,7 @@
             const ticketFromUrl = Number(new URLSearchParams(window.location.search).get('ticket'));
             if (ticketFromUrl) openChat(ticketFromUrl);
         });
-        loadQuickReplies();
+        loadChatBackground();
         loadAtendimentoOperators();
         connectWebSocket();
         document.getElementById('msg-input')?.addEventListener('input', () => {

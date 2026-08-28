@@ -1,13 +1,44 @@
 import json
+import os
+import uuid
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Form, Request, Depends
+from fastapi import APIRouter, HTTPException, Form, Request, Depends, UploadFile, File
 from sqlmodel import Session, select
+from sqlalchemy import text
 from models import Usuario
 from database import engine
 import bcrypt
 from auth_utils import get_current_admin
 
 router = APIRouter(prefix="/api/usuarios", tags=["User Management"], dependencies=[Depends(get_current_admin)])
+
+CLIENT_ATTENDANCE_ROLE = "cliente_atendimento"
+
+def _ensure_company_columns():
+    for statement in (
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(255)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_logo_url VARCHAR(500)",
+    ):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(statement))
+        except Exception as exc:
+            print(f"[USUARIOS] Migração de empresa ignorada: {exc}")
+
+async def _save_company_logo(upload: UploadFile) -> str:
+    allowed = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/svg+xml": ".svg"}
+    extension = allowed.get(upload.content_type or "")
+    if not extension:
+        raise HTTPException(status_code=400, detail="Logo inválida. Use JPG, PNG, WEBP, GIF ou SVG")
+    content = await upload.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="A logo deve ter no máximo 5 MB")
+    upload_dir = os.path.join(os.path.dirname(__file__), "public_html", "uploads", "empresas")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"empresa-{uuid.uuid4().hex}{extension}"
+    with open(os.path.join(upload_dir, filename), "wb") as output:
+        output.write(content)
+    return f"uploads/empresas/{filename}"
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
@@ -24,6 +55,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 @router.get("/list")
 async def list_users():
+    _ensure_company_columns()
     with Session(engine) as session:
         users = session.exec(select(Usuario).order_by(Usuario.created_at.desc())).all()
         return {
@@ -38,10 +70,15 @@ async def create_user(
     email: str = Form(...),
     username: str = Form(...),
     password: str = Form(...),
-    role: str = Form("operator")
+    role: str = Form("operator"),
+    empresa_nome: str = Form(""),
+    empresa_logo_upload: Optional[UploadFile] = File(None)
 ):
+    _ensure_company_columns()
     form_data = await request.form()
     perms = form_data.getlist("perms")
+    if role == CLIENT_ATTENDANCE_ROLE:
+        perms = ["Atendimento"]
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Senha muito curta")
         
@@ -52,6 +89,9 @@ async def create_user(
         exist_user = session.exec(select(Usuario).where(Usuario.username == username)).first()
         if exist_user: raise HTTPException(status_code=400, detail="Usuário já existe")
         
+        empresa_logo_url = None
+        if empresa_logo_upload and empresa_logo_upload.filename:
+            empresa_logo_url = await _save_company_logo(empresa_logo_upload)
         novo = Usuario(
             nome=nome,
             email=email,
@@ -60,6 +100,8 @@ async def create_user(
             role=role,
             status_conta="ativo",
             permissoes=json.dumps(perms)
+            , empresa_nome=empresa_nome.strip() or None,
+            empresa_logo_url=empresa_logo_url,
         )
         session.add(novo)
         session.commit()
@@ -82,10 +124,15 @@ async def edit_perms(
     user_id: int = Form(...),
     nome: str = Form(...),
     email: str = Form(...),
-    role: str = Form(...)
+    role: str = Form(...),
+    empresa_nome: str = Form(""),
+    empresa_logo_upload: Optional[UploadFile] = File(None)
 ):
+    _ensure_company_columns()
     form_data = await request.form()
     perms = form_data.getlist("perms")
+    if role == CLIENT_ATTENDANCE_ROLE:
+        perms = ["Atendimento"]
     with Session(engine) as session:
         user = session.get(Usuario, user_id)
         if not user: raise HTTPException(status_code=404, detail="Usuário não encontrado")
@@ -94,6 +141,9 @@ async def edit_perms(
         user.email = email
         user.role = role
         user.permissoes = json.dumps(perms)
+        user.empresa_nome = empresa_nome.strip() or None
+        if empresa_logo_upload and empresa_logo_upload.filename:
+            user.empresa_logo_url = await _save_company_logo(empresa_logo_upload)
         
         session.add(user)
         session.commit()

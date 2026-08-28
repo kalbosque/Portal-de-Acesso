@@ -1,0 +1,69 @@
+{% extends "atendimento_base.html" %}
+
+{% block title %}Painel da Central | {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl">
+    <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[.3em] text-emerald-300">Visão administrativa</p>
+            <h2 class="mt-2 text-3xl font-black tracking-tight text-white">Painel da Central</h2>
+            <p class="mt-2 text-sm text-slate-400">Acompanhe o fluxo dos atendimentos em tempo real.</p>
+        </div>
+        <div class="flex gap-2">
+            <button type="button" onclick="window.location.reload()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-200 hover:bg-indigo-500/15">Atualizar</button>
+            <a href="/central-atendimento" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-200 hover:bg-emerald-500/15">Abrir conversas</a>
+        </div>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {% for item in [
+            ('Total de atendimentos', metrics.total, 'text-cyan-300', 'border-cyan-400/20'),
+            ('Em triagem', metrics.triagem, 'text-amber-300', 'border-amber-400/20'),
+            ('Em atendimento', metrics.atendimento, 'text-emerald-300', 'border-emerald-400/20'),
+            ('Finalizados', metrics.finalizados, 'text-indigo-300', 'border-indigo-400/20'),
+            ('Grupos WhatsApp', metrics.grupos, 'text-fuchsia-300', 'border-fuchsia-400/20'),
+            ('Mensagens não lidas', metrics.nao_lidas, 'text-rose-300', 'border-rose-400/20')
+        ] %}
+        <div class="rounded-2xl border {{ item[3] }} bg-slate-900/70 p-6 shadow-xl">
+            <p class="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">{{ item[0] }}</p>
+            <p class="mt-4 text-4xl font-black {{ item[2] }}">{{ item[1] }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6">
+        <h3 class="text-sm font-black uppercase tracking-widest text-slate-200">Fluxo do atendimento</h3>
+        <div class="mt-5 grid gap-3 text-center text-xs font-black uppercase tracking-wider sm:grid-cols-3">
+            <div class="rounded-xl bg-amber-400/10 px-4 py-4 text-amber-200">Triagem<br><span class="mt-2 block text-2xl">{{ metrics.triagem }}</span></div>
+            <div class="rounded-xl bg-emerald-400/10 px-4 py-4 text-emerald-200">Em atendimento<br><span class="mt-2 block text-2xl">{{ metrics.atendimento }}</span></div>
+            <div class="rounded-xl bg-indigo-400/10 px-4 py-4 text-indigo-200">Finalizados<br><span class="mt-2 block text-2xl">{{ metrics.finalizados }}</span></div>
+        </div>
+    </div>
+
+    <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
+            <h3 class="text-sm font-black uppercase tracking-widest text-slate-200">Atendimentos por operador</h3>
+            <div class="mt-5 space-y-3">
+                {% for operator, count in metrics.operators %}
+                <div class="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3">
+                    <span class="truncate text-sm font-bold text-slate-200">{{ operator }}</span>
+                    <span class="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-black text-emerald-300">{{ count }}</span>
+                </div>
+                {% else %}<p class="text-sm text-slate-500">Nenhum atendimento em andamento.</p>{% endfor %}
+            </div>
+        </div>
+        <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
+            <h3 class="text-sm font-black uppercase tracking-widest text-slate-200">Atendimentos recentes</h3>
+            <div class="mt-4 divide-y divide-white/5">
+                {% for item in metrics.recent %}
+                <a href="/central-atendimento?ticket={{ item.id }}" class="flex items-center justify-between gap-3 py-3 no-underline hover:bg-white/5">
+                    <div class="min-w-0"><p class="truncate text-sm font-bold text-slate-200">#{{ item.id }} · {{ item.name }}</p><p class="text-[10px] text-slate-500">{{ item.assigned }} · {{ item.date }}</p></div>
+                    <span class="shrink-0 text-[9px] font-black uppercase tracking-wider {% if item.status == 'Resolvido' %}text-indigo-300{% elif item.status == 'Em Atendimento' %}text-emerald-300{% else %}text-amber-300{% endif %}">{{ 'Finalizado' if item.status == 'Resolvido' else ('Em atendimento' if item.status == 'Em Atendimento' else 'Triagem') }}</span>
+                </a>
+                {% else %}<p class="py-3 text-sm text-slate-500">Nenhum atendimento encontrado.</p>{% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

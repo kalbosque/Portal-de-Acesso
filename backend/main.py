@@ -112,6 +112,10 @@ def ensure_schema_compatibility():
 
     statements = [
         "ALTER TABLE impressoras ADD COLUMN IF NOT EXISTS modelo VARCHAR(120)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(255)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_logo_url VARCHAR(500)",
+        "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_role_check",
+        "ALTER TABLE usuarios ADD CONSTRAINT usuarios_role_check CHECK (role IN ('admin', 'operator', 'gestor', 'gerente', 'supervisor', 'recepcao', 'recepcionista', 'cliente_atendimento'))",
         "ALTER TABLE impressoras ADD COLUMN IF NOT EXISTS localizacao VARCHAR(120)",
         "ALTER TABLE tipos_problemas ADD COLUMN IF NOT EXISTS sla_horas INTEGER DEFAULT 24",
         "ALTER TABLE equipamentos_ti ADD COLUMN IF NOT EXISTS modelo_monitor VARCHAR(120)",
@@ -1156,6 +1160,7 @@ async def save_configuracoes(
     url_atendimento: str = Form(""),
     guia_suporte_url: str = Form(""),
     app_logo_url: str = Form(""),
+    app_logo_remove: str = Form("0"),
     mod_impressao: Optional[str] = Form(None),
     mod_suporte: Optional[str] = Form(None),
     mod_atendimento: Optional[str] = Form(None),
@@ -1187,6 +1192,14 @@ async def save_configuracoes(
         
         upload_dir = "public_html/uploads"
         os.makedirs(upload_dir, exist_ok=True)
+
+        # Remove somente os nomes de logo criados por este sistema.
+        if app_logo_remove == "1":
+            logo = ""
+            for logo_ext in ("png", "jpg", "jpeg", "gif", "svg", "webp"):
+                old_logo = os.path.join(upload_dir, f"logo_customizada.{logo_ext}")
+                if os.path.isfile(old_logo):
+                    os.remove(old_logo)
         
         # Upload de Logo
         if app_logo_upload and app_logo_upload.filename:
@@ -1517,6 +1530,8 @@ def _can_access_atendimento(request: Request) -> bool:
     """Permite a Central de Atendimento a administradores ou usuários autorizados."""
     if get_signed_cookie(request, "user_role") == "admin":
         return True
+    if get_signed_cookie(request, "user_role") in ("recepcao", "recepção", "recepcionista"):
+        return True
     try:
         raw_perms = get_signed_cookie(request, "user_perms", "[]") or "[]"
         perms = normalize_permissions(json.loads(raw_perms))
@@ -1532,6 +1547,16 @@ async def view_central_atendimento(request: Request):
     user_name = request.cookies.get("user_name")
 
     config = load_app_config()
+    if user_role == "cliente_atendimento":
+        try:
+            with Session(engine) as session:
+                cliente = session.get(Usuario, int(user_id))
+            if cliente:
+                config = dict(config)
+                config["APP_NAME"] = cliente.empresa_nome or cliente.nome or config.get("APP_NAME", "Central de Atendimento")
+                config["APP_LOGO_URL"] = cliente.empresa_logo_url or ""
+        except Exception as exc:
+            print(f"[CENTRAL] Não foi possível carregar a marca do cliente: {exc}")
     if not config.get("MODULO_ATENDIMENTO", False):
         return RedirectResponse(url="/")
 
@@ -1543,6 +1568,8 @@ async def view_central_atendimento(request: Request):
         )
 
     has_access = _can_access_atendimento(request)
+    if not has_access:
+        return RedirectResponse(url="/")
 
     return templates.TemplateResponse(
         request=request,
@@ -1552,6 +1579,7 @@ async def view_central_atendimento(request: Request):
             "is_admin": user_role == "admin",
             "user_role": user_role,
             "can_manage_atendimento": user_role in ("admin", "gestor", "gerente", "supervisor", "recepcao", "recepção", "recepcionista"),
+            "is_reception": user_role in ("recepcao", "recepção", "recepcionista"),
             "user_name": user_name,
             "authenticated": True,
             "has_access": has_access,
@@ -1561,6 +1589,42 @@ async def view_central_atendimento(request: Request):
 @app.get("/atendimento")
 async def redirect_atendimento():
     return RedirectResponse(url="/central-atendimento")
+
+@app.get("/central-atendimento/dashboard", response_class=HTMLResponse)
+async def view_central_atendimento_dashboard(request: Request):
+    user_id = request.cookies.get("user_id")
+    user_role = request.cookies.get("user_role")
+    if not user_id:
+        return RedirectResponse(url="/login")
+    if user_role != "admin":
+        return RedirectResponse(url="/central-atendimento")
+
+    config = load_app_config()
+    with Session(engine) as session:
+        chamados = session.exec(select(Chamado).where(Chamado.origem == "WhatsApp")).all()
+        operator_counts = {}
+        for item in chamados:
+            if item.assigned_user and item.status != "Resolvido":
+                operator_counts[item.assigned_user] = operator_counts.get(item.assigned_user, 0) + 1
+        recent = sorted(chamados, key=lambda item: item.data_abertura or datetime.min, reverse=True)[:8]
+        metrics = {
+            "total": len(chamados),
+            "triagem": sum(1 for item in chamados if item.status != "Resolvido" and not item.assigned_user),
+            "atendimento": sum(1 for item in chamados if item.status == "Em Atendimento"),
+            "finalizados": sum(1 for item in chamados if item.status == "Resolvido"),
+            "grupos": sum(1 for item in chamados if str(item.whatsapp_cliente or "").lower().endswith("@g.us")),
+            "nao_lidas": sum(int(item.unread_admin or 0) for item in chamados),
+            "operators": sorted(operator_counts.items(), key=lambda pair: pair[1], reverse=True),
+            "recent": [
+                {"id": item.id, "name": item.usuario or "Sem nome", "status": item.status, "assigned": item.assigned_user or "Sem operador", "date": item.data_abertura.strftime("%d/%m/%Y %H:%M")}
+                for item in recent
+            ],
+        }
+    return templates.TemplateResponse(
+        request=request,
+        name="atendimento_dashboard.html",
+        context={"config": config, "metrics": metrics, "authenticated": True, "user_role": user_role, "user_name": request.cookies.get("user_name", "")},
+    )
 
 @app.get("/central-atendimento/contatos", response_class=HTMLResponse)
 async def view_whatsapp_contacts(request: Request):

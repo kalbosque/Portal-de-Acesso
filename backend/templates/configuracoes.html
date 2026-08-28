@@ -108,8 +108,12 @@
             <div class="space-y-6">
                 <div>
                     <label class="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-3">Logomarca (Upload)</label>
-                    <input type="file" name="app_logo_upload" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-emerald-500/10 file:text-emerald-400 cursor-pointer">
+                    <input id="app-logo-upload" type="file" name="app_logo_upload" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-emerald-500/10 file:text-emerald-400 cursor-pointer">
                     <input type="hidden" name="app_logo_url" value="{{ config.APP_LOGO_URL|default('')|replace('?v=' ~ range(1,999999)|join(''), '') }}">
+                    <input id="app-logo-remove" type="hidden" name="app_logo_remove" value="0">
+                    {% if config.APP_LOGO_URL %}
+                    <button type="button" onclick="removeAppLogo(this)" class="mt-3 rounded-lg border border-rose-400/30 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-400/10">Remover logomarca atual</button>
+                    {% endif %}
                 </div>
                 <div class="pt-6 border-t border-white/5">
                     <label class="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3">Guia de Utilização (Upload)</label>
@@ -150,6 +154,16 @@
         </div>
     </div>
 </form>
+
+<script>
+    function removeAppLogo(button) {
+        const remove = document.getElementById('app-logo-remove');
+        const upload = document.getElementById('app-logo-upload');
+        if (remove) remove.value = '1';
+        if (upload) upload.value = '';
+        if (button) { button.textContent = 'Logomarca será removida ao salvar'; button.disabled = true; }
+    }
+</script>
 
 <script>
     async function loadBackups() {
