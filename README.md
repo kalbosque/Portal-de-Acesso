@@ -1,7 +1,5 @@
 # Sistema de Impressão e Atendimento
 
-![Painel do Sistema](docs/dashboard_preview.jpg)
-
 Este repositório contém o sistema completo de impressão, chamados e integração com o WhatsApp (Evolution API).
 
 ## 🚀 Passo a Passo para uma Nova Instalação
