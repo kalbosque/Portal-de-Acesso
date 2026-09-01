@@ -593,10 +593,8 @@
         <button onclick="closeSolutionModal()" class="absolute top-8 right-8 text-slate-500 hover:text-white"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         <div class="mb-8">
             <h3 class="text-3xl font-black text-white mb-2 uppercase tracking-tight italic">Finalizar Chamado</h3>
-            <p class="text-[10px] text-slate-500 font-black uppercase tracking-widest">Insira a nota técnica para o encerramento do ticket.</p>
         </div>
         <form onsubmit="resolverChamadoSubmit(event)" class="space-y-6">
-            <textarea id="atend-nota-tecnica" required rows="5" class="glass-input w-full px-6 py-4 rounded-2xl text-white text-sm bg-slate-900 border-white/5" placeholder="O que foi resolvido? (Esta nota será enviada ao cliente via WhatsApp)..."></textarea>
             <button type="submit" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg">Finalizar e Enviar</button>
         </form>
     </div>
@@ -745,13 +743,18 @@
         return groupCatalog.find(g => g.id === groupId)?.label || 'Atendimento';
     }
 
-    function formatMessagePreview(message) {
+    function formatMessagePreview(message, isMe = false) {
         if (!message) return 'Nova conversa';
         try {
             const media = JSON.parse(message);
             if (media && media.__wa_media__) {
-                if (media.type === 'gif') return 'GIF recebido';
-                const labels = { audio: '🎧 Áudio', image: '📷 Foto', video: '🎥 Vídeo', document: '📄 Documento' };
+                if (media.type === 'gif') return isMe ? '🎬 GIF enviado' : '🎬 GIF recebido';
+                const labels = {
+                    audio: isMe ? '🎧 Áudio enviado' : '🎧 Áudio',
+                    image: isMe ? '📷 Foto enviada' : '📷 Foto',
+                    video: isMe ? '🎥 Vídeo enviado' : '🎥 Vídeo',
+                    document: isMe ? '📄 Documento enviado' : '📄 Documento'
+                };
                 return labels[media.type] || '📎 Mídia';
             }
         } catch (_) {}
@@ -1001,7 +1004,7 @@
                         <div class="chat-card-actions">
                             ${currentQueue === 'resolvidos' && is_admin ? `<button type="button" class="chat-card-action reopen" title="Reabrir atendimento" aria-label="Reabrir atendimento" onclick="reabrirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v8h8"/><path d="M12 8v4l3 2"/></svg></button>` : ''}
                             ${!c.assigned_user && !isReception ? `<button type="button" class="chat-card-action assume" title="Assumir atendimento" aria-label="Assumir atendimento" onclick="assumirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></button>` : ''}
-                            ${currentQueue !== 'resolvidos' ? `<button type="button" class="chat-card-action close" title="Fechar atendimento" aria-label="Fechar atendimento" onclick="fecharAtendimentoCard(${c.id}, event)">
+                            ${currentQueue !== 'resolvidos' && !isGroupChat(c) ? `<button type="button" class="chat-card-action close" title="Fechar atendimento" aria-label="Fechar atendimento" onclick="fecharAtendimentoCard(${c.id}, event)">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
                             </button>` : ''}
                         </div>
@@ -1163,6 +1166,7 @@
                 </button>
             `;
             document.getElementById('btn-resolver').disabled = true;
+            document.getElementById('btn-resolver').classList.toggle('hidden', isGroupChat(chat));
         } else {
             assumirArea.innerHTML = `
                 ${promoteButton}
@@ -1173,6 +1177,7 @@
             `;
             // Apenas quem assumiu (ou Admin) pode resolver
             document.getElementById('btn-resolver').disabled = chat.assigned_user !== currentUser && !is_admin;
+            document.getElementById('btn-resolver').classList.toggle('hidden', isGroupChat(chat));
         }
         
         // Carrega o histórico de mensagens
@@ -1198,7 +1203,9 @@
     async function loadMessages(ticketId) {
         try {
             const res = await fetch(`/api/tickets/chat/${ticketId}`);
-            const messages = await res.json();
+            if (!res.ok) throw new Error(`Falha ao carregar histórico (${res.status})`);
+            const payload = await res.json();
+            const messages = Array.isArray(payload) ? payload : (payload.messages || []);
             
             const timeline = document.getElementById('chat-timeline');
             timeline.innerHTML = '';
@@ -1227,35 +1234,38 @@
         const bubble = document.createElement('div');
         bubble.className = `bubble ${m.is_me ? 'sent' : 'received'} relative`;
         
+        const messageText = String(m.mensagem || '[Mensagem]');
         let media = null;
         try {
-            const parsed = JSON.parse(m.mensagem);
+            const parsed = JSON.parse(messageText);
             if (parsed && parsed.__wa_media__) media = parsed;
         } catch (_) {}
 
-        let formattedMsg = m.mensagem.replace(/\n/g, '<br>');
+        let formattedMsg = messageText.replace(/\n/g, '<br>');
         if (media) {
             const caption = media.caption ? `<div class="mt-2 text-sm">${media.caption}</div>` : '';
+            const direction = m.is_me ? 'enviado' : 'recebido';
+            const directionF = m.is_me ? 'enviada' : 'recebida';
             if (media.type === 'image') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto recebida</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="Imagem recebida">${caption}</a>`;
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
             } else if (media.type === 'gif') {
                 const isVideoGif = String(media.mime || '').startsWith('video/');
                 formattedMsg = isVideoGif
-                    ? `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF recebido</div><video autoplay loop muted playsinline controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`
-                    : `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF recebido</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="GIF recebido">${caption}</a>`;
+                    ? `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><video autoplay loop muted playsinline controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`
+                    : `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="GIF ${direction}">${caption}</a>`;
             } else if (media.type === 'video') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎥 Vídeo recebido</div><video controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`;
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎥 Vídeo ${direction}</div><video controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`;
             } else if (media.type === 'audio') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎧 Áudio recebido</div><audio controls preload="metadata" class="max-w-full"><source src="${media.url}" type="${media.mime || 'audio/ogg'}">Seu navegador não conseguiu reproduzir este áudio.</audio>${caption}`;
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎧 Áudio ${direction}</div><audio controls preload="metadata" class="max-w-full"><source src="${media.url}" type="${media.mime || 'audio/ogg'}">Seu navegador não conseguiu reproduzir este áudio.</audio>${caption}`;
             } else if (media.type === 'document') {
                 formattedMsg = `<a href="${media.url}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm text-emerald-200 hover:bg-white/15">📎 ${media.filename || 'Abrir arquivo'}</a>${caption}`;
             }
         }
         
-        let timeStr = m.data_hora;
-        if(m.data_hora.includes(' ')) {
-             timeStr = m.data_hora.split(' ')[1].substring(0,5);
-        }
+        // Mantém a data e o horário no histórico da conversa.
+        // O endpoint legado já retorna DD/MM HH:mm; mensagens em tempo real
+        // recebem a data completa logo abaixo.
+        let timeStr = String(m.data_hora || '');
 
         let ticks = '';
         const tickColor = m.whatsapp_status === 'read' ? 'text-[#53bdeb]' : 'text-slate-400';
@@ -1821,9 +1831,7 @@
         e.preventDefault();
         if (!activeTicketId) return;
         
-        const nota = document.getElementById('atend-nota-tecnica').value.trim();
-        
-        await finalizarAtendimento(nota);
+        await finalizarAtendimento('');
     }
 
     async function finalizarAtendimento(nota) {
@@ -1837,7 +1845,6 @@
             if (res.ok) {
                 mostrarToast('Chamado finalizado!');
                 closeSolutionModal();
-                document.getElementById('atend-nota-tecnica').value = '';
                 
                 // Volta para o estado inicial
                 document.getElementById('no-chat-screen').classList.remove('opacity-0', 'pointer-events-none');
@@ -1913,7 +1920,10 @@
                             is_me: data.usuario === currentUser,
                             usuario: data.usuario || 'Cliente',
                             mensagem: data.preview || data.mensagem || '...',
-                            data_hora: new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})
+                            data_hora: new Date().toLocaleString('pt-BR', {
+                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit'
+                            })
                         }, true);
                         
                         if (data.usuario !== currentUser) {
@@ -1966,7 +1976,11 @@
     // Inicialização
     document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) { unreadTitleCount = 0; document.title = 'Central de Atendimento'; }
+            if (!document.hidden) {
+                unreadTitleCount = 0;
+                document.title = 'Central de Atendimento';
+                loadChats();
+            }
         });
         document.addEventListener('click', () => {
             try {
@@ -1996,7 +2010,7 @@
             // quando algum proxy interrompe eventos do WebSocket.
             loadChats();
             if (!wsConnected) pollActiveMessages();
-        }, 10000);
+        }, 5000);
         
         // Configura polling de fallback caso o websocket falhe
         // setInterval(loadChats, 15000); // Removido para tempo real puramente via WebSocket

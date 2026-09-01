@@ -17,6 +17,7 @@ from database import engine
 from auth_utils import get_signed_cookie
 from notifications import send_alert
 from websocket_manager import manager
+import api_whatsapp
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
 
@@ -217,9 +218,6 @@ async def finalizar_ticket(request: Request, background_tasks: BackgroundTasks):
         chamado = session.get(Chamado, ticket_id)
         if not chamado:
             raise HTTPException(status_code=404, detail="Chamado não encontrado")
-        if chamado.visivel_suporte and not str(nota or '').strip():
-            raise HTTPException(status_code=400, detail="Informe a nota técnica para finalizar um chamado do suporte")
-            
         chamado.status = "Resolvido"
         if not chamado.assigned_user:
             chamado.assigned_user = user_name
@@ -231,7 +229,9 @@ async def finalizar_ticket(request: Request, background_tasks: BackgroundTasks):
 
         if chamado.origem == "WhatsApp" and chamado.whatsapp_cliente:
             from api_whatsapp import send_whatsapp_text
-            msg_resolucao = f"Seu chamado #{chamado.id} foi finalizado.\n\n*Nota Técnica:* {nota or 'Nenhuma nota informada.'}"
+            msg_resolucao = f"Seu chamado #{chamado.id} foi finalizado."
+            if str(nota or '').strip():
+                msg_resolucao += f"\n\n*Nota Técnica:* {nota.strip()}"
             background_tasks.add_task(send_whatsapp_text, chamado.whatsapp_cliente, msg_resolucao, chamado.whatsapp_instance)
 
     background_tasks.add_task(
@@ -303,6 +303,38 @@ def _message_can_edit(message: ChamadoInteracao, user_name: str) -> bool:
 def _message_can_delete(message: ChamadoInteracao, user_name: str, user_role: str) -> bool:
     return (message.usuario == user_name or user_role == "admin") and datetime.now() - message.data_hora <= timedelta(hours=MESSAGE_DELETE_WINDOW_HOURS)
 
+
+def _sync_group_history_name(session: Session, chamado: Chamado, messages):
+    """Atualiza o rótulo genérico das mensagens antigas de um grupo."""
+    group_jid = str(chamado.whatsapp_cliente or "")
+    if not group_jid.lower().endswith("@g.us"):
+        group_message = next(
+            (message for message in reversed(messages) if str(message.whatsapp_remote_jid or "").lower().endswith("@g.us")),
+            None,
+        )
+        if group_message:
+            group_jid = str(group_message.whatsapp_remote_jid)
+            chamado.whatsapp_cliente = group_jid
+            session.add(chamado)
+    if not group_jid.lower().endswith("@g.us"):
+        return
+    old_name = chamado.usuario or ""
+    if old_name not in ("", "Grupo WhatsApp", group_jid):
+        return
+    group_name = api_whatsapp.get_whatsapp_group_name(group_jid, chamado.whatsapp_instance)
+    if not group_name:
+        return
+    chamado.usuario = group_name
+    session.add(chamado)
+    changed = False
+    for message in messages:
+        if message.usuario in (old_name, "Grupo WhatsApp", group_jid):
+            message.usuario = group_name
+            session.add(message)
+            changed = True
+    if changed:
+        session.commit()
+
 # ── GET /api/tickets/chat?chamado_id=X&since_id=Y  (frontend polling) ─────────
 @router.get("/chat")
 def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = None):
@@ -321,6 +353,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
             )
             .order_by(ChamadoInteracao.data_hora)
         ).all()
+        _sync_group_history_name(session, chamado, msgs)
 
         return {
             "ok": True,
@@ -463,6 +496,9 @@ async def send_chat_message(
             "responde_a_texto": msg.responde_a_texto,
             "whatsapp_status": msg.whatsapp_status or "sent",
             "data_hora": msg.data_hora.strftime("%d/%m/%Y %H:%M:%S"),
+            "is_me": True,
+            "can_edit": True,
+            "can_delete": True,
         },
     }
 
@@ -569,6 +605,7 @@ def get_chat_legacy(chamado_id: int, request: Request):
             .where(ChamadoInteracao.chamado_id == chamado_id)
             .order_by(ChamadoInteracao.data_hora)
         ).all()
+        _sync_group_history_name(session, chamado, msgs)
         seen_whatsapp_ids = set()
         unique_msgs = []
         for message in msgs:
