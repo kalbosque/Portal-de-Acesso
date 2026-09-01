@@ -19,6 +19,9 @@ from websocket_manager import manager
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
+_whatsapp_columns_ready = False
+_connected_map_cache = {"expires_at": 0.0, "value": {}}
+
 # Caminho absoluto relativo ao diretório do script — garante leitura do config correto
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(_BASE_DIR, "public_html", "includes", "config.json")
@@ -52,6 +55,9 @@ def get_whatsapp_webhook_target(config: dict) -> str:
 
 
 def _ensure_whatsapp_columns():
+    global _whatsapp_columns_ready
+    if _whatsapp_columns_ready:
+        return
     statements = [
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS whatsapp_cliente VARCHAR(80)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS whatsapp_instance VARCHAR(120)",
@@ -68,6 +74,7 @@ def _ensure_whatsapp_columns():
     with engine.begin() as conn:
         for statement in statements:
             conn.execute(text(statement))
+    _whatsapp_columns_ready = True
 
 
 def get_default_whatsapp_instance(config: dict) -> Optional[str]:
@@ -179,6 +186,36 @@ def get_evolution_api_endpoints(instance_name: Optional[str] = None):
     if not instance:
         instance = "printdash"
     return base_url, wa_token, instance
+
+
+def get_whatsapp_group_name(group_jid: str, instance_name: Optional[str] = None) -> Optional[str]:
+    """Busca o nome atual de um grupo na Evolution API."""
+    if not group_jid or not str(group_jid).lower().endswith("@g.us"):
+        return None
+    try:
+        base_url, wa_token, resolved = get_evolution_api_endpoints(instance_name)
+        if not base_url or not resolved:
+            return None
+        response = requests.get(
+            f"{base_url}/group/findGroupInfo/{resolved}",
+            headers={"apikey": wa_token or ""},
+            params={"groupJid": str(group_jid)},
+            timeout=3,
+        )
+        if response.status_code != 200:
+            return None
+        result = response.json()
+        objects = [result]
+        if isinstance(result, dict):
+            objects.extend(value for value in result.values() if isinstance(value, dict))
+        for item in objects:
+            for field in ("subject", "groupName", "name"):
+                name = str(item.get(field) or "").strip()
+                if name:
+                    return name
+    except Exception as exc:
+        print(f"[WhatsApp] Não foi possível obter nome do grupo {group_jid}: {exc}")
+    return None
 
 
 def send_whatsapp_text(number: str, text: str, instance: Optional[str] = None) -> bool:
@@ -307,9 +344,18 @@ def send_whatsapp_media(number: str, media_base64: str, media_type: str, mime_ty
     if wa_token:
         headers["apikey"] = wa_token
     is_gif = media_type == "gif" or mime_type.lower() == "image/gif" or filename.lower().endswith(".gif")
+    if is_gif:
+        # A Evolution API exige mediatype=video + mime=video/mp4 + gifPlayback=True
+        # para que o WhatsApp entregue o GIF como animação ao cliente.
+        # Enviar como image/gif ou document faz o cliente receber um arquivo estático
+        # sem animação, ou nem exibir a mídia.
+        media_type = "video"
+        mime_type = "video/mp4"
+        filename = os.path.splitext(filename)[0] + ".mp4"
+
     payload = {
         "number": number,
-        "mediatype": "video" if is_gif else media_type,
+        "mediatype": media_type,
         "mimetype": mime_type,
         "caption": caption or "",
         "media": media_base64,
@@ -1133,32 +1179,37 @@ def get_whatsapp_chats(request: Request):
     show_groups = bool(get_whatsapp_config().get("WHATSAPP_SHOW_GROUPS", False))
     
     # Tenta obter números conectados por instância (para indicar presença)
-    connected_map = {}
-    try:
-        instances, _ = get_whatsapp_instances()
-        for inst in instances:
-            name = inst.get('instanceName')
-            if not name:
-                continue
-            try:
-                base_url, wa_token, resolved = get_evolution_api_endpoints(name)
-                if base_url:
-                    headers = {}
-                    if wa_token:
-                        headers['apikey'] = wa_token
-                    resp = requests.get(f"{base_url}/instance/connectionState/{resolved}", headers=headers, timeout=3)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        nums = _extract_connected_numbers(data)
-                        connected_map[name] = set(nums)
+    now = time.time()
+    if _connected_map_cache["expires_at"] > now:
+        connected_map = _connected_map_cache["value"]
+    else:
+        connected_map = {}
+        try:
+            instances, _ = get_whatsapp_instances()
+            for inst in instances:
+                name = inst.get('instanceName')
+                if not name:
+                    continue
+                try:
+                    base_url, wa_token, resolved = get_evolution_api_endpoints(name)
+                    if base_url:
+                        headers = {}
+                        if wa_token:
+                            headers['apikey'] = wa_token
+                        resp = requests.get(f"{base_url}/instance/connectionState/{resolved}", headers=headers, timeout=3)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            connected_map[name] = set(_extract_connected_numbers(data))
+                        else:
+                            connected_map[name] = set()
                     else:
                         connected_map[name] = set()
-                else:
+                except Exception:
                     connected_map[name] = set()
-            except Exception:
-                connected_map[name] = set()
-    except Exception:
-        connected_map = {}
+        except Exception:
+            connected_map = {}
+        _connected_map_cache["value"] = connected_map
+        _connected_map_cache["expires_at"] = now + 10
 
     with Session(engine) as session:
         # Query base para chamados vindos do WhatsApp
@@ -1192,8 +1243,28 @@ def get_whatsapp_chats(request: Request):
                     c.whatsapp_cliente = interaction_jid
                     session.add(c)
                     session.commit()
+            if not str(c.whatsapp_cliente or "").lower().endswith("@g.us"):
+                group_interaction = session.exec(
+                    select(ChamadoInteracao).where(
+                        ChamadoInteracao.chamado_id == c.id,
+                        ChamadoInteracao.whatsapp_remote_jid.like("%@g.us"),
+                    ).order_by(desc(ChamadoInteracao.data_hora)).limit(1)
+                ).first()
+                if group_interaction:
+                    c.whatsapp_cliente = group_interaction.whatsapp_remote_jid
+                    session.add(c)
+                    session.commit()
             if not show_groups and str(c.whatsapp_cliente or "").lower().endswith("@g.us"):
                 continue
+
+            if str(c.whatsapp_cliente or "").lower().endswith("@g.us") and (
+                not c.usuario or c.usuario.strip() in ("Grupo WhatsApp", c.whatsapp_cliente)
+            ):
+                group_name = get_whatsapp_group_name(c.whatsapp_cliente, c.whatsapp_instance)
+                if group_name:
+                    c.usuario = group_name
+                    session.add(c)
+                    session.commit()
             
             # determina presença: se o chamado tem `whatsapp_instance`, checa lá, senão checa em todas
             is_connected = False
@@ -1642,7 +1713,13 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         if not remote_jid:
             print(f"[Webhook] JID vazio ignorado: {remote_jid}")
             continue
-        is_group = str(remote_jid).lower().endswith("@g.us")
+        is_group = "@g.us" in str(remote_jid).lower()
+
+        # Grupos não participam do fluxo de atendimento. Mensagens enviadas
+        # por qualquer participante são ignoradas, sem criar ou reabrir ticket.
+        if is_group:
+            print(f"[Webhook] Mensagem de grupo ignorada: {remote_jid}")
+            continue
 
         # A Evolution API pode reenviar o mesmo webhook. Evita duplicar a interação.
         incoming_message_id = str(key.get("id") or "").strip()
@@ -1688,9 +1765,9 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         background_tasks.add_task(manager.broadcast, {"event": "whatsapp_reaction", "ticket_id": target_message.chamado_id, "message_id": target_message.id, "reaction": target_message.reacao})
             continue
 
-        customer_name = (data.get("groupName") or data.get("subject") or "") if is_group else (data.get("pushName") or data.get("notifyName") or data.get("senderName") or "")
+        customer_name = (data.get("groupName") or data.get("subject") or key.get("groupName") or key.get("subject") or "") if is_group else (data.get("pushName") or data.get("notifyName") or data.get("senderName") or "")
         if is_group and not customer_name:
-            customer_name = key.get("groupName") or key.get("subject") or "Grupo WhatsApp"
+            customer_name = get_whatsapp_group_name(phone_number, instance_from_payload) or "Grupo WhatsApp"
 
         # Extrai o texto de acordo com o tipo da mensagem (Baileys/Evolution v2)
         msg_text = ""
@@ -1735,6 +1812,16 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
         with Session(engine) as session:
             # 1) Tenta achar chamado ativo na MESMA instância
+            if not is_group:
+                legacy_group_message = session.exec(
+                    select(ChamadoInteracao).where(
+                        ChamadoInteracao.whatsapp_remote_jid.like(f"{phone_number}@g.us%")
+                    ).order_by(desc(ChamadoInteracao.data_hora)).limit(1)
+                ).first()
+                if legacy_group_message:
+                    is_group = True
+                    phone_number = str(legacy_group_message.whatsapp_remote_jid)
+
             stmt = select(Chamado).where(
                 Chamado.whatsapp_cliente == phone_number,
                 Chamado.whatsapp_instance == instance_from_payload,
@@ -1751,6 +1838,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 chamado = session.exec(stmt2).first()
 
             if chamado:
+                if is_group and customer_name != "Grupo WhatsApp" and chamado.usuario != customer_name:
+                    chamado.usuario = customer_name
                 own_messages = session.exec(select(ChamadoInteracao).where(
                     ChamadoInteracao.chamado_id == chamado.id,
                     ChamadoInteracao.usuario != customer_name,
@@ -1790,6 +1879,11 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     }
                 )
             else:
+                # Mensagens de grupos não devem abrir chamados automaticamente.
+                # O grupo só continua sendo processado se já existir um chamado.
+                if is_group:
+                    print(f"[Webhook] Mensagem de grupo ignorada sem chamado: {phone_number}")
+                    continue
                 # Abre novo chamado
                 auto_create_ticket = bool(get_whatsapp_config().get("WHATSAPP_AUTO_CREATE_TICKETS", True))
                 chamado = Chamado(
