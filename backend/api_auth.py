@@ -1,11 +1,13 @@
 import json
 import secrets
+from datetime import datetime
 from typing import Optional
 
 import bcrypt
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
+from sqlalchemy import text
 
 from auth_utils import get_signed_cookie, normalize_permissions
 from database import engine
@@ -98,7 +100,7 @@ async def login(
             if intent == "atendimento":
                 if user.role != "admin" and "Atendimento" not in user_perms and "Suporte" not in user_perms:
                     return JSONResponse({"success": False, "detail": "Este usuário não possui permissão para Atendimento."}, status_code=403)
-                redirect = "/central-atendimento"
+                redirect = "/central-atendimento/dashboard" if user.role in ("admin", "recepcao", "recepção", "recepcionista") else "/central-atendimento"
             elif intent == "suporte":
                 redirect = "/chamados"
             elif user.role in ("admin", "gestor") and intent == "gestao":
@@ -107,6 +109,8 @@ async def login(
                 redirect = "/chamados"
 
             response = JSONResponse({"success": True, "redirect": redirect})
+            session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(), "user_id": user.id})
+            session.commit()
             _set_session_cookies(response, user)
             return response
     except Exception as exc:
@@ -238,8 +242,29 @@ async def change_password(request: Request, password: str = Form(...), confirm_p
     return JSONResponse({"success": True, "message": "Senha alterada com sucesso!"})
 
 
+@router.post("/heartbeat")
+async def heartbeat(request: Request):
+    user_id = get_signed_cookie(request, "user_id")
+    if user_id:
+        try:
+            with Session(engine) as session:
+                session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(), "user_id": int(user_id)})
+                session.commit()
+        except Exception as exc:
+            print(f"[HEARTBEAT] Nao foi possivel atualizar presenca: {exc}")
+    return JSONResponse({"success": True})
+
+
 @router.post("/logout")
-async def logout():
+async def logout(request: Request):
+    user_id = get_signed_cookie(request, "user_id")
+    if user_id:
+        try:
+            with Session(engine) as session:
+                session.execute(text("UPDATE usuarios SET last_seen = NULL WHERE id = :user_id"), {"user_id": int(user_id)})
+                session.commit()
+        except Exception as exc:
+            print(f"[LOGOUT] Nao foi possivel limpar presenca: {exc}")
     response = JSONResponse({"success": True})
     for key in ("user_id", "user_name", "username", "user_role", "user_perms"):
         response.delete_cookie(key, path="/")

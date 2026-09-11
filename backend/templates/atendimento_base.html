@@ -43,6 +43,7 @@
         .attendance-nav .menu-logout:hover { background: rgba(244,63,94,.16); border-color: rgba(251,113,133,.2); color: #fecdd3; }
         body.attendance-menu-expanded main { padding-left: 250px !important; transition: none !important; }
         .attendance-nav a[href="/central-atendimento/configuracoes"]::before { content: '⚙'; margin-right: .55rem; font-size: 1rem; }
+        .attendance-nav a[href="/central-atendimento/dashboard"] { order: -1; }
         @media (max-width: 1200px) {
             .attendance-nav { left: 22px; top: 196px; }
             .attendance-menu-toggle { left: 22px; top: 109px; width: 58px; height: 40px; }
@@ -71,7 +72,7 @@
             <button type="button" class="attendance-menu-toggle items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200" onclick="toggleAttendanceMenu(event)" aria-label="Abrir menu"></button>
             <div class="flex flex-wrap items-center gap-2 attendance-nav menu-collapsed">
                 <a href="/central-atendimento" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">💬</span>Conversas</a>
-                {% if user_role == 'admin' %}<a href="/central-atendimento/dashboard" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-indigo-500/15"><span class="menu-icon shrink-0" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>Painel</a>{% endif %}
+                {% if user_role in ['admin', 'recepcao', 'recepção', 'recepcionista'] %}<a href="/central-atendimento/dashboard" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-indigo-500/15"><span class="menu-icon shrink-0" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>Painel</a>{% endif %}
                 <a href="/central-atendimento/contatos" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">👥</span>Contatos</a>
                 <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-internal-note'))" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-amber-500/15"><span aria-hidden="true">📝</span>Nota interna</button>
                 {% if user_role != 'cliente_atendimento' %}<a href="/central-atendimento/configuracoes" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15">Configurações</a>{% endif %}
@@ -149,13 +150,14 @@
                 holder.className = 'menu-icon shrink-0';
             }
             const configLink = document.querySelector('.attendance-nav a[href="/central-atendimento/configuracoes"]');
-            if (configLink && !document.querySelector('.attendance-nav .menu-history')) {
+            const historyAnchor = configLink || document.querySelector('.attendance-nav .menu-logout');
+            if (historyAnchor && !document.querySelector('.attendance-nav .menu-history')) {
                 const history = document.createElement('button');
                 history.type = 'button';
                 history.className = 'menu-history inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-indigo-500/15';
                 history.innerHTML = '<span class="menu-icon shrink-0" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg></span>Histórico';
                 history.onclick = function() { window.dispatchEvent(new CustomEvent('open-resolved-history')); };
-                configLink.parentNode.insertBefore(history, configLink);
+                historyAnchor.parentNode.insertBefore(history, historyAnchor);
             }
             const logout = document.querySelector('.attendance-nav .menu-logout');
             if (logout) {
@@ -168,5 +170,11 @@
         }
         initializeAttendanceMenu();
     </script>
+    {% if authenticated|default(false) %}
+    <script>
+        fetch('/api/auth/heartbeat', { method: 'POST' }).catch(() => {});
+        setInterval(() => fetch('/api/auth/heartbeat', { method: 'POST' }).catch(() => {}), 60000);
+    </script>
+    {% endif %}
 </body>
 </html>

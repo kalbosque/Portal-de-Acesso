@@ -191,7 +191,7 @@
     /* Chat Baloon Bubble styling */
     .bubble {
         max-width: 75%;
-        padding: 0.5rem 0.6rem 1.25rem 0.6rem;
+        padding: 0.5rem 0.6rem;
         border-radius: 0.5rem;
         font-size: 0.85rem;
         font-weight: 500;
@@ -200,7 +200,13 @@
         word-break: break-word;
         box-shadow: 0 1px 0.5px rgba(11, 20, 26, .13);
         z-index: 1;
-        animation: bubblePop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        animation: none;
+    }
+
+    /* Emojis devem permanecer estÃ¡ticos; somente GIFs usam movimento. */
+    #emoji-picker, #emoji-picker button {
+        animation: none !important;
+        transform: none !important;
     }
 
     @keyframes bubblePop {
@@ -237,9 +243,6 @@
     }
 
     .bubble-meta {
-        position: absolute;
-        bottom: 3px;
-        right: 8px;
         display: flex;
         align-items: center;
         gap: 4px;
@@ -595,7 +598,11 @@
             <h3 class="text-3xl font-black text-white mb-2 uppercase tracking-tight italic">Finalizar Chamado</h3>
         </div>
         <form onsubmit="resolverChamadoSubmit(event)" class="space-y-6">
-            <button type="submit" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg">Finalizar e Enviar</button>
+            <label class="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" id="send-closing-msg" class="w-5 h-5 rounded border-white/10 bg-black/20 text-emerald-500 focus:ring-emerald-500/50" checked>
+                <span class="text-sm font-semibold text-slate-300">Enviar mensagem de encerramento ao cliente</span>
+            </label>
+            <button type="submit" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest rounded-xl shadow-lg">Finalizar Chamado</button>
         </form>
     </div>
 </div>
@@ -620,6 +627,8 @@
     let typingNotifyTimer = null;
     let toastTimer = null;
     let unreadTitleCount = 0;
+    let notificationSnapshot = new Map();
+    let notificationSnapshotReady = false;
     let audioContext = null;
     let wsHeartbeat = null;
     let wsConnected = false;
@@ -650,6 +659,16 @@
 
     function sameTicket(a, b) {
         return a != null && b != null && String(a) === String(b);
+    }
+
+    function _isGroupChat(c) {
+        return String(c?.whatsapp_cliente || '').toLowerCase().endsWith('@g.us');
+    }
+
+    function getChatDisplayName(chat) {
+        if (!chat) return 'Contato sem nome';
+        if (_isGroupChat(chat)) return chat.usuario || `Grupo WhatsApp · ${String(chat.whatsapp_cliente || '').split('@')[0]}`;
+        return chat.usuario || 'Contato sem nome';
     }
 
     function playNotificationSound() {
@@ -718,7 +737,12 @@
         if (raw.includes('@lid')) return 'Telefone não disponível';
         let digits = raw.split('@')[0].split(':')[0].replace(/\D/g, '');
         if (!digits) return '--';
-        if (!digits.startsWith('55')) digits = `55${digits}`;
+        
+        // Se for número nacional sem DDI (10 ou 11 dígitos), assume Brasil (55)
+        if (digits.length === 10 || digits.length === 11) {
+            digits = `55${digits}`;
+        }
+        
         if (digits.startsWith('55') && digits.length === 13) {
             return `+55 (${digits.slice(2, 4)}) ${digits[4]} ${digits.slice(5, 9)}-${digits.slice(9)}`;
         }
@@ -876,7 +900,23 @@
         chatsLoading = true;
         try {
             const res = await fetch('/api/whatsapp/chats');
-            chatsData = await res.json();
+            const incomingChats = await res.json();
+            if (notificationSnapshotReady) {
+                incomingChats.forEach(chat => {
+                    const key = String(chat.id);
+                    const unread = Number(chat.unread_admin || 0);
+                    const previous = Number(notificationSnapshot.get(key) || 0);
+                    if (unread > previous && !sameTicket(chat.id, activeTicketId)) {
+                        notifyIncomingMessage({
+                            usuario: getChatDisplayName(chat),
+                            preview: chat.ultima_mensagem || 'Nova mensagem recebida'
+                        });
+                    }
+                });
+            }
+            notificationSnapshot = new Map(incomingChats.map(chat => [String(chat.id), Number(chat.unread_admin || 0)]));
+            notificationSnapshotReady = true;
+            chatsData = incomingChats;
             renderGroupsList();
             renderContactsList();
             renderChatsList();
@@ -913,7 +953,7 @@
         }
         
         let filtered = [];
-        const isGroupChat = c => String(c.whatsapp_cliente || '').toLowerCase().endsWith('@g.us');
+        const isGroupChat = _isGroupChat;
         if (currentQueue === 'grupos') {
             filtered = chatsData.filter(c => isGroupChat(c));
         } else if (currentQueue === 'aguardando') {
@@ -964,7 +1004,8 @@
                 badge = `<span class="bg-[#00a884] text-[#111b21] font-black text-[10px] px-1.5 min-w-[20px] h-5 rounded-full flex items-center justify-center shadow-lg transition-transform">${c.unread_admin}</span>`;
             }
 
-            const nameInitial = c.usuario.substring(0, 2).toUpperCase();
+            const displayName = getChatDisplayName(c);
+            const nameInitial = displayName.substring(0, 2).toUpperCase();
             const isConnected = !!(c.connected || c.is_connected || c.presence === 'connected');
             const groupName = c.status === 'Resolvido'
                 ? 'Finalizado'
@@ -979,7 +1020,7 @@
                     </div>
                     <div class="min-w-0 flex-grow">
                         <div class="flex items-center justify-between w-full mb-0.5">
-                            <span class="chat-name text-[15px] font-medium text-[#e9edef] truncate">${c.usuario}</span>
+                            <span class="chat-name text-[15px] font-medium text-[#e9edef] truncate" title="${displayName}">${displayName}</span>
                             <span class="text-[11px] text-[#8696a0] flex-shrink-0 ml-2" id="time-${c.id}">${c.data_ultima_mensagem}</span>
                         </div>
                         <div class="flex items-center justify-between w-full gap-2 mb-1">
@@ -1003,7 +1044,7 @@
                         </div>
                         <div class="chat-card-actions">
                             ${currentQueue === 'resolvidos' && is_admin ? `<button type="button" class="chat-card-action reopen" title="Reabrir atendimento" aria-label="Reabrir atendimento" onclick="reabrirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v8h8"/><path d="M12 8v4l3 2"/></svg></button>` : ''}
-                            ${!c.assigned_user && !isReception ? `<button type="button" class="chat-card-action assume" title="Assumir atendimento" aria-label="Assumir atendimento" onclick="assumirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></button>` : ''}
+                            ${!c.assigned_user && !isReception && !isGroupChat(c) ? `<button type="button" class="chat-card-action assume" title="Assumir atendimento" aria-label="Assumir atendimento" onclick="assumirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/></svg></button>` : ''}
                             ${currentQueue !== 'resolvidos' && !isGroupChat(c) ? `<button type="button" class="chat-card-action close" title="Fechar atendimento" aria-label="Fechar atendimento" onclick="fecharAtendimentoCard(${c.id}, event)">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
                             </button>` : ''}
@@ -1097,9 +1138,9 @@
         if (!chat) return;
         
         // Preenche o Header do Chat
-        document.getElementById('chat-header-name').innerText = chat.usuario;
+        document.getElementById('chat-header-name').innerText = getChatDisplayName(chat);
         document.getElementById('chat-header-phone').innerText = formatDisplayPhone(chat.whatsapp_cliente);
-        document.getElementById('chat-header-avatar').innerText = chat.usuario.substring(0, 2).toUpperCase();
+        document.getElementById('chat-header-avatar').innerText = getChatDisplayName(chat).substring(0, 2).toUpperCase();
         // Instância e presença
         document.getElementById('chat-header-instance').innerText = chat.whatsapp_instance || '--';
         const pres = document.getElementById('chat-header-presence');
@@ -1115,9 +1156,11 @@
         const transferButton = document.getElementById('transfer-button');
         const mobileTransferSelect = document.getElementById('transfer-operator-mobile');
         const mobileTransferButton = document.getElementById('transfer-button-mobile');
+        const isGroupConversation = _isGroupChat(chat);
+        if (isGroupConversation) transferBar?.classList.add('hidden');
         if (chat.assigned_user) {
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-white/5 border border-white/5 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">Operador: ${chat.assigned_user}</span>`;
-            transferBar?.classList.remove('hidden');
+            if (!isGroupConversation) transferBar?.classList.remove('hidden');
             if (transferSelect) transferSelect.disabled = false;
             if (transferButton) transferButton.disabled = false;
             if (mobileTransferSelect) mobileTransferSelect.disabled = false;
@@ -1125,7 +1168,7 @@
             fillTransferOperators(chat.assigned_user);
         } else {
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[9px] font-black text-amber-400 uppercase tracking-widest animate-pulse">Aguardando</span>`;
-            if (isReception) {
+            if (isReception && !isGroupConversation) {
                 transferBar?.classList.remove('hidden');
                 fillTransferOperators('');
                 if (transferSelect) transferSelect.disabled = false;
@@ -1166,7 +1209,7 @@
                 </button>
             `;
             document.getElementById('btn-resolver').disabled = true;
-            document.getElementById('btn-resolver').classList.toggle('hidden', isGroupChat(chat));
+            document.getElementById('btn-resolver').classList.toggle('hidden', _isGroupChat(chat));
         } else {
             assumirArea.innerHTML = `
                 ${promoteButton}
@@ -1177,7 +1220,7 @@
             `;
             // Apenas quem assumiu (ou Admin) pode resolver
             document.getElementById('btn-resolver').disabled = chat.assigned_user !== currentUser && !is_admin;
-            document.getElementById('btn-resolver').classList.toggle('hidden', isGroupChat(chat));
+            document.getElementById('btn-resolver').classList.toggle('hidden', _isGroupChat(chat));
         }
         
         // Carrega o histórico de mensagens
@@ -1277,7 +1320,7 @@
         ticks = ticks.replace('text-[#53bdeb]', tickColor);
         const canEdit = m.can_edit ?? m.is_me;
         const canDelete = m.can_delete ?? (m.is_me || is_admin);
-        const replyAction = !isDeleted ? `<button type="button" onclick="replyToMessage(${m.id})" class="absolute bottom-2 left-2 text-[9px] font-bold text-slate-400 hover:text-emerald-300" title="Responder">Responder</button>` : '';
+        const replyAction = !isDeleted ? `<button type="button" onclick="replyToMessage(${m.id})" class="text-[10px] font-bold text-slate-400 hover:text-emerald-300" title="Responder">Responder</button>` : '';
         const messageActions = !isDeleted
             ? `<div class="absolute right-2 top-2 z-20"><button type="button" onclick="toggleMessageMenu(${m.id}, event)" class="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white" title="Opções">⋮</button><div id="message-menu-${m.id}" class="message-menu hidden absolute right-0 top-7 min-w-28 overflow-hidden rounded-lg border border-white/10 bg-slate-800 shadow-xl">${canEdit ? `<button type="button" onclick="editarMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-slate-200 hover:bg-white/10">Editar</button>` : ''}${canDelete ? `<button type="button" onclick="excluirMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-rose-300 hover:bg-white/10">Excluir</button>` : ''}</div></div>`
             : '';
@@ -1287,13 +1330,15 @@
             ${m.whatsapp_message_id ? `<button type="button" class="reaction-trigger flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-slate-800 text-sm text-slate-300 shadow-lg" onclick="reactToMessage(${m.id})" title="Reagir">☺</button>` : ''}
             <div class="mb-1 text-[10px] font-black uppercase tracking-wider ${m.is_me ? 'text-emerald-300' : 'text-slate-400'}">${m.is_me ? 'Atendente · ' + currentUser : (m.usuario || 'Cliente')}</div>
             ${m.responde_a_id ? `<div class="mb-2 rounded-lg border-l-2 border-emerald-400 bg-black/10 px-2 py-1"><div class="text-[9px] font-black text-emerald-300">${escapeHtml(m.responde_a_usuario || 'Mensagem')}</div><div class="truncate text-[10px] text-slate-400">${escapeHtml(m.responde_a_texto || '')}</div></div>` : ''}
-            <div class="text-[14.2px] pb-[10px]">${formattedMsg}</div>
+            <div class="text-[14.2px]">${formattedMsg}</div>
             ${m.reacao ? `<span class="message-reaction absolute -bottom-2 left-3 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm shadow">${escapeHtml(m.reacao)}</span>` : ''}
-            ${replyAction}
             ${messageActions}
-            <div class="bubble-meta">
-                <span>${timeStr}</span>
-                ${ticks}
+            <div class="flex items-end justify-between gap-4 mt-1">
+                ${replyAction}
+                <div class="bubble-meta ml-auto shrink-0">
+                    <span>${timeStr}</span>
+                    ${ticks}
+                </div>
             </div>
         `;
         
@@ -1527,10 +1572,25 @@
         const picker = document.getElementById('gif-picker');
         if (!activeTicketId) return;
         try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error('GIF indisponível');
+            // O WhatsApp só aceita arquivos MP4 para tocar como GIF animado nativo.
+            // O Giphy (onde os GIFs estão hospedados) fornece a versão MP4 automaticamente!
+            let finalUrl = url.replace('.gif', '.mp4');
+            let isMp4 = true;
+            let response = await fetch(finalUrl);
+            
+            if (!response.ok) {
+                // Fallback de segurança se o mp4 falhar
+                finalUrl = url;
+                isMp4 = false;
+                response = await fetch(finalUrl);
+                if (!response.ok) throw new Error('GIF indisponível');
+            }
+            
             const blob = await response.blob();
-            const file = new File([blob], `gif-${Date.now()}.gif`, { type: 'image/gif' });
+            const filename = isMp4 ? `gif-${Date.now()}.mp4` : `gif-${Date.now()}.gif`;
+            const mimeType = isMp4 ? 'video/mp4' : 'image/gif';
+            
+            const file = new File([blob], filename, { type: mimeType });
             const transfer = new DataTransfer();
             transfer.items.add(file);
             const attachmentInput = document.getElementById('attachment-input');
@@ -1815,11 +1875,6 @@
 
     function openSolutionModal() {
         if (!activeTicketId) return;
-        const chat = chatsData.find(c => c.id === activeTicketId);
-        if (chat && chat.visivel_suporte === false) {
-            if (confirm('Fechar este atendimento sem nota técnica?')) finalizarAtendimento('');
-            return;
-        }
         document.getElementById('atendSolutionModal').classList.remove('hidden');
     }
 
@@ -1831,15 +1886,17 @@
         e.preventDefault();
         if (!activeTicketId) return;
         
-        await finalizarAtendimento('');
+        const sendMsgCb = document.getElementById('send-closing-msg');
+        const sendMsg = sendMsgCb ? sendMsgCb.checked : true;
+        await finalizarAtendimento('', sendMsg);
     }
 
-    async function finalizarAtendimento(nota) {
+    async function finalizarAtendimento(nota, sendMsg = true) {
         try {
             const res = await fetch('/api/tickets/finalizar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({id: activeTicketId, nota_tecnica: nota})
+                body: JSON.stringify({id: activeTicketId, nota_tecnica: nota, send_message: sendMsg})
             });
             
             if (res.ok) {
@@ -1900,7 +1957,17 @@
                     }
                 }
                 else if (data.event === "whatsapp_message_status") {
-                    if (sameTicket(data.ticket_id, activeTicketId)) loadMessages(activeTicketId);
+                    if (sameTicket(data.ticket_id, activeTicketId)) {
+                        const msgId = data.msg_id || data.message_id || data.id;
+                        const msgRow = document.querySelector(`[data-message-id="${msgId}"]`);
+                        if (msgRow && (data.status === 'read' || data.status === 'READ')) {
+                            const tick = msgRow.querySelector('.bubble-meta svg');
+                            if (tick) {
+                                tick.classList.remove('text-slate-400');
+                                tick.classList.add('text-[#53bdeb]');
+                            }
+                        }
+                    }
                 }
                 else if (data.event === "whatsapp_reaction") {
                     if (sameTicket(data.ticket_id, activeTicketId)) loadMessages(activeTicketId);
@@ -1928,12 +1995,14 @@
                         
                         if (data.usuario !== currentUser) {
                             markAsRead(tId);
-                            loadMessages(tId);
                         }
                     } else {
                         if (data.usuario !== currentUser) {
                             const c = chatsData.find(x => x.id === tId);
-                            if(c) c.unread_admin = (c.unread_admin || 0) + 1;
+                            if(c) {
+                                c.unread_admin = (c.unread_admin || 0) + 1;
+                                notificationSnapshot.set(String(tId), Number(c.unread_admin || 0));
+                            }
                         }
                     }
 
@@ -1947,11 +2016,13 @@
                         chatsData.unshift(c);
                         renderChatsList();
                     } else {
+                        if (tId) notificationSnapshot.set(String(tId), 1);
                         loadChats();
                     }
                 } 
                 else if (data.event === "new_whatsapp_chat") {
                     notifyIncomingMessage(data, true);
+                    if (data.ticket_id) notificationSnapshot.set(String(data.ticket_id), 1);
                     loadChats();
                 } 
                 else if (data.event === "whatsapp_chat_assigned") {
@@ -2001,16 +2072,16 @@
             typingNotifyTimer = setTimeout(notifyTyping, 350);
         });
         setInterval(() => {
-            pollTyping();
-            pollActiveMessages();
+            if (!wsConnected) {
+                pollTyping();
+                pollActiveMessages();
+            }
         }, 1500);
-        // Fallback para quando o navegador perde algum evento WebSocket.
+        // Sincronização de segurança: também avisa quando o WebSocket perde um evento.
         setInterval(() => {
-            // Sincroniza apenas a lista; mantém o contador atualizado mesmo
-            // quando algum proxy interrompe eventos do WebSocket.
             loadChats();
             if (!wsConnected) pollActiveMessages();
-        }, 5000);
+        }, 7000);
         
         // Configura polling de fallback caso o websocket falhe
         // setInterval(loadChats, 15000); // Removido para tempo real puramente via WebSocket
@@ -2033,6 +2104,7 @@
             const internalStatus = document.getElementById('contact-internal-status');
             if (internalStatus) {
                 internalStatus.value = data.status_interno || 'Normal';
+                internalStatus.dataset.lastValue = data.status_interno || 'Normal';
                 internalStatus.disabled = false;
             }
             updateContactPresence(!!chatsData.find(chat => chat.id === Number(ticketId))?.connected);
@@ -2072,12 +2144,18 @@
 
     async function saveContactInternalStatus(status) {
         if (!activeTicketId) return;
+        const selectElem = document.getElementById('contact-internal-status');
+        const previousStatus = selectElem ? (selectElem.dataset.lastValue || 'Normal') : 'Normal';
+        
         try {
             const res = await fetch('/api/whatsapp/contact/status', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ ticket_id: activeTicketId, status })
             });
             if (!res.ok) throw new Error('status');
+            
+            if (selectElem) selectElem.dataset.lastValue = status;
+            
             const statusAlert = document.getElementById('contact-status-alert');
             if (statusAlert && status !== 'Normal') {
                 statusAlert.textContent = `Aviso: cliente marcado como ${status}`;
@@ -2087,6 +2165,7 @@
             }
             mostrarToast('Status interno atualizado');
         } catch (e) {
+            if (selectElem) selectElem.value = previousStatus;
             mostrarToast('Não foi possível salvar o status interno');
         }
     }

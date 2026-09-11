@@ -22,7 +22,13 @@
         </div>
         <div class="flex gap-2"><button onclick="openNewContact()" class="rounded-xl bg-indigo-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-400">Novo contato</button><button onclick="syncContacts()" class="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-emerald-400">Sincronizar contatos</button></div>
     </div>
-    <div class="mb-5 flex items-center gap-3">
+    <div class="mb-5 flex flex-wrap items-center gap-3">
+        <label class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            N&#250;mero
+            <select id="contact-instance" onchange="syncContacts()" class="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-3 text-xs font-bold normal-case tracking-normal text-white outline-none focus:border-emerald-500">
+                <option value="">Inst&#226;ncia padr&#227;o</option>
+            </select>
+        </label>
         <input id="contact-search" oninput="renderContacts()" placeholder="Buscar por nome ou telefone..." class="w-full max-w-md rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
         <span id="contact-count" class="text-xs text-slate-500"></span>
     </div>
@@ -49,10 +55,28 @@
 <script>
 let contacts = [];
 let editingContactId = null;
+async function loadContactInstances() {
+    const select = document.getElementById('contact-instance');
+    try {
+        const res = await fetch('/api/whatsapp/instances');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        select.innerHTML = '<option value="">Inst&#226;ncia padr&#227;o</option>';
+        (data.instances || []).forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.instanceName;
+            option.textContent = `${item.label || item.instanceName}${['open', 'connected'].includes(String(item.state || '').toLowerCase()) ? ' · conectado' : ''}`;
+            select.appendChild(option);
+        });
+        if (data.default_instance) select.value = data.default_instance;
+    } catch (_) {
+        select.innerHTML = '<option value="">Inst&#226;ncia padr&#227;o</option>';
+    }
+}
 async function syncContacts() {
     const grid = document.getElementById('contacts-grid');
     grid.innerHTML = '<div class="col-span-full py-20 text-center text-sm text-slate-400">Sincronizando contatos...</div>';
-    try { const res = await fetch('/api/whatsapp/contacts'); if (!res.ok) throw new Error(); contacts = await res.json(); renderContacts(); addEditButtonsForSynced(); }
+    try { const instance = document.getElementById('contact-instance').value; const url = instance ? `/api/whatsapp/contacts?instance=${encodeURIComponent(instance)}` : '/api/whatsapp/contacts'; const res = await fetch(url); if (!res.ok) throw new Error(); contacts = await res.json(); renderContacts(); addEditButtonsForSynced(); }
     catch (_) { grid.innerHTML = '<div class="col-span-full py-20 text-center text-sm text-rose-300">Não foi possível sincronizar os contatos.</div>'; }
 }
 function openNewContact() { document.getElementById('new-contact-modal').classList.remove('hidden'); document.getElementById('new-contact-modal').classList.add('flex'); document.getElementById('new-name').focus(); }
@@ -71,6 +95,6 @@ async function saveNewContact(event) { event.preventDefault(); const id = editin
 function openStartModal(contact) { document.getElementById('modal-contact-name').textContent = `Conversar com ${contact.name}`; document.getElementById('modal-contact-number').value = contact.number; document.getElementById('modal-contact-instance').value = contact.instance || ''; document.getElementById('modal-message').value = ''; document.getElementById('start-modal').classList.remove('hidden'); document.getElementById('start-modal').classList.add('flex'); document.getElementById('modal-message').focus(); }
 function closeStartModal() { document.getElementById('start-modal').classList.add('hidden'); document.getElementById('start-modal').classList.remove('flex'); }
 async function startConversation() { const res = await fetch('/api/whatsapp/contacts/start', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number:document.getElementById('modal-contact-number').value,name:document.getElementById('modal-contact-name').textContent.replace('Conversar com ',''),instance:document.getElementById('modal-contact-instance').value,message:document.getElementById('modal-message').value})}); if (!res.ok) { alert('Não foi possível iniciar a conversa.'); return; } const data = await res.json(); window.location.href = `/central-atendimento?ticket=${data.ticket_id}`; }
-document.addEventListener('DOMContentLoaded', () => syncContacts());
+document.addEventListener('DOMContentLoaded', async () => { await loadContactInstances(); await syncContacts(); });
 </script>
 {% endblock %}

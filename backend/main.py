@@ -114,6 +114,7 @@ def ensure_schema_compatibility():
         "ALTER TABLE impressoras ADD COLUMN IF NOT EXISTS modelo VARCHAR(120)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(255)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_logo_url VARCHAR(500)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP NULL",
         "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_role_check",
         "ALTER TABLE usuarios ADD CONSTRAINT usuarios_role_check CHECK (role IN ('admin', 'operator', 'gestor', 'gerente', 'supervisor', 'recepcao', 'recepcionista', 'cliente_atendimento'))",
         "ALTER TABLE impressoras ADD COLUMN IF NOT EXISTS localizacao VARCHAR(120)",
@@ -1596,17 +1597,35 @@ async def view_central_atendimento_dashboard(request: Request):
     user_role = request.cookies.get("user_role")
     if not user_id:
         return RedirectResponse(url="/login")
-    if user_role != "admin":
+    if user_role not in ("admin", "recepcao", "recepção", "recepcionista"):
         return RedirectResponse(url="/central-atendimento")
 
     config = load_app_config()
     with Session(engine) as session:
         chamados = session.exec(select(Chamado).where(Chamado.origem == "WhatsApp")).all()
+        try:
+            status_usuarios = session.connection().execute(text("SELECT status_conta, last_seen FROM usuarios")).fetchall()
+            online_cutoff = datetime.now() - timedelta(minutes=2)
+            usuarios_ativos = sum(1 for row in status_usuarios if row[1] and row[1] >= online_cutoff)
+            usuarios_inativos = len(status_usuarios) - usuarios_ativos
+            total_usuarios = len(status_usuarios)
+        except Exception as exc:
+            print(f"[CENTRAL DASHBOARD] Nao foi possivel carregar status dos usuarios: {exc}")
+            usuarios_ativos = 0
+            usuarios_inativos = 0
+            total_usuarios = 0
         operator_counts = {}
         for item in chamados:
             if item.assigned_user and item.status != "Resolvido":
                 operator_counts[item.assigned_user] = operator_counts.get(item.assigned_user, 0) + 1
         recent = sorted(chamados, key=lambda item: item.data_abertura or datetime.min, reverse=True)[:8]
+        agora = datetime.now()
+        triagem_aberta = [item for item in chamados if item.status != "Resolvido" and not item.assigned_user]
+        tempos_triagem = [max(0, int((agora - item.data_abertura).total_seconds() // 60)) for item in triagem_aberta if item.data_abertura]
+        triagem_urgente = sorted(
+            [item for item in triagem_aberta if item.data_abertura and (agora - item.data_abertura).total_seconds() >= 15 * 60],
+            key=lambda item: item.data_abertura,
+        )[:5]
         metrics = {
             "total": len(chamados),
             "triagem": sum(1 for item in chamados if item.status != "Resolvido" and not item.assigned_user),
@@ -1614,6 +1633,15 @@ async def view_central_atendimento_dashboard(request: Request):
             "finalizados": sum(1 for item in chamados if item.status == "Resolvido"),
             "grupos": sum(1 for item in chamados if str(item.whatsapp_cliente or "").lower().endswith("@g.us")),
             "nao_lidas": sum(int(item.unread_admin or 0) for item in chamados),
+            "usuarios_ativos": usuarios_ativos,
+            "usuarios_inativos": usuarios_inativos,
+            "total_usuarios": total_usuarios,
+            "usuarios_ativos_percentual": round(usuarios_ativos / total_usuarios * 100) if total_usuarios else 0,
+            "tempo_medio_espera": round(sum(tempos_triagem) / len(tempos_triagem)) if tempos_triagem else 0,
+            "triagem_urgente": [
+                {"id": item.id, "name": item.usuario or "Sem nome", "minutes": max(0, int((agora - item.data_abertura).total_seconds() // 60))}
+                for item in triagem_urgente
+            ],
             "operators": sorted(operator_counts.items(), key=lambda pair: pair[1], reverse=True),
             "recent": [
                 {"id": item.id, "name": item.usuario or "Sem nome", "status": item.status, "assigned": item.assigned_user or "Sem operador", "date": item.data_abertura.strftime("%d/%m/%Y %H:%M")}
@@ -1632,7 +1660,7 @@ async def view_whatsapp_contacts(request: Request):
     user_role = request.cookies.get("user_role")
     if not user_id:
         return RedirectResponse(url="/login")
-    if user_role not in ("admin", "operator"):
+    if not _can_access_atendimento(request):
         return RedirectResponse(url="/central-atendimento")
     return templates.TemplateResponse(
         request=request,
@@ -1640,6 +1668,7 @@ async def view_whatsapp_contacts(request: Request):
         context={
             "config": load_app_config(),
             "is_admin": user_role == "admin",
+            "user_role": user_role,
             "authenticated": True,
             "user_name": request.cookies.get("user_name", ""),
         },
@@ -1681,7 +1710,14 @@ async def view_whatsapp_groups(request: Request):
             if chamado.whatsapp_cliente in seen:
                 continue
             seen.add(chamado.whatsapp_cliente)
-            groups.append({"name": chamado.usuario or "Grupo WhatsApp", "jid": chamado.whatsapp_cliente, "last_activity": chamado.data_abertura.strftime("%d/%m/%Y %H:%M")})
+            group_name = chamado.usuario or ""
+            if group_name in ("", "Grupo WhatsApp", chamado.whatsapp_cliente):
+                group_name = api_whatsapp.get_whatsapp_group_name(chamado.whatsapp_cliente, chamado.whatsapp_instance)
+                if group_name:
+                    chamado.usuario = group_name
+                    session.add(chamado)
+                    session.commit()
+            groups.append({"name": group_name or "Grupo WhatsApp", "jid": chamado.whatsapp_cliente, "last_activity": chamado.data_abertura.strftime("%d/%m/%Y %H:%M")})
     return templates.TemplateResponse(request=request, name="whatsapp_groups.html", context={"config": config, "groups": groups, "authenticated": True, "user_name": request.cookies.get("user_name", "")})
 
 @app.get("/whatsapp_config")

@@ -111,6 +111,19 @@ def get_whatsapp_instances():
             if instance_name:
                 normalized.append({"instanceName": instance_name, "label": instance_name})
 
+    if "WHATSAPP_INSTANCES" not in config and not normalized:
+        wa_url = config.get("WHATSAPP_WEBHOOK_URL", "")
+        instance = None
+        if "/message/sendText/" in wa_url:
+            parts = wa_url.split("/message/sendText/")
+            if len(parts) > 1 and parts[1]:
+                instance = parts[1].split("?")[0]
+        
+        if not instance:
+            instance = "printdash"
+            
+        normalized.append({"instanceName": instance, "label": instance})
+
     default_instance = config.get("WHATSAPP_DEFAULT_INSTANCE") or (normalized[0]["instanceName"] if normalized else None)
     return normalized, default_instance
 
@@ -305,6 +318,9 @@ def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None
     ticket_id = payload.get("ticket_id")
     message_id = str(payload.get("message_id") or "").strip()
     reaction = str(payload.get("reaction") or "").strip()
+    # A Evolution API rejeita o variation selector usado por emojis como ❤️.
+    # Mantemos o emoji, removendo apenas esse marcador invisível antes do envio.
+    reaction = reaction.replace("\ufe0f", "")
     if not ticket_id or not message_id or not reaction:
         raise HTTPException(status_code=400, detail="Dados da reação incompletos")
     if len(reaction) > 16:
@@ -343,15 +359,20 @@ def send_whatsapp_media(number: str, media_base64: str, media_type: str, mime_ty
     headers = {"Content-Type": "application/json"}
     if wa_token:
         headers["apikey"] = wa_token
-    is_gif = media_type == "gif" or mime_type.lower() == "image/gif" or filename.lower().endswith(".gif")
-    if is_gif:
-        # A Evolution API exige mediatype=video + mime=video/mp4 + gifPlayback=True
-        # para que o WhatsApp entregue o GIF como animação ao cliente.
-        # Enviar como image/gif ou document faz o cliente receber um arquivo estático
-        # sem animação, ou nem exibir a mídia.
+    is_gif_playback = False
+    if filename.lower().startswith("gif-") and filename.lower().endswith(".mp4"):
+        # Frontend enviou versão MP4 do GIF para ativar a animação nativa do WhatsApp
+        is_gif_playback = True
         media_type = "video"
         mime_type = "video/mp4"
-        filename = os.path.splitext(filename)[0] + ".mp4"
+    elif media_type == "gif" or mime_type.lower() == "image/gif" or filename.lower().endswith(".gif"):
+        # Se enviarmos um binário .gif mas declararmos mime="video/mp4", o WhatsApp rejeita
+        # silenciosamente porque a assinatura do arquivo não bate com o cabeçalho.
+        # A forma segura de entregar sem conversão (ffmpeg) é enviá-lo como imagem/gif.
+        media_type = "image"
+        mime_type = "image/gif"
+        if not filename.lower().endswith(".gif"):
+            filename = os.path.splitext(filename)[0] + ".gif"
 
     payload = {
         "number": number,
@@ -361,7 +382,7 @@ def send_whatsapp_media(number: str, media_base64: str, media_type: str, mime_ty
         "media": media_base64,
         "fileName": filename,
     }
-    if is_gif:
+    if is_gif_playback:
         payload["options"] = {"gifPlayback": True}
     try:
         response = requests.post(
@@ -1125,9 +1146,9 @@ def disconnect_whatsapp(request: Request, instance: Optional[str] = None):
         attempts.append({"method": "GET", "url": f"{base_url}/instance/logout/{instance}", "kwargs": {}})
         attempts.append({"method": "GET", "url": f"{base_url}/instance/{instance}/logout", "kwargs": {}})
         attempts.append({"method": "GET", "url": f"{base_url}/instance/logout", "kwargs": {"params": {"instanceName": instance}}})
-        # Try DELETE variants
         attempts.append({"method": "DELETE", "url": f"{base_url}/instance/logout/{instance}", "kwargs": {}})
         attempts.append({"method": "DELETE", "url": f"{base_url}/instance/{instance}/logout", "kwargs": {}})
+        attempts.append({"method": "DELETE", "url": f"{base_url}/instance/delete/{instance}", "kwargs": {}})
 
         errors = []
         for a in attempts:
@@ -1140,8 +1161,20 @@ def disconnect_whatsapp(request: Request, instance: Optional[str] = None):
                 status = resp.status_code
                 text = resp.text or resp.reason or ""
                 print(f"[WhatsApp] Resposta {status} para {u}: {text[:200]}")
-                if status in (200, 204):
-                    print(f"[WhatsApp] Logout bem-sucedido via {u}")
+                if status in (200, 204) or status == 404:
+                    print(f"[WhatsApp] Logout bem-sucedido (ou já inexistente) via {u}")
+                    # Remove da config
+                    config = get_whatsapp_config()
+                    instances = config.get("WHATSAPP_INSTANCES", [])
+                    if not isinstance(instances, list):
+                        instances = []
+                    new_instances = [i for i in instances if (i.get("instanceName") if isinstance(i, dict) else i) != instance]
+                    config["WHATSAPP_INSTANCES"] = new_instances
+                    # update default if needed
+                    if config.get("WHATSAPP_DEFAULT_INSTANCE") == instance:
+                        config["WHATSAPP_DEFAULT_INSTANCE"] = new_instances[0].get("instanceName") if new_instances else None
+                    save_whatsapp_config(config)
+                    
                     return {"success": True}
                 else:
                     errors.append(f"{m} {u} => {status}: {text}")
@@ -1257,14 +1290,19 @@ def get_whatsapp_chats(request: Request):
             if not show_groups and str(c.whatsapp_cliente or "").lower().endswith("@g.us"):
                 continue
 
-            if str(c.whatsapp_cliente or "").lower().endswith("@g.us") and (
-                not c.usuario or c.usuario.strip() in ("Grupo WhatsApp", c.whatsapp_cliente)
+            is_group_chat = str(c.whatsapp_cliente or "").lower().endswith("@g.us")
+            if is_group_chat and (
+                not c.usuario or c.usuario.strip() in ("Grupo WhatsApp", c.whatsapp_cliente) or c.usuario.strip().startswith("Grupo WhatsApp ·")
             ):
                 group_name = get_whatsapp_group_name(c.whatsapp_cliente, c.whatsapp_instance)
                 if group_name:
                     c.usuario = group_name
                     session.add(c)
                     session.commit()
+            if is_group_chat and (not c.usuario or c.usuario.strip() == c.whatsapp_cliente):
+                c.usuario = f"Grupo WhatsApp · {str(c.whatsapp_cliente).split('@')[0]}"
+                session.add(c)
+                session.commit()
             
             # determina presença: se o chamado tem `whatsapp_instance`, checa lá, senão checa em todas
             is_connected = False
@@ -1283,7 +1321,8 @@ def get_whatsapp_chats(request: Request):
 
             resultado.append({
                 "id": c.id,
-                "usuario": c.usuario,
+                "usuario": c.usuario or (f"Grupo WhatsApp · {str(c.whatsapp_cliente).split('@')[0]}" if is_group_chat else "Contato sem nome"),
+                "is_group": is_group_chat,
                 "whatsapp_instance": c.whatsapp_instance,
                 "visivel_suporte": bool(c.visivel_suporte),
                 "connected": is_connected,
@@ -1717,10 +1756,6 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
         # Grupos não participam do fluxo de atendimento. Mensagens enviadas
         # por qualquer participante são ignoradas, sem criar ou reabrir ticket.
-        if is_group:
-            print(f"[Webhook] Mensagem de grupo ignorada: {remote_jid}")
-            continue
-
         # A Evolution API pode reenviar o mesmo webhook. Evita duplicar a interação.
         incoming_message_id = str(key.get("id") or "").strip()
         if incoming_message_id:
@@ -1881,9 +1916,6 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
             else:
                 # Mensagens de grupos não devem abrir chamados automaticamente.
                 # O grupo só continua sendo processado se já existir um chamado.
-                if is_group:
-                    print(f"[Webhook] Mensagem de grupo ignorada sem chamado: {phone_number}")
-                    continue
                 # Abre novo chamado
                 auto_create_ticket = bool(get_whatsapp_config().get("WHATSAPP_AUTO_CREATE_TICKETS", True))
                 chamado = Chamado(

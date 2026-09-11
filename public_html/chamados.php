@@ -583,6 +583,34 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<?php if(false): ?>
+<div class="hidden mb-8 grid grid-cols-1 gap-4 xl:grid-cols-2">
+    <div class="glass-panel rounded-[2rem] border border-white/10 p-6">
+        <div class="mb-5 flex items-center justify-between">
+            <div>
+                <h3 class="text-sm font-black uppercase tracking-widest text-white">Status dos UsuÃ¡rios</h3>
+                <p class="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500"><?= $totalUsuarios ?> usuÃ¡rio(s) cadastrados</p>
+            </div>
+            <a href="usuarios.php" class="rounded-xl bg-indigo-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-wider text-indigo-300 hover:bg-indigo-500/20">Gerenciar</a>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="h-36 w-36 shrink-0"><canvas id="usersStatusChart"></canvas></div>
+            <div class="space-y-3 text-xs">
+                <div><span class="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-400"></span><span class="font-bold text-slate-300">Ativos</span><strong class="ml-3 text-emerald-300"><?= $usuariosAtivos ?></strong></div>
+                <div><span class="mr-2 inline-block h-2 w-2 rounded-full bg-rose-400"></span><span class="font-bold text-slate-300">Inativos</span><strong class="ml-3 text-rose-300"><?= $usuariosInativos ?></strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel rounded-[2rem] border border-white/10 p-6">
+        <div class="mb-5">
+            <h3 class="text-sm font-black uppercase tracking-widest text-white">Resumo dos Chamados</h3>
+            <p class="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">DistribuiÃ§Ã£o atual do suporte</p>
+        </div>
+        <div class="mx-auto h-36 max-w-xs"><canvas id="supportChart"></canvas></div>
+    </div>
+</div>
+
+<?php endif; ?>
 <div class="mb-8 flex flex-col xl:flex-row gap-4 items-center justify-between">
     <div class="flex flex-col md:flex-row gap-4 w-full xl:w-auto flex-1">
         <div class="relative flex-1 search-focus bg-slate-900/40 rounded-2xl border border-white/10 p-1 flex items-center transition-all shadow-inner">
@@ -992,9 +1020,7 @@ require_once 'includes/header.php';
         <form id="formResolver" class="space-y-8" onsubmit="event.preventDefault(); resolverTicket();">
             <input type="hidden" name="csrf_token" value="<?= getCsrfToken() ?>">
             <input type="hidden" name="chamado_id" id="modal_chamado_id">
-            
-            <textarea name="nota_tecnica" required rows="5" class="glass-input w-full px-8 py-6 rounded-[2rem] text-white font-medium text-sm leading-relaxed shadow-inner" placeholder="Ex: Substituição de cilindro e limpeza de roletes efetuada..."></textarea>
-            
+
             <button type="submit" class="w-full bg-gradient-to-br from-emerald-500 to-emerald-800 text-white font-black text-xs uppercase tracking-[0.2em] py-6 rounded-2xl shadow-[0_15px_35px_-10px_rgba(16,185,129,0.4)] active:scale-95 transition-all border border-emerald-400/20">Registrar e Finalizar</button>
         </form>
     </div>
@@ -1440,8 +1466,7 @@ function renderChamadoCard($c, $isAdmin) {
 
     async function resolverTicket() {
         const id = document.getElementById('modal_chamado_id').value;
-        const nota = document.querySelector('textarea[name="nota_tecnica"]').value;
-        if (!nota) return;
+        const nota = '';
         try {
             const res = await fetch('/api/tickets/finalizar', {
                 method: 'POST',

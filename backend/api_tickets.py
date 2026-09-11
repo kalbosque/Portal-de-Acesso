@@ -213,6 +213,7 @@ async def finalizar_ticket(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     ticket_id = data.get("id")
     nota = data.get("nota_tecnica", "")
+    send_msg = data.get("send_message", True)
 
     with Session(engine) as session:
         chamado = session.get(Chamado, ticket_id)
@@ -227,7 +228,7 @@ async def finalizar_ticket(request: Request, background_tasks: BackgroundTasks):
         session.commit()
         session.refresh(chamado)
 
-        if chamado.origem == "WhatsApp" and chamado.whatsapp_cliente:
+        if chamado.origem == "WhatsApp" and chamado.whatsapp_cliente and send_msg:
             from api_whatsapp import send_whatsapp_text
             msg_resolucao = f"Seu chamado #{chamado.id} foi finalizado."
             if str(nota or '').strip():
@@ -355,6 +356,17 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
         ).all()
         _sync_group_history_name(session, chamado, msgs)
 
+        # Deduplicação por whatsapp_message_id (evita mensagens duplicadas do webhook)
+        seen_whatsapp_ids = set()
+        unique_msgs = []
+        for m in msgs:
+            external_id = str(m.whatsapp_message_id or '').strip()
+            if external_id and external_id in seen_whatsapp_ids:
+                continue
+            if external_id:
+                seen_whatsapp_ids.add(external_id)
+            unique_msgs.append(m)
+
         return {
             "ok": True,
             "messages": [
@@ -374,7 +386,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
                     "whatsapp_status": m.whatsapp_status or "sent",
                     "data_hora": m.data_hora.strftime("%d/%m/%Y %H:%M:%S"),
                 }
-                for m in msgs
+                for m in unique_msgs
             ],
         }
 
@@ -513,7 +525,7 @@ def edit_chat_message(message_id: int, payload: dict, request: Request, backgrou
         msg = session.get(ChamadoInteracao, message_id)
         if not msg:
             raise HTTPException(status_code=404, detail="Mensagem não encontrada")
-        if False:
+        if msg.usuario != user_name and user_role != "admin":
             raise HTTPException(status_code=403, detail="Você só pode editar suas próprias mensagens")
         if not _message_can_edit(msg, user_name):
             raise HTTPException(status_code=403, detail="Prazo de edição expirado")
@@ -532,7 +544,7 @@ def delete_chat_message(message_id: int, request: Request, background_tasks: Bac
         msg = session.get(ChamadoInteracao, message_id)
         if not msg:
             raise HTTPException(status_code=404, detail="Mensagem não encontrada")
-        if False:
+        if msg.usuario != user_name and user_role != "admin":
             raise HTTPException(status_code=403, detail="Você só pode excluir suas próprias mensagens")
         if not _message_can_delete(msg, user_name, user_role):
             raise HTTPException(status_code=403, detail="Prazo de exclusão expirado")
@@ -773,6 +785,7 @@ async def reabrir_ticket(request: Request, background_tasks: BackgroundTasks, id
             return RedirectResponse(url="/chamados?error=denied", status_code=303)
             
         chamado.status = "Aberto"
+        chamado.assigned_user = None
         session.add(chamado)
         session.commit()
         
