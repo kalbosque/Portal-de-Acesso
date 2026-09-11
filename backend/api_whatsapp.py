@@ -291,6 +291,26 @@ def send_whatsapp_text_for_interaction(interaction_id: int, number: str, text: s
         return False
 
 
+def edit_whatsapp_message(number: str, message_id: str, text: str, instance: Optional[str] = None, remote_jid: Optional[str] = None) -> bool:
+    """Edita uma mensagem enviada pelo sistema na Evolution API."""
+    base_url, wa_token, resolved_instance = get_evolution_api_endpoints(instance)
+    if not base_url or not message_id or not text:
+        return False
+    headers = {"Content-Type": "application/json"}
+    if wa_token:
+        headers["apikey"] = wa_token
+    target_jid = remote_jid or (str(number) if "@" in str(number) else f"{number}@s.whatsapp.net")
+    payload = {"chat": target_jid, "messageId": str(message_id), "message": text}
+    try:
+        response = requests.post(f"{base_url}/message/edit", json=payload, headers=headers, timeout=8)
+        if response.status_code in (200, 201):
+            return True
+        print(f"[WhatsApp API] Erro ao editar mensagem: {response.status_code} - {response.text[:300]}")
+    except Exception as exc:
+        print(f"[WhatsApp API] Erro ao editar mensagem: {exc}")
+    return False
+
+
 def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance: Optional[str] = None, remote_jid: Optional[str] = None) -> bool:
     base_url, wa_token, resolved_instance = get_evolution_api_endpoints(instance)
     if not base_url or not message_id:
@@ -1823,7 +1843,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         elif "audioMessage" in message_obj:
             msg_text = _save_incoming_media(message_obj, key, instance_from_payload, "audio")
         elif "stickerMessage" in message_obj:
-            msg_text = "[Sticker]"
+            msg_text = _save_incoming_media(message_obj, key, instance_from_payload, "sticker")
         elif "locationMessage" in message_obj:
             msg_text = "[Localização]"
         elif "contactMessage" in message_obj:

@@ -124,6 +124,7 @@ class ChamadoInteracao(SQLModel, table=True):
     whatsapp_message_id: Optional[str] = None
     whatsapp_remote_jid: Optional[str] = None
     reacao: Optional[str] = None
+    favorito: bool = Field(default=False, index=True)
     whatsapp_status: str = Field(default="sent")
     data_hora: datetime = Field(default_factory=datetime.now)
     

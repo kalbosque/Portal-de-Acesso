@@ -278,6 +278,7 @@ async def resolver_ticket_compat(ticket_id: int, request: Request, background_ta
 # Armazena quem está digitando: {chamado_id: {user: timestamp}}
 _typing_store: dict = {}
 _typing_schema_ready = False
+_favorite_schema_ready = False
 
 def _ensure_typing_schema():
     global _typing_schema_ready
@@ -292,7 +293,17 @@ def _ensure_typing_schema():
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_message_id VARCHAR(160) NULL"))
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_remote_jid VARCHAR(180) NULL"))
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao VARCHAR(32) NULL"))
+        conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS favorito BOOLEAN DEFAULT FALSE"))
     _typing_schema_ready = True
+
+
+def _ensure_favorite_schema():
+    global _favorite_schema_ready
+    if _favorite_schema_ready:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS favorito BOOLEAN DEFAULT FALSE"))
+    _favorite_schema_ready = True
 MESSAGE_EDIT_WINDOW_MINUTES = 15
 MESSAGE_DELETE_WINDOW_HOURS = 60
 
@@ -340,6 +351,7 @@ def _sync_group_history_name(session: Session, chamado: Chamado, messages):
 @router.get("/chat")
 def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = None):
     _ensure_typing_schema()
+    _ensure_favorite_schema()
     user_name, user_role = _get_user(request)
     with Session(engine) as session:
         chamado = session.get(Chamado, chamado_id)
@@ -380,6 +392,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
                     "whatsapp_message_id": m.whatsapp_message_id,
                     "whatsapp_remote_jid": m.whatsapp_remote_jid,
                     "reacao": m.reacao,
+                    "favorito": bool(getattr(m, "favorito", False)),
                     "is_me": m.usuario == user_name,
                     "can_edit": _message_can_edit(m, user_name),
                     "can_delete": _message_can_delete(m, user_name, user_role),
@@ -527,14 +540,74 @@ def edit_chat_message(message_id: int, payload: dict, request: Request, backgrou
             raise HTTPException(status_code=404, detail="Mensagem não encontrada")
         if msg.usuario != user_name and user_role != "admin":
             raise HTTPException(status_code=403, detail="Você só pode editar suas próprias mensagens")
-        if not _message_can_edit(msg, user_name):
+        if user_role != "admin" and not _message_can_edit(msg, user_name):
             raise HTTPException(status_code=403, detail="Prazo de edição expirado")
         if msg.mensagem.lstrip().startswith('{'):
             raise HTTPException(status_code=400, detail="Anexos não podem ser editados")
+        chamado = session.get(Chamado, msg.chamado_id)
+        whatsapp_synced = True
+        if chamado and chamado.origem == "WhatsApp" and chamado.whatsapp_cliente and msg.whatsapp_message_id:
+            from api_whatsapp import edit_whatsapp_message
+            whatsapp_synced = edit_whatsapp_message(chamado.whatsapp_cliente, msg.whatsapp_message_id, new_text, chamado.whatsapp_instance, msg.whatsapp_remote_jid)
+            if False:
+                raise HTTPException(status_code=502, detail="O WhatsApp não aceitou a edição desta mensagem")
         msg.mensagem = new_text
         session.add(msg)
         session.commit()
-    return {"ok": True, "message_id": message_id, "mensagem": new_text}
+        background_tasks.add_task(manager.broadcast, {"event": "message_edited", "chamado_id": msg.chamado_id, "msg_id": message_id, "mensagem": new_text})
+    return {"ok": True, "message_id": message_id, "mensagem": new_text, "whatsapp_synced": whatsapp_synced}
+
+
+@router.post("/chat/message/{message_id}/favorite")
+def toggle_favorite_message(message_id: int, payload: dict, request: Request):
+    _ensure_favorite_schema()
+    with Session(engine) as session:
+        message = session.get(ChamadoInteracao, message_id)
+        if not message:
+            raise HTTPException(status_code=404, detail="Mensagem não encontrada")
+        if "favorito" in payload:
+            message.favorito = bool(payload.get("favorito"))
+        else:
+            message.favorito = not bool(getattr(message, "favorito", False))
+        session.add(message)
+        session.commit()
+        return {"ok": True, "message_id": message_id, "favorito": bool(message.favorito)}
+
+
+@router.post("/chat/message/{message_id}/forward")
+def forward_chat_message(message_id: int, payload: dict, request: Request, background_tasks: BackgroundTasks):
+    user_name, _ = _get_user(request)
+    target = str(payload.get("number") or "").strip()
+    requested_ids = payload.get("message_ids") or [message_id]
+    try:
+        message_ids = list(dict.fromkeys(int(item) for item in requested_ids))[:50]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Mensagens inválidas")
+    if not target:
+        raise HTTPException(status_code=400, detail="Informe o nÃºmero de destino")
+    with Session(engine) as session:
+        messages = [session.get(ChamadoInteracao, item_id) for item_id in message_ids]
+        msg = messages[0] if messages else None
+        if not messages or any(item is None for item in messages):
+            raise HTTPException(status_code=404, detail="Mensagem nÃ£o encontrada")
+        if any(item.chamado_id != messages[0].chamado_id for item in messages):
+            raise HTTPException(status_code=400, detail="As mensagens precisam ser da mesma conversa")
+        chamado = session.get(Chamado, msg.chamado_id)
+        if not chamado or chamado.origem != "WhatsApp":
+            raise HTTPException(status_code=400, detail="Mensagem sem conversa WhatsApp")
+        from api_whatsapp import send_whatsapp_text
+        sent_count = 0
+        for item in messages:
+            forwarded_text = item.mensagem
+            if forwarded_text.lstrip().startswith("{"):
+                forwarded_text = "[MÃ­dia encaminhada pela Central]"
+            if send_whatsapp_text(
+                target,
+                f"*Mensagem encaminhada por {user_name}:*\n{forwarded_text}",
+                chamado.whatsapp_instance,
+            ):
+                sent_count += 1
+    return {"ok": sent_count == len(messages), "number": target, "count": len(messages), "sent_count": sent_count}
 
 
 @router.delete("/chat/message/{message_id}")
@@ -569,6 +642,19 @@ def mark_chat_read(chamado_id: int, request: Request):
             chamado.unread_user = 0
             session.commit()
     return {"ok": True}
+
+
+@router.post("/chat/mark_unread")
+def mark_chat_unread(chamado_id: int, request: Request):
+    """Retorna a conversa para a fila de mensagens pendentes."""
+    with Session(engine) as session:
+        chamado = session.get(Chamado, chamado_id)
+        if not chamado:
+            raise HTTPException(status_code=404, detail="Atendimento não encontrado")
+        chamado.unread_admin = max(1, int(chamado.unread_admin or 0))
+        session.add(chamado)
+        session.commit()
+    return {"ok": True, "chamado_id": chamado_id}
 
 
 # ── GET /api/tickets/chat/get_typing?chamado_id=X ────────────────────────────
