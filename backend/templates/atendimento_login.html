@@ -37,6 +37,8 @@
 </div>
 
 <script>
+    const desktopMode = {{ 'true' if request.query_params.get('desktop') == '1' else 'false' }};
+
     function togglePass(id, btn) {
         const input = document.getElementById(id);
         input.type = input.type === 'password' ? 'text' : 'password';
@@ -54,7 +56,12 @@
             let res;
             try { res = JSON.parse(raw); } catch { res = { success: false, detail: raw || 'Falha no login' }; }
             if (resp.ok && res.success) {
-                window.location.href = res.redirect;
+                // No aplicativo Tauri, o atendente sempre entra diretamente
+                // nas conversas; administradores não devem cair no dashboard.
+                const nextUrl = desktopMode
+                    ? new URL('/central-atendimento?desktop=1', window.location.origin)
+                    : new URL(res.redirect || '/central-atendimento', window.location.origin);
+                window.location.href = nextUrl.pathname + nextUrl.search;
                 return;
             }
             msg.className = 'text-sm font-bold rounded-3xl border px-4 py-3 bg-rose-500/10 text-rose-300 border-rose-500/20';

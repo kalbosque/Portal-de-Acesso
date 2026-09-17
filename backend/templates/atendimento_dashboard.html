@@ -3,7 +3,7 @@
 {% block title %}Painel da Central | {{ config.APP_NAME }}{% endblock %}
 
 {% block content %}
-<div class="mx-auto max-w-7xl">
+<div class="mx-auto max-w-[1400px]">
     <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
             <p class="text-[10px] font-black uppercase tracking-[.3em] text-emerald-300">Visão administrativa</p>
@@ -11,12 +11,13 @@
             <p class="mt-2 text-sm text-slate-400">Acompanhe o fluxo dos atendimentos em tempo real.</p>
         </div>
         <div class="flex gap-2">
+            <button type="button" id="btn-alertas" onclick="ativarAlertas()" class="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-200 hover:bg-amber-400/20">Ativar alertas</button>
             <button type="button" onclick="window.location.reload()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-200 hover:bg-indigo-500/15">Atualizar</button>
             <a href="/central-atendimento" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-200 hover:bg-emerald-500/15">Abrir conversas</a>
         </div>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {% for item in [
             ('Total de atendimentos', metrics.total, 'text-cyan-300', 'border-cyan-400/20'),
             ('Em triagem', metrics.triagem, 'text-amber-300', 'border-amber-400/20'),
@@ -25,12 +26,32 @@
             ('Grupos WhatsApp', metrics.grupos, 'text-fuchsia-300', 'border-fuchsia-400/20'),
             ('Mensagens não lidas', metrics.nao_lidas, 'text-rose-300', 'border-rose-400/20')
         ] %}
-        <div class="rounded-2xl border {{ item[3] }} bg-slate-900/70 p-6 shadow-xl">
+        <div class="rounded-2xl border {{ item[3] }} bg-slate-900/70 p-5 shadow-xl transition hover:-translate-y-0.5 hover:bg-slate-900">
             <p class="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">{{ item[0] }}</p>
-            <p class="mt-4 text-4xl font-black {{ item[2] }}">{{ item[1] }}</p>
+            <p class="mt-3 text-4xl font-black {{ item[2] }}">{{ item[1] }}</p>
         </div>
-        {% endfor %}
+    {% endfor %}
     </div>
+
+    {% if metrics.grupos_abertos|default(0) > 0 %}
+    <div class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-fuchsia-400/25 bg-fuchsia-500/10 p-5">
+        <div>
+            <p class="text-xs font-black uppercase tracking-widest text-fuchsia-200">Grupos abertos</p>
+            <p class="mt-1 text-sm text-fuchsia-100">{{ metrics.grupos_abertos }} grupo(s) permanecem aberto(s) porque não precisam ser assumidos.</p>
+        </div>
+        <a href="/central-atendimento" class="rounded-xl bg-fuchsia-400/15 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-fuchsia-200 transition hover:bg-fuchsia-400/25">Abrir grupos</a>
+    </div>
+    {% endif %}
+
+    {% if metrics.triagem_urgente|length > 0 %}
+    <div class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-5 shadow-xl shadow-rose-950/20">
+        <div class="flex items-center gap-4">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-400/15 text-xl">!</div>
+            <div><p class="text-xs font-black uppercase tracking-widest text-rose-200">Atenção necessária</p><p class="mt-1 text-sm text-rose-100">{{ metrics.triagem_urgente|length }} conversa(s) aguardam triagem há mais de 15 minutos.</p></div>
+        </div>
+        <a href="#triagens-urgentes" class="rounded-xl bg-rose-400/15 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-rose-200 transition hover:bg-rose-400/25">Ver triagens</a>
+    </div>
+    {% endif %}
 
     <div class="mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-6">
         <div class="flex flex-wrap items-center justify-between gap-3">
@@ -78,7 +99,7 @@
         </div>
     </div>
 
-    <div class="mt-6 rounded-2xl border border-rose-400/20 bg-slate-900/60 p-6">
+    <div id="triagens-urgentes" class="mt-6 rounded-2xl border border-rose-400/20 bg-slate-900/60 p-6">
         <div class="flex items-center justify-between gap-3">
             <h3 class="text-sm font-black uppercase tracking-widest text-slate-200">Triagens aguardando atenção</h3>
             <a href="/central-atendimento" class="rounded-lg bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-500/20">Abrir fila</a>
@@ -120,6 +141,52 @@
 </div>
 <script>
     // Mantém os indicadores da Central atualizados sem intervenção manual.
+    const triagensUrgentes = `{{ metrics.triagem_urgente|map(attribute='id')|join(',') }}`.split(',').filter(Boolean);
+    const alertasStorageKey = 'central_triagens_alertadas';
+
+    function tocarAlerta() {
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            const audio = new AudioContextClass();
+            const agora = audio.currentTime;
+            [0, 0.18].forEach((inicio) => {
+                const oscilador = audio.createOscillator();
+                const ganho = audio.createGain();
+                oscilador.frequency.value = inicio ? 880 : 660;
+                ganho.gain.setValueAtTime(0.0001, agora + inicio);
+                ganho.gain.exponentialRampToValueAtTime(0.16, agora + inicio + 0.02);
+                ganho.gain.exponentialRampToValueAtTime(0.0001, agora + inicio + 0.14);
+                oscilador.connect(ganho).connect(audio.destination);
+                oscilador.start(agora + inicio);
+                oscilador.stop(agora + inicio + 0.16);
+            });
+        } catch (_) {}
+    }
+
+    function notificarTriagem() {
+        if (!triagensUrgentes.length) return;
+        const anteriores = JSON.parse(localStorage.getItem(alertasStorageKey) || '[]');
+        const novas = triagensUrgentes.filter(id => !anteriores.includes(id));
+        if (!novas.length) return;
+        localStorage.setItem(alertasStorageKey, JSON.stringify(triagensUrgentes));
+        tocarAlerta();
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Triagem aguardando atenção', { body: `${novas.length} conversa(s) ultrapassaram 15 minutos.` });
+        }
+    }
+
+    async function ativarAlertas() {
+        if ('Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+        }
+        localStorage.removeItem(alertasStorageKey);
+        tocarAlerta();
+        const botao = document.getElementById('btn-alertas');
+        if (botao) { botao.textContent = 'Alertas ativos'; botao.classList.add('text-emerald-200'); }
+    }
+
+    notificarTriagem();
     window.setTimeout(() => window.location.reload(), 60000);
 </script>
 {% endblock %}

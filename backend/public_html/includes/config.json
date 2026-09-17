@@ -12,5 +12,12 @@
     "GUIA_SUPORTE_URL":  "uploads/guia_suporte_usuario.pdf",
     "WHATSAPP_WEBHOOK_URL":  "http://evolution-api:8080",
     "WHATSAPP_WEBHOOK_TOKEN":  "printdash_evo_key_2024",
-    "WHATSAPP_WEBHOOK_TARGET":  "http://192.168.1.230:8000/api/whatsapp/webhook"
+    "WHATSAPP_WEBHOOK_TARGET":  "http://192.168.1.230:8000/api/whatsapp/webhook",
+    "WHATSAPP_INSTANCES": [
+        {
+            "instanceName": "kalbosque-chip2",
+            "label": "WhatsApp principal"
+        }
+    ],
+    "WHATSAPP_DEFAULT_INSTANCE": "kalbosque-chip2"
 }

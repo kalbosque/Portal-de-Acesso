@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List
 from sqlmodel import Field, SQLModel, create_engine, Session, select, Relationship
 
@@ -14,6 +14,7 @@ class Usuario(SQLModel, table=True):
     permissoes: str = Field(default="[]")
     empresa_nome: Optional[str] = None
     empresa_logo_url: Optional[str] = None
+    foto_perfil_url: Optional[str] = None
     senha_temp: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
@@ -123,6 +124,7 @@ class ChamadoInteracao(SQLModel, table=True):
     responde_a_texto: Optional[str] = None
     whatsapp_message_id: Optional[str] = None
     whatsapp_remote_jid: Optional[str] = None
+    whatsapp_participant: Optional[str] = None
     reacao: Optional[str] = None
     favorito: bool = Field(default=False, index=True)
     whatsapp_status: str = Field(default="sent")
@@ -162,6 +164,19 @@ class AvisoCarrossel(SQLModel, table=True):
     ativo: bool = Field(default=True)
     criado_por: str = Field(default="admin")
     criado_em: datetime = Field(default_factory=datetime.now)
+
+class StatusEmpresa(SQLModel, table=True):
+    __tablename__ = "status_empresa"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    titulo: str = Field(default="Status da empresa")
+    mensagem: Optional[str] = None
+    media_url: Optional[str] = None
+    media_tipo: Optional[str] = None
+    cor: str = Field(default="emerald")
+    ativo: bool = Field(default=True, index=True)
+    criado_por: str = Field(default="admin")
+    criado_em: datetime = Field(default_factory=datetime.now, index=True)
+    expira_em: datetime = Field(default_factory=lambda: datetime.now() + timedelta(hours=24), index=True)
 
 class MarmitaCardapio(SQLModel, table=True):
     __tablename__ = "marmita_cardapio"

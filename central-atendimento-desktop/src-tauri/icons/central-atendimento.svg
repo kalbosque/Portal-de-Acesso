@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#061827"/>
+      <stop offset="1" stop-color="#0b5260"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <circle cx="512" cy="512" r="488" fill="url(#bg)"/>
+  <circle cx="512" cy="470" r="290" fill="#07131f" stroke="url(#ring)" stroke-width="30"/>
+  <path d="M330 455c0-105 81-190 182-190s182 85 182 190-81 190-182 190c-30 0-59-7-84-21l-89 48 29-91c-24-34-38-78-38-126Z" fill="none" stroke="#f8fafc" stroke-width="34" stroke-linejoin="round"/>
+  <circle cx="438" cy="455" r="18" fill="#5eead4"/>
+  <circle cx="512" cy="455" r="18" fill="#5eead4"/>
+  <circle cx="586" cy="455" r="18" fill="#5eead4"/>
+  <text x="512" y="865" text-anchor="middle" font-family="Arial, sans-serif" font-size="86" font-weight="700" letter-spacing="10" fill="#f8fafc">CA</text>
+</svg>

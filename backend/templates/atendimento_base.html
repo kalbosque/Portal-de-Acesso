@@ -42,6 +42,8 @@
         .attendance-nav a:hover, .attendance-nav button:hover, .attendance-nav .menu-current { background: rgba(13,148,136,.28); border-color: rgba(45,212,191,.12); color: #f8fafc; }
         .attendance-nav .menu-logout:hover { background: rgba(244,63,94,.16); border-color: rgba(251,113,133,.2); color: #fecdd3; }
         body.attendance-menu-expanded main { padding-left: 250px !important; transition: none !important; }
+        body.desktop-focus > header { display: none !important; }
+        body.desktop-focus main { max-width: none !important; width: 100%; padding: 1.25rem !important; }
         .attendance-nav a[href="/central-atendimento/configuracoes"]::before { content: '⚙'; margin-right: .55rem; font-size: 1rem; }
         .attendance-nav a[href="/central-atendimento/dashboard"] { order: -1; }
         @media (max-width: 1200px) {
@@ -54,7 +56,7 @@
         }
     </style>
 </head>
-<body class="page-shell">
+<body class="page-shell{% if desktop_mode|default(false) %} desktop-focus{% endif %}">
     {% if authenticated|default(false) %}
     <header class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl shadow-[0_10px_40px_-24px_rgba(0,0,0,0.5)]">
         <div class="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-4 py-4 lg:px-8">
@@ -110,7 +112,8 @@
         async function sairDaCentral(event) {
             event?.stopPropagation();
             try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
-            window.location.href = '/atendimento/login';
+            const isDesktopApp = document.body.classList.contains('desktop-focus') || new URLSearchParams(window.location.search).get('desktop') === '1';
+            window.location.href = isDesktopApp ? '/atendimento/login?desktop=1' : '/atendimento/login';
         }
         document.addEventListener('click', function(event) {
             const menu = document.querySelector('.attendance-nav');

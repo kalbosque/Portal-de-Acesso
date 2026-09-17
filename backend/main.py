@@ -23,6 +23,7 @@ import api_auth
 import api_tickets
 import api_finance
 import api_avisos
+import api_status
 import api_equipamentos_ti
 import api_cofre
 import api_whatsapp
@@ -114,6 +115,7 @@ def ensure_schema_compatibility():
         "ALTER TABLE impressoras ADD COLUMN IF NOT EXISTS modelo VARCHAR(120)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(255)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_logo_url VARCHAR(500)",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url VARCHAR(500)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP NULL",
         "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_role_check",
         "ALTER TABLE usuarios ADD CONSTRAINT usuarios_role_check CHECK (role IN ('admin', 'operator', 'gestor', 'gerente', 'supervisor', 'recepcao', 'recepcionista', 'cliente_atendimento'))",
@@ -255,6 +257,7 @@ include_router_if_available(api_settings, "api_settings")
 include_router_if_available(api_auth, "api_auth")
 include_router_if_available(api_finance, "api_finance")
 include_router_if_available(api_avisos, "api_avisos")
+include_router_if_available(api_status, "api_status")
 include_router_if_available(api_equipamentos_ti, "api_equipamentos_ti")
 include_router_if_available(api_cofre, "api_cofre")
 include_router_if_available(api_whatsapp, "api_whatsapp")
@@ -1543,11 +1546,22 @@ def _can_access_atendimento(request: Request) -> bool:
 
 @app.get("/central-atendimento", response_class=HTMLResponse)
 async def view_central_atendimento(request: Request):
+    desktop_mode = request.query_params.get("desktop") == "1" or request.cookies.get("central_atendimento_tauri") == "1"
     user_id = request.cookies.get("user_id")
     user_role = request.cookies.get("user_role")
     user_name = request.cookies.get("user_name")
+    profile_name = user_name or ""
+    profile_photo_url = ""
 
     config = load_app_config()
+    try:
+        with Session(engine) as session:
+            current_user = session.get(Usuario, int(user_id)) if user_id else None
+        if current_user:
+            profile_name = current_user.nome or current_user.username or profile_name
+            profile_photo_url = current_user.foto_perfil_url or ""
+    except Exception:
+        pass
     if user_role == "cliente_atendimento":
         try:
             with Session(engine) as session:
@@ -1572,7 +1586,7 @@ async def view_central_atendimento(request: Request):
     if not has_access:
         return RedirectResponse(url="/")
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request=request,
         name="atendimento_whatsapp.html",
         context={
@@ -1584,8 +1598,15 @@ async def view_central_atendimento(request: Request):
             "user_name": user_name,
             "authenticated": True,
             "has_access": has_access,
+            "desktop_mode": desktop_mode,
+            "can_edit_identity": user_role in ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepÃ§Ã£o", "recepcionista"),
+            "profile_name": profile_name,
+            "profile_photo_url": profile_photo_url,
         }
     )
+    if request.query_params.get("desktop") == "1":
+        response.set_cookie("central_atendimento_tauri", "1", httponly=False, samesite="lax")
+    return response
 
 @app.get("/atendimento")
 async def redirect_atendimento():
@@ -1593,6 +1614,8 @@ async def redirect_atendimento():
 
 @app.get("/central-atendimento/dashboard", response_class=HTMLResponse)
 async def view_central_atendimento_dashboard(request: Request):
+    if request.query_params.get("desktop") == "1":
+        return RedirectResponse(url="/central-atendimento?desktop=1", status_code=303)
     user_id = request.cookies.get("user_id")
     user_role = request.cookies.get("user_role")
     if not user_id:
@@ -1615,24 +1638,35 @@ async def view_central_atendimento_dashboard(request: Request):
             usuarios_inativos = 0
             total_usuarios = 0
         operator_counts = {}
+        atendimentos = [
+            item for item in chamados
+            if not str(item.whatsapp_cliente or "").lower().endswith("@g.us")
+        ]
         for item in chamados:
-            if item.assigned_user and item.status != "Resolvido":
+            if not str(item.whatsapp_cliente or "").lower().endswith("@g.us") and item.assigned_user and item.status != "Resolvido":
                 operator_counts[item.assigned_user] = operator_counts.get(item.assigned_user, 0) + 1
-        recent = sorted(chamados, key=lambda item: item.data_abertura or datetime.min, reverse=True)[:8]
+        recent = sorted(atendimentos, key=lambda item: item.data_abertura or datetime.min, reverse=True)[:8]
         agora = datetime.now()
-        triagem_aberta = [item for item in chamados if item.status != "Resolvido" and not item.assigned_user]
+        # Grupos ficam abertos e não precisam ser assumidos; portanto não entram na triagem.
+        triagem_aberta = [
+            item for item in chamados
+            if item.status != "Resolvido"
+            and not item.assigned_user
+            and not str(item.whatsapp_cliente or "").lower().endswith("@g.us")
+        ]
         tempos_triagem = [max(0, int((agora - item.data_abertura).total_seconds() // 60)) for item in triagem_aberta if item.data_abertura]
         triagem_urgente = sorted(
             [item for item in triagem_aberta if item.data_abertura and (agora - item.data_abertura).total_seconds() >= 15 * 60],
             key=lambda item: item.data_abertura,
         )[:5]
         metrics = {
-            "total": len(chamados),
-            "triagem": sum(1 for item in chamados if item.status != "Resolvido" and not item.assigned_user),
-            "atendimento": sum(1 for item in chamados if item.status == "Em Atendimento"),
-            "finalizados": sum(1 for item in chamados if item.status == "Resolvido"),
+            "total": len(atendimentos),
+            "triagem": len(triagem_aberta),
+            "atendimento": sum(1 for item in atendimentos if item.status == "Em Atendimento"),
+            "finalizados": sum(1 for item in atendimentos if item.status == "Resolvido"),
             "grupos": sum(1 for item in chamados if str(item.whatsapp_cliente or "").lower().endswith("@g.us")),
-            "nao_lidas": sum(int(item.unread_admin or 0) for item in chamados),
+            "grupos_abertos": sum(1 for item in chamados if item.status != "Resolvido" and str(item.whatsapp_cliente or "").lower().endswith("@g.us")),
+            "nao_lidas": sum(int(item.unread_admin or 0) for item in atendimentos),
             "usuarios_ativos": usuarios_ativos,
             "usuarios_inativos": usuarios_inativos,
             "total_usuarios": total_usuarios,
@@ -1676,15 +1710,21 @@ async def view_whatsapp_contacts(request: Request):
 
 @app.get("/central-atendimento/configuracoes", response_class=HTMLResponse)
 async def view_whatsapp_config(request: Request):
+    desktop_mode = request.query_params.get("desktop") == "1" or request.cookies.get("central_atendimento_tauri") == "1"
+    if not desktop_mode and "desktop=1" in (request.headers.get("referer") or ""):
+        return RedirectResponse(url="/central-atendimento/configuracoes?desktop=1", status_code=307)
     user_id = request.cookies.get("user_id")
     user_role = request.cookies.get("user_role")
     if not user_id:
         return RedirectResponse(url="/login")
 
-    if user_role != "admin":
+    allowed_roles = ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepÃ§Ã£o", "recepcionista")
+    if user_role not in allowed_roles:
         return RedirectResponse(url="/central-atendimento")
 
     config = load_app_config()
+    with Session(engine) as session:
+        current_user = session.get(Usuario, int(user_id))
     return templates.TemplateResponse(
         request=request,
         name="whatsapp_config.html",
@@ -1693,6 +1733,10 @@ async def view_whatsapp_config(request: Request):
             "is_admin": user_role == "admin",
             "authenticated": True,
             "user_name": request.cookies.get("user_name", ""),
+            "desktop_mode": desktop_mode,
+            "can_edit_identity": user_role in allowed_roles,
+            "profile_name": (current_user.nome or current_user.username) if current_user else "",
+            "profile_photo_url": current_user.foto_perfil_url if current_user else "",
         }
     )
 

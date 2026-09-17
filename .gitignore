@@ -11,14 +11,14 @@ __pycache__/
 *.txt
 !COMO_USAR_NOVO_MENU.txt
 
-# Executáveis e builds do agente
+# Executǭveis e builds do agente
 agent_2.0.exe
 agent_new.exe
 build/
 dist/
 *.spec
 
-# Variáveis de ambiente
+# Variǭveis de ambiente
 .env
 .env.*
 
@@ -53,6 +53,10 @@ public_html/dist/
 public_html/scratch/
 public_html/.git.backup/
 
-# Uploads do usuário (não versionar)
+# Uploads do usuǭrio (nǜo versionar)
 backend/static/uploads/
 backend/public_html/uploads/
+
+# Node e Tauri
+central-atendimento-desktop/node_modules/
+central-atendimento-desktop/src-tauri/target/

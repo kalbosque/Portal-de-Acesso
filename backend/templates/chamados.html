@@ -170,6 +170,48 @@
 <div id="live-toast-container"></div>
 <audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
 
+<!-- STATUS DA EMPRESA -->
+<div id="empresa-status-area" class="mb-7 hidden">
+    <div class="flex items-center gap-4">
+        <button id="empresa-status-button" type="button" onclick="openEmpresaStatus()" class="group flex flex-col items-center gap-1.5" title="Ver Status da empresa">
+            <span class="w-[70px] h-[70px] rounded-full p-[3px] bg-gradient-to-tr from-emerald-400 via-teal-400 to-indigo-500 shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                <span class="w-full h-full rounded-full bg-slate-950 border-2 border-slate-900 flex items-center justify-center overflow-hidden">
+                    {% if config.APP_LOGO_URL %}<img src="/{{ config.APP_LOGO_URL }}" class="w-full h-full object-cover" alt="Status">{% else %}<span class="text-2xl">📣</span>{% endif %}
+                </span>
+            </span>
+            <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</span>
+        </button>
+        {% if is_admin %}
+        <button type="button" onclick="openEmpresaStatusModal()" class="h-10 px-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all">+ Publicar Status</button>
+        {% endif %}
+    </div>
+</div>
+
+<div id="empresaStatusView" class="hidden fixed inset-0 z-[130] items-center justify-center bg-slate-950/95 backdrop-blur-xl p-5" onclick="if(event.target===this) closeEmpresaStatus()">
+    <div class="w-full max-w-md rounded-[2rem] overflow-hidden border border-white/10 bg-slate-900 shadow-2xl relative">
+        <button type="button" onclick="closeEmpresaStatus()" class="absolute right-4 top-4 z-10 w-9 h-9 rounded-full bg-black/40 text-white text-xl">×</button>
+        <div id="empresa-status-media" class="w-full max-h-[55vh] bg-slate-950 flex items-center justify-center"></div>
+        <div class="p-6"><h3 id="empresa-status-title" class="text-white text-lg font-black"></h3><p id="empresa-status-message" class="text-slate-300 text-sm mt-2 whitespace-pre-wrap"></p><p id="empresa-status-date" class="text-slate-500 text-[9px] uppercase tracking-widest mt-5"></p></div>
+    </div>
+</div>
+
+{% if is_admin %}
+<div id="empresaStatusModal" class="hidden fixed inset-0 z-[131] items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4">
+    <div class="glass-panel w-full max-w-lg p-7 rounded-[2rem] border border-white/10 relative">
+        <button type="button" onclick="closeEmpresaStatusModal()" class="absolute right-5 top-4 text-slate-500 text-2xl">×</button>
+        <h3 class="text-xl font-black text-white uppercase italic">Publicar Status</h3>
+        <p class="text-slate-500 text-[10px] uppercase tracking-widest mt-1 mb-6">Visível para os clientes por 24 horas</p>
+        <div class="space-y-4">
+            <input id="status-titulo" class="glass-input w-full p-4 rounded-xl text-sm" placeholder="Título (ex.: Atendimento normal)">
+            <textarea id="status-mensagem" rows="4" class="glass-input w-full p-4 rounded-xl text-sm resize-none" placeholder="Escreva a informação para os clientes..."></textarea>
+            <input id="status-media" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" class="w-full text-xs text-slate-400">
+            <button type="button" onclick="salvarEmpresaStatus()" class="w-full py-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-widest">Publicar agora</button>
+        </div>
+        <div id="empresa-status-admin-list" class="mt-6 space-y-2"></div>
+    </div>
+</div>
+{% endif %}
+
 <div class="mb-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
     <div class="flex items-center gap-4 flex-grow">
         <div class="p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20 shadow-inner hidden sm:block">
@@ -1353,6 +1395,63 @@
         }
     }
     setInterval(checkGlobal, 10000);
+
+    // Status informativo da empresa (expira em 24 horas)
+    let empresaStatusData = [];
+    async function loadEmpresaStatus() {
+        try {
+            const res = await fetch('/api/status-empresa');
+            empresaStatusData = await res.json();
+            const area = document.getElementById('empresa-status-area');
+            if (!area) return;
+            area.classList.toggle('hidden', !empresaStatusData.length && !{{ 'true' if is_admin else 'false' }});
+            {% if is_admin %} renderEmpresaStatusAdmin(); {% endif %}
+        } catch (e) { console.error('Erro ao carregar Status:', e); }
+    }
+    function openEmpresaStatus() {
+        const status = empresaStatusData[0];
+        if (!status) return;
+        const media = document.getElementById('empresa-status-media');
+        media.innerHTML = status.media_url
+            ? (status.media_tipo === 'video' ? `<video src="/${status.media_url}" controls autoplay class="max-h-[55vh] w-full object-contain"></video>` : `<img src="/${status.media_url}" class="max-h-[55vh] w-full object-contain" alt="Status">`)
+            : '<div class="py-20 text-6xl">📣</div>';
+        document.getElementById('empresa-status-title').textContent = status.titulo;
+        document.getElementById('empresa-status-message').textContent = status.mensagem || '';
+        document.getElementById('empresa-status-date').textContent = 'Publicado em ' + status.criado_em;
+        document.getElementById('empresaStatusView').classList.remove('hidden');
+        document.getElementById('empresaStatusView').classList.add('flex');
+    }
+    function closeEmpresaStatus() { document.getElementById('empresaStatusView').classList.add('hidden'); document.getElementById('empresaStatusView').classList.remove('flex'); }
+    function openEmpresaStatusModal() { document.getElementById('empresaStatusModal').classList.remove('hidden'); document.getElementById('empresaStatusModal').classList.add('flex'); renderEmpresaStatusAdmin(); }
+    function closeEmpresaStatusModal() { document.getElementById('empresaStatusModal').classList.add('hidden'); document.getElementById('empresaStatusModal').classList.remove('flex'); }
+    function renderEmpresaStatusAdmin() {
+        const list = document.getElementById('empresa-status-admin-list');
+        if (!list) return;
+        list.innerHTML = empresaStatusData.map(status => `<div class="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2"><span class="text-xs text-white truncate">${status.titulo}</span><button type="button" onclick="removerEmpresaStatus(${status.id})" class="text-[9px] font-black uppercase text-rose-400">Remover</button></div>`).join('');
+    }
+    async function salvarEmpresaStatus() {
+        const form = new FormData();
+        form.append('titulo', document.getElementById('status-titulo').value || 'Status da empresa');
+        form.append('mensagem', document.getElementById('status-mensagem').value || '');
+        const file = document.getElementById('status-media').files[0];
+        if (file) form.append('media', file);
+        const res = await fetch('/api/status-empresa', { method: 'POST', body: form });
+        if (!res.ok) { const data = await res.json().catch(() => ({})); mostrarToast(data.detail || 'Não foi possível publicar o Status.'); return; }
+        document.getElementById('status-titulo').value = '';
+        document.getElementById('status-mensagem').value = '';
+        document.getElementById('status-media').value = '';
+        const result = await res.json().catch(() => ({}));
+        mostrarToast(result.whatsapp?.ok === false
+            ? 'Status interno publicado, mas não foi enviado ao WhatsApp: ' + (result.whatsapp.detail || 'verifique a conexão.')
+            : 'Status publicado no portal e no WhatsApp por 24 horas.');
+        closeEmpresaStatusModal();
+        loadEmpresaStatus();
+    }
+    async function removerEmpresaStatus(id) {
+        const res = await fetch('/api/status-empresa/' + id, { method: 'DELETE' });
+        if (res.ok) { mostrarToast('Status removido.'); loadEmpresaStatus(); }
+    }
+    loadEmpresaStatus();
 
     // Magnetic cards
     document.addEventListener('DOMContentLoaded', () => {

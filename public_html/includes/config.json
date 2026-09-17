@@ -12,12 +12,13 @@
     "GUIA_SUPORTE_URL": "uploads/guia_suporte_usuario.pdf",
     "WHATSAPP_WEBHOOK_URL": "http://evolution-api:8080",
     "WHATSAPP_WEBHOOK_TOKEN": "printdash_evo_key_2024",
-    "WHATSAPP_SHOW_GROUPS": true,
     "WHATSAPP_INSTANCES": [
         {
-            "instanceName": "jos--chip-2",
-            "label": "jos--chip-2"
+            "instanceName": "kalbosque-chip2",
+            "label": "kalbosque-chip2"
         }
     ],
-    "WHATSAPP_DEFAULT_INSTANCE": "jos--chip-2"
+    "WHATSAPP_SHOW_GROUPS": true,
+    "WHATSAPP_AUTO_CREATE_TICKETS": false,
+    "WHATSAPP_DEFAULT_INSTANCE": "kalbosque-chip2"
 }

@@ -8,7 +8,7 @@ import requests
 from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
-from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Body, UploadFile, File
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Body, UploadFile, File, Form
 from sqlalchemy import text
 from sqlmodel import Session, select, desc
 
@@ -36,6 +36,84 @@ def get_whatsapp_config():
         except Exception as e:
             print(f"[api_whatsapp] Erro ao ler config.json: {e}")
     return {}
+
+
+def user_can_access_instance(request: Request, instance: Optional[str]) -> bool:
+    """Aplica a restrição por número; lista vazia significa acesso geral."""
+    if get_signed_cookie(request, "user_role") == "admin":
+        return True
+    if not instance:
+        return True
+    access = get_whatsapp_config().get("WHATSAPP_INSTANCE_ACCESS", {}) or {}
+    allowed = access.get(str(instance))
+    if not allowed:
+        return True
+    current = get_signed_cookie(request, "user_name", "")
+    return current in {str(name) for name in allowed}
+
+
+def _can_edit_identity(request: Request) -> bool:
+    role = get_signed_cookie(request, "user_role")
+    if role in ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepção", "recepcionista"):
+        return True
+    try:
+        permissions = normalize_permissions(json.loads(get_signed_cookie(request, "user_perms", "[]") or "[]"))
+        return "Atendimento" in permissions or "Suporte" in permissions
+    except Exception:
+        return False
+
+
+@router.post("/identity")
+async def update_attendance_identity(
+    request: Request,
+    nome: str = Form(""),
+    logo: Optional[UploadFile] = File(None),
+):
+    if not _can_edit_identity(request):
+        raise HTTPException(status_code=403, detail="Sem permissão para alterar a identificação da Central.")
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url VARCHAR(500)"))
+    except Exception as exc:
+        print(f"[IDENTIDADE] Migração de foto ignorada: {exc}")
+    user_id = get_signed_cookie(request, "user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sessão expirada.")
+    with Session(engine) as session:
+        user = session.get(Usuario, int(user_id))
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+        if nome.strip():
+            user.nome = nome.strip()[:120]
+    if logo and logo.filename:
+        allowed = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/svg+xml": ".svg"}
+        ext = allowed.get(logo.content_type or "") or os.path.splitext(logo.filename)[1].lower()
+        if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}:
+            raise HTTPException(status_code=400, detail="Use uma imagem JPG, PNG, WEBP, GIF ou SVG.")
+        content = await logo.read()
+        if len(content) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="A imagem deve ter no máximo 5 MB.")
+        folder = os.path.join(_BASE_DIR, "public_html", "uploads")
+        os.makedirs(folder, exist_ok=True)
+        filename = f"perfil-{user.id}{ext}"
+        with open(os.path.join(folder, filename), "wb") as output:
+            output.write(content)
+        user.foto_perfil_url = f"uploads/{filename}?v={int(time.time())}"
+        session.add(user)
+        session.commit()
+        return {"success": True, "nome": user.nome or user.username, "logo_url": user.foto_perfil_url or ""}
+
+
+@router.get("/identity/me")
+def get_attendance_identity(request: Request):
+    user_id = get_signed_cookie(request, "user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sessão expirada.")
+    with Session(engine) as session:
+        user = session.get(Usuario, int(user_id))
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+        return {"success": True, "nome": user.nome or user.username, "foto_url": user.foto_perfil_url or ""}
 
 
 def get_whatsapp_webhook_target(config: dict) -> str:
@@ -68,6 +146,7 @@ def _ensure_whatsapp_columns():
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS responde_a_texto TEXT NULL",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_message_id VARCHAR(160) NULL",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_remote_jid VARCHAR(180) NULL",
+        "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_participant VARCHAR(180) NULL",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao VARCHAR(32) NULL",
         "ALTER TABLE contatos_whatsapp ADD COLUMN IF NOT EXISTS status_interno VARCHAR(40) DEFAULT 'Normal'"
     ]
@@ -173,6 +252,35 @@ def _extract_connected_numbers(obj):
     return sorted(found)
 
 
+def _instance_is_connected(instance: Optional[str]) -> bool:
+    """Confirma o estado real da instância antes de aceitar mensagens do webhook.
+
+    A Evolution pode reenviar eventos atrasados mesmo depois do logout. O
+    webhook precisa falhar fechado nesses casos para não transformar eventos
+    antigos em novas mensagens no atendimento.
+    """
+    if not instance:
+        return False
+    try:
+        base_url, wa_token, resolved = get_evolution_api_endpoints(instance)
+        if not base_url:
+            return False
+        headers = {"apikey": wa_token} if wa_token else {}
+        response = requests.get(
+            f"{base_url}/instance/connectionState/{resolved}",
+            headers=headers,
+            timeout=3,
+        )
+        if response.status_code != 200:
+            return False
+        data = response.json() or {}
+        state = data.get("instance", {}).get("state") or data.get("state")
+        return str(state or "").lower() in {"open", "connected"}
+    except Exception as exc:
+        print(f"[Webhook] Nao foi possivel confirmar estado da instancia '{instance}': {exc}")
+        return False
+
+
 def get_evolution_api_endpoints(instance_name: Optional[str] = None):
     config = get_whatsapp_config()
     wa_url = config.get("WHATSAPP_WEBHOOK_URL", "")
@@ -210,7 +318,7 @@ def get_whatsapp_group_name(group_jid: str, instance_name: Optional[str] = None)
         if not base_url or not resolved:
             return None
         response = requests.get(
-            f"{base_url}/group/findGroupInfo/{resolved}",
+            f"{base_url}/group/findGroupInfos/{resolved}",
             headers={"apikey": wa_token or ""},
             params={"groupJid": str(group_jid)},
             timeout=3,
@@ -311,25 +419,33 @@ def edit_whatsapp_message(number: str, message_id: str, text: str, instance: Opt
     return False
 
 
-def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance: Optional[str] = None, remote_jid: Optional[str] = None) -> bool:
+def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance: Optional[str] = None, remote_jid: Optional[str] = None, from_me: bool = False, participant: Optional[str] = None) -> tuple[bool, str]:
     base_url, wa_token, resolved_instance = get_evolution_api_endpoints(instance)
+    if base_url and base_url.startswith("http://evolution-api:8080"):
+        base_url = base_url.replace("http://evolution-api:8080", "http://127.0.0.1:8081", 1)
     if not base_url or not message_id:
-        return False
+        return False, "Evolution API nao configurada"
     headers = {"Content-Type": "application/json"}
     if wa_token:
         headers["apikey"] = wa_token
     target_jid = str(remote_jid or number or "")
     if "@" not in target_jid:
         target_jid = f"{target_jid}@s.whatsapp.net"
-    payload = {"key": {"remoteJid": target_jid, "fromMe": False, "id": message_id}, "reaction": reaction}
+    key = {"remoteJid": target_jid, "fromMe": bool(from_me), "id": message_id}
+    if participant:
+        key["participant"] = str(participant)
+    payload = {"key": key, "reaction": reaction}
     try:
         response = requests.post(f"{base_url}/message/sendReaction/{resolved_instance}", json=payload, headers=headers, timeout=8)
         if response.status_code in (200, 201):
-            return True
+            return True, ""
+        error = f"Evolution API ({response.status_code}): {response.text[:300]}"
+        print(f"[WhatsApp API] Erro ao enviar reacao: {error}")
+        return False, error
         print(f"[WhatsApp API] Erro ao enviar reação: {response.status_code} - {response.text[:300]}")
     except Exception as exc:
         print(f"[WhatsApp API] Erro ao enviar reação: {exc}")
-    return False
+    return False, "Falha de comunicacao com a Evolution API"
 
 
 @router.post("/message/reaction")
@@ -356,14 +472,36 @@ def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None
         interaction = session.exec(select(ChamadoInteracao).where(ChamadoInteracao.id == local_message_id, ChamadoInteracao.chamado_id == ticket_id)).first()
         if not interaction or not interaction.whatsapp_message_id:
             raise HTTPException(status_code=400, detail="Esta mensagem não pode receber reação")
-        ok = send_whatsapp_reaction(
-            chamado.whatsapp_cliente,
-            interaction.whatsapp_message_id,
-            reaction,
-            chamado.whatsapp_instance,
-            interaction.whatsapp_remote_jid,
-        )
+        # Mensagens recebidas usam fromMe=false; mensagens enviadas pelo
+        # atendente usam fromMe=true. Há registros antigos sem essa marcação,
+        # então tentamos as duas formas e os JIDs disponíveis no chamado.
+        targets = []
+        for candidate in (interaction.whatsapp_remote_jid, chamado.whatsapp_cliente):
+            candidate = str(candidate or '').strip()
+            if candidate and candidate not in targets:
+                targets.append(candidate)
+        ok = False
+        reaction_error = ""
+        for target in targets:
+            for from_me in (False, True):
+                sent, error = send_whatsapp_reaction(
+                    chamado.whatsapp_cliente,
+                    interaction.whatsapp_message_id,
+                    reaction,
+                    chamado.whatsapp_instance,
+                    target,
+                    from_me,
+                    interaction.whatsapp_participant,
+                )
+                reaction_error = error or reaction_error
+                if sent:
+                    ok = True
+                    break
+            if ok:
+                break
         if not ok:
+            if reaction_error:
+                raise HTTPException(status_code=502, detail=reaction_error)
             raise HTTPException(status_code=502, detail="Não foi possível enviar a reação ao WhatsApp")
         interaction.reacao = reaction
         session.add(interaction)
@@ -588,8 +726,43 @@ def list_whatsapp_instances(request: Request):
         "chat_background_color": get_whatsapp_config().get("WHATSAPP_CHAT_BACKGROUND_COLOR", "#0b141a"),
         "chat_background_image": get_whatsapp_config().get("WHATSAPP_CHAT_BACKGROUND_IMAGE", ""),
         "total": len(detailed),
-        "connected": connected_count
+        "connected": connected_count,
+        "instance_access": get_whatsapp_config().get("WHATSAPP_INSTANCE_ACCESS", {}) or {},
+        "instance_colors": get_whatsapp_config().get("WHATSAPP_INSTANCE_COLORS", {}) or {}
     }
+
+
+@router.post("/instances/access")
+def save_whatsapp_instance_access(request: Request, payload: dict = Body(...)):
+    _require_admin(request)
+    config = get_whatsapp_config()
+    valid = {item["instanceName"] for item in get_whatsapp_instances()[0]}
+    raw_access = payload.get("access", {}) or {}
+    access = {}
+    for instance, users in raw_access.items():
+        if str(instance) in valid and isinstance(users, list):
+            clean = sorted({str(user).strip() for user in users if str(user).strip()})
+            if clean:
+                access[str(instance)] = clean
+    config["WHATSAPP_INSTANCE_ACCESS"] = access
+    save_whatsapp_config(config)
+    return {"success": True, "access": access}
+
+
+@router.post("/instances/colors")
+def save_whatsapp_instance_colors(request: Request, payload: dict = Body(...)):
+    _require_admin(request)
+    config = get_whatsapp_config()
+    valid = {item["instanceName"] for item in get_whatsapp_instances()[0]}
+    raw_colors = payload.get("colors", {}) or {}
+    colors = {}
+    for instance, color in raw_colors.items():
+        value = str(color or "").strip()
+        if str(instance) in valid and re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+            colors[str(instance)] = value
+    config["WHATSAPP_INSTANCE_COLORS"] = colors
+    save_whatsapp_config(config)
+    return {"success": True, "colors": colors}
 
 
 @router.post("/instances/save")
@@ -1183,6 +1356,18 @@ def disconnect_whatsapp(request: Request, instance: Optional[str] = None):
                 print(f"[WhatsApp] Resposta {status} para {u}: {text[:200]}")
                 if status in (200, 204) or status == 404:
                     print(f"[WhatsApp] Logout bem-sucedido (ou já inexistente) via {u}")
+                    # A Evolution pode manter a instÃ¢ncia registrada mesmo
+                    # apÃ³s o logout (DEL_INSTANCE=false). Remova-a tambÃ©m
+                    # para nÃ£o acumular conexÃµes antigas.
+                    try:
+                        delete_resp = requests.delete(
+                            f"{base_url}/instance/delete/{instance}",
+                            headers=headers,
+                            timeout=8,
+                        )
+                        print(f"[WhatsApp] InstÃ¢ncia '{instance}' removida: {delete_resp.status_code}")
+                    except requests.RequestException as delete_exc:
+                        print(f"[WhatsApp] Aviso ao remover instÃ¢ncia '{instance}': {delete_exc}")
                     # Remove da config
                     config = get_whatsapp_config()
                     instances = config.get("WHATSAPP_INSTANCES", [])
@@ -1194,6 +1379,7 @@ def disconnect_whatsapp(request: Request, instance: Optional[str] = None):
                     if config.get("WHATSAPP_DEFAULT_INSTANCE") == instance:
                         config["WHATSAPP_DEFAULT_INSTANCE"] = new_instances[0].get("instanceName") if new_instances else None
                     save_whatsapp_config(config)
+                    _connected_map_cache["expires_at"] = 0
                     
                     return {"success": True}
                 else:
@@ -1283,7 +1469,10 @@ def get_whatsapp_chats(request: Request):
         chamados = session.exec(stmt).all()
         
         resultado = []
+        instance_colors = get_whatsapp_config().get("WHATSAPP_INSTANCE_COLORS", {}) or {}
         for c in chamados:
+            if not user_can_access_instance(request, c.whatsapp_instance):
+                continue
             # Busca a última mensagem do chamado
             last_msg_stmt = select(ChamadoInteracao).where(
                 ChamadoInteracao.chamado_id == c.id
@@ -1319,6 +1508,12 @@ def get_whatsapp_chats(request: Request):
                     c.usuario = group_name
                     session.add(c)
                     session.commit()
+            if is_group_chat:
+                refreshed_group_name = get_whatsapp_group_name(c.whatsapp_cliente, c.whatsapp_instance)
+                if refreshed_group_name and refreshed_group_name != c.usuario:
+                    c.usuario = refreshed_group_name
+                    session.add(c)
+                    session.commit()
             if is_group_chat and (not c.usuario or c.usuario.strip() == c.whatsapp_cliente):
                 c.usuario = f"Grupo WhatsApp · {str(c.whatsapp_cliente).split('@')[0]}"
                 session.add(c)
@@ -1344,9 +1539,11 @@ def get_whatsapp_chats(request: Request):
                 "usuario": c.usuario or (f"Grupo WhatsApp · {str(c.whatsapp_cliente).split('@')[0]}" if is_group_chat else "Contato sem nome"),
                 "is_group": is_group_chat,
                 "whatsapp_instance": c.whatsapp_instance,
+                "instance_color": instance_colors.get(c.whatsapp_instance, "#00a884"),
                 "visivel_suporte": bool(c.visivel_suporte),
                 "connected": is_connected,
                 "whatsapp_cliente": c.whatsapp_cliente,
+                "group_name": c.usuario if is_group_chat else None,
                 "categoria": c.categoria,
                 "status": c.status,
                 "prioridade": c.prioridade,
@@ -1699,6 +1896,37 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
     # A Evolution API v2 pode enviar data como objeto único, lista de mensagens ou wrapper com lista de mensagens.
     raw_data = payload.get("data", {})
+    instance_from_payload = None
+    for k in ('instance', 'instanceName', 'instance_name', 'instanceId', 'instance_id'):
+        instance_from_payload = payload.get(k)
+        if instance_from_payload:
+            break
+        if isinstance(raw_data, dict):
+            instance_from_payload = raw_data.get(k)
+            if instance_from_payload:
+                break
+        if isinstance(raw_data, list):
+            for item in raw_data:
+                if isinstance(item, dict) and item.get(k):
+                    instance_from_payload = item.get(k)
+                    break
+            if instance_from_payload:
+                break
+
+    if not instance_from_payload:
+        print("[Webhook] Mensagem rejeitada: instancia ausente no evento")
+        return {"status": "ignored", "reason": "instance_missing"}
+
+    configured_instances, _ = get_whatsapp_instances()
+    configured_names = {str(item.get("instanceName")) for item in configured_instances}
+    if str(instance_from_payload) not in configured_names:
+        print(f"[Webhook] Mensagem rejeitada: instancia nao cadastrada '{instance_from_payload}'")
+        return {"status": "ignored", "reason": "instance_not_configured"}
+
+    if not _instance_is_connected(str(instance_from_payload)):
+        print(f"[Webhook] Mensagem rejeitada: instancia '{instance_from_payload}' esta desconectada")
+        return {"status": "ignored", "reason": "instance_disconnected"}
+
     messages_list = []
 
     if isinstance(raw_data, list):
@@ -1910,6 +2138,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     mensagem=msg_text,
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
+                    whatsapp_participant=str(key.get("participant") or data.get("participant") or "") or None,
                     data_hora=datetime.now()
                 )
                 session.add(interacao)
@@ -1928,6 +2157,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         "event": "new_whatsapp_message",
                         "ticket_id": ticket_id,
                         "msg_id": interacao.id,
+                        "whatsapp_instance": instance_from_payload,
                         "usuario": customer_name,
                         "mensagem": msg_text,
                         "data_hora": interacao.data_hora.strftime("%d/%m/%Y %H:%M:%S")
@@ -1963,6 +2193,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     mensagem=msg_text,
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
+                    whatsapp_participant=str(key.get("participant") or data.get("participant") or "") or None,
                     data_hora=datetime.now()
                 )
                 session.add(interacao)
@@ -1973,6 +2204,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     {
                         "event": "new_whatsapp_chat",
                         "ticket_id": ticket_id,
+                        "whatsapp_instance": instance_from_payload,
                         "usuario": customer_name,
                         "mensagem": msg_text,
                         "prioridade": chamado.prioridade,

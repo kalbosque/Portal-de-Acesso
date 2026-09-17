@@ -8,6 +8,7 @@
 <style>
     /* Custom layout for dedicated WhatsApp full screen */
     body:has(.atend-container) main { padding-top: 1rem; padding-bottom: 1rem; }
+    body:has(.atend-container) .attendance-brand > div:last-child { display: none !important; }
     .atend-container {
         width: 100%;
         height: calc(100dvh - 118px);
@@ -85,6 +86,25 @@
         z-index: 0;
         pointer-events: none;
     }
+    .media-image-trigger { display: block; max-width: 100%; cursor: zoom-in; }
+    .media-image-trigger img { transition: transform .18s ease, filter .18s ease; }
+    .media-image-trigger:hover img { transform: scale(1.02); filter: brightness(1.08); }
+    .col-sidebar > .p-4 { position: relative; }
+    .queue-menu { display: none; position: absolute; top: 10.6rem; left: 1rem; right: 1rem; z-index: 120; max-height: min(22rem, calc(100vh - 11rem)); overflow-y: auto; }
+    .queue-inline-logo { display: none !important; }
+    .profile-identity-old { display: none !important; }
+    .col-sidebar .p-4 > .flex.items-center.justify-between > .flex.min-w-0.items-center.gap-2 > img:first-child,
+    .col-sidebar .p-4 > .flex.items-center.justify-between > .flex.min-w-0.items-center.gap-2 > span:first-child { display: none !important; }
+    .queue-menu.is-open { display: block; }
+    .desktop-app-menu { display: none; }
+    .desktop-app-menu-enabled { display: flex; }
+    .desktop-app-menu button { flex: 1; min-width: 0; min-height: 32px; white-space: nowrap; border: 0; }
+    .desktop-app-menu button:first-child { background: rgba(16,185,129,.18); color: #6ee7b7; }
+    body.desktop-focus .desktop-app-menu { border-radius: 0; }
+    body.desktop-focus .desktop-app-menu + .p-4 { padding-top: .85rem; }
+    #image-preview-modal { display: none; }
+    #image-preview-modal.is-open { display: flex; }
+    #image-preview-content { max-width: min(92vw, 1200px); max-height: 86vh; object-fit: contain; }
 
     .col-actions {
         display: flex;
@@ -180,6 +200,13 @@
     .chat-main-header > .chat-transfer-bar select { min-width: 150px; }
     .chat-main-header { position: relative; z-index: 25; }
     .chat-main-header { background: #111f28 !important; }
+    body.desktop-focus .chat-main-header { flex-wrap: wrap; align-items: center; gap: .7rem; }
+    body.desktop-focus .chat-main-header > div:first-child { min-width: 0; flex: 1 1 260px; }
+    body.desktop-focus .chat-main-header > div:first-child > div:last-child { min-width: 0; }
+    body.desktop-focus #chat-header-name { max-width: min(32vw, 300px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    body.desktop-focus .chat-main-header > div:nth-child(2) { min-width: 0; flex: 0 1 auto; }
+    body.desktop-focus .chat-main-header > .chat-transfer-bar { position: static; order: 3; flex: 1 0 100%; width: 100%; justify-content: flex-start; padding: .35rem 0 0; min-height: 38px; }
+    body.desktop-focus .chat-main-header > .chat-transfer-bar select { min-width: 190px; }
     #chat-header-operator { color: #f8fafc; opacity: 1 !important; }
     #chat-header-operator span { color: #d1fae5 !important; background: #12352f !important; border-color: rgba(52,211,153,.35) !important; }
     .mobile-transfer-panel { display: none; }
@@ -343,6 +370,32 @@
     @media (min-width: 1201px) {
         body:has(.atend-container) main { max-width: none; padding-left: 120px; padding-right: 24px; }
     }
+    /* Modo compacto usado pelo aplicativo Windows/Tauri. */
+    body.desktop-focus { overflow: hidden; }
+    body.desktop-focus > header,
+    body.desktop-focus .central-heading,
+    body.desktop-focus .attendance-menu-toggle,
+    body.desktop-focus .attendance-nav { display: none !important; }
+    body.desktop-focus main { max-width: none !important; height: 100vh; padding: 12px !important; }
+    body.desktop-focus main { overflow: hidden !important; }
+    body.desktop-focus .atend-container { height: calc(100vh - 24px); grid-template-columns: 320px minmax(0, 1fr); }
+    body.desktop-focus .col-actions { display: none !important; }
+    body.desktop-focus .mobile-transfer-panel { display: none !important; }
+    body.desktop-focus .col-chat { min-width: 0; grid-column: 2; }
+    body.desktop-focus .desktop-details-button { display: inline-flex !important; }
+    body.desktop-focus.desktop-details-open .col-actions {
+        display: flex !important;
+        position: fixed;
+        z-index: 120;
+        top: 12px;
+        right: 12px;
+        bottom: 12px;
+        width: min(360px, calc(100vw - 32px));
+        max-width: calc(100vw - 32px);
+        overflow-y: auto;
+        border: 1px solid rgba(52,211,153,.28);
+        box-shadow: 0 24px 80px rgba(0,0,0,.65);
+    }
 </style>
 
 <div class="central-heading mb-4 flex flex-wrap items-center justify-between gap-4 rounded-[1.25rem] border px-5 py-3">
@@ -358,6 +411,7 @@
     <div class="flex items-center gap-2">
         <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-emerald-300">Conversas</a>
         {% if is_admin %}
+        <button type="button" onclick="openTauriStatusModal()" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-amber-300 transition hover:bg-amber-500/10">Status</button>
         <a href="/central-atendimento/configuracoes" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition hover:bg-white/5 hover:text-white">Conexão e configurações</a>
         {% endif %}
     </div>
@@ -368,6 +422,19 @@
     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-lg text-emerald-300">💬</div>
     <div class="min-w-0"><span id="attendance-toast-title" class="block text-[10px] font-black uppercase tracking-widest text-emerald-300">Nova mensagem</span><span id="attendance-toast-message" class="mt-1 block line-clamp-2 text-xs font-semibold text-slate-200"></span></div>
 </div>
+{% if is_admin %}
+<div id="tauriStatusModal" class="hidden fixed inset-0 z-[120] items-center justify-center bg-slate-950/90 p-4 backdrop-blur-xl">
+    <div class="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+        <div class="mb-5 flex items-center justify-between"><h3 class="text-lg font-black uppercase italic text-white">Status da empresa</h3><button type="button" onclick="closeTauriStatusModal()" class="text-2xl text-slate-500">×</button></div>
+        <p class="mb-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Visível para os clientes por 24 horas.</p>
+        <input id="tauri-status-title" class="mb-3 w-full rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm text-white" placeholder="Título">
+        <textarea id="tauri-status-message" rows="3" class="mb-3 w-full rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm text-white" placeholder="Mensagem"></textarea>
+        <input id="tauri-status-media" type="file" accept="image/*,video/mp4,video/webm" class="mb-4 w-full text-xs text-slate-400">
+        <button type="button" onclick="saveTauriStatus()" class="w-full rounded-xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-widest text-white hover:bg-emerald-500">Publicar Status</button>
+        <div id="tauri-status-list" class="mt-4 space-y-2"></div>
+    </div>
+</div>
+{% endif %}
 
 <div class="atend-container">
     
@@ -375,9 +442,37 @@
     <div class="col-sidebar glass-panel rounded-[2rem] border border-white/5 bg-slate-900/20 overflow-hidden">
         <!-- Header Busca -->
         <div class="p-4 border-b border-white/5 space-y-3">
+            <div class="profile-identity-old mb-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/35 p-3" style="display:none!important">
+                {% if can_edit_identity %}<button type="button" onclick="window.location.href='/central-atendimento/configuracoes?desktop=1'" title="Configurar nome e foto" class="shrink-0 rounded-full transition hover:scale-105">{% endif %}
+                {% if config.APP_LOGO_URL %}<img src="/{{ config.APP_LOGO_URL }}" alt="Logo" class="h-16 w-16 rounded-full border-2 border-emerald-400/40 bg-slate-950 object-cover shadow-lg">{% else %}<span class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-emerald-400/40 bg-emerald-500/10 text-2xl text-emerald-300">💬</span>{% endif %}
+                {% if can_edit_identity %}</button>{% endif %}
+                <div class="min-w-0"><p class="truncate text-sm font-black uppercase tracking-wide text-white">{{ config.APP_NAME or 'Central de Atendimento' }}</p><p class="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-emerald-300">Central de Atendimento</p>{% if can_edit_identity %}<p class="mt-1 text-[8px] text-slate-500">Clique na imagem para editar</p>{% endif %}</div>
+            </div>
+            <div class="profile-identity-card mb-3 flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/35 p-3">
+                {% if can_edit_identity %}<button type="button" onclick="window.location.href='/central-atendimento/configuracoes?desktop=1'" title="Configurar nome e foto" class="shrink-0 rounded-full transition hover:scale-105">{% endif %}
+                {% if profile_photo_url %}<img src="/{{ profile_photo_url }}" alt="Foto do atendente" class="h-16 w-16 rounded-full border-2 border-emerald-400/40 bg-slate-950 object-cover shadow-lg">{% else %}<span class="flex h-16 w-16 items-center justify-center rounded-full border-2 border-emerald-400/40 bg-emerald-500/10 text-2xl text-emerald-300">💬</span>{% endif %}
+                {% if can_edit_identity %}</button>{% endif %}
+                <div class="min-w-0"><p class="truncate text-sm font-black uppercase tracking-wide text-white">{{ profile_name or 'Atendente' }}</p><p class="mt-1 text-[9px] font-black uppercase tracking-[0.18em] text-emerald-300">Central de Atendimento</p>{% if can_edit_identity %}<p class="mt-1 text-[8px] text-slate-500">Clique na imagem para editar</p>{% endif %}</div>
+            </div>
             <div class="flex items-center justify-between">
-                <h3 class="text-sm font-black text-white uppercase tracking-wider italic">Mensagens</h3>
-                <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black tracking-widest uppercase">WhatsApp</span>
+                <div class="flex min-w-0 items-center gap-2">
+                    {% if config.APP_LOGO_URL %}<img src="/{{ config.APP_LOGO_URL }}" alt="Logo" class="h-8 w-8 shrink-0 rounded-full border border-emerald-400/30 bg-slate-950 object-cover shadow-lg">{% else %}<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/10 text-sm text-emerald-300">💬</span>{% endif %}
+                    <button type="button" onclick="toggleQueueMenu()" class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 text-slate-300 hover:bg-emerald-500/15 hover:text-white" title="Menu de atendimentos" aria-label="Menu de atendimentos">☰</button>
+                    <h3 class="text-sm font-black text-white uppercase tracking-wider italic">Mensagens</h3>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black tracking-widest uppercase">WhatsApp</span>
+                    {% if is_admin %}<button type="button" onclick="openTauriStatusModal()" class="rounded-lg border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-amber-300 hover:bg-amber-400/20" title="Publicar Status">Status</button>{% endif %}
+                </div>
+            </div>
+
+            <div id="queue-menu" class="queue-menu rounded-xl border border-white/10 bg-slate-900 p-1 shadow-xl">
+                {% if can_edit_identity %}<button type="button" onclick="window.location.href='/central-atendimento/configuracoes?desktop=1'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/10">Configurações</button>{% endif %}
+                <button type="button" onclick="selectQueueMenu('aguardando')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Fila de atendimento</button>
+                <button type="button" onclick="selectQueueMenu('atendendo')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Meus atendimentos</button>
+                {% if config.get('WHATSAPP_SHOW_GROUPS', false) %}<button type="button" onclick="selectQueueMenu('grupos')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Grupos</button>{% endif %}
+                <button type="button" onclick="selectQueueMenu('resolvidos')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Histórico / resolvidos</button>
+                <button type="button" onclick="sairDaCentral(event)" class="mt-1 w-full rounded-lg border-t border-white/10 px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-500/10">Sair</button>
             </div>
             
             <input type="text" id="chat-search" oninput="filterChatList()" placeholder="Buscar cliente..." class="w-full bg-slate-950/60 border border-white/5 rounded-xl px-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50">
@@ -430,6 +525,7 @@
             <div class="flex items-center gap-2">
                 <button onclick="toggleMobileDrawer('queue')" class="lg:hidden rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300" title="Conversas">☰</button>
                 <button onclick="toggleMobileDrawer('details')" class="lg:hidden rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300" title="Detalhes">ⓘ</button>
+                <button onclick="toggleDesktopDetails()" class="desktop-details-button hidden items-center gap-1 rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300 hover:bg-emerald-500/15" title="Histórico e detalhes">☰ Histórico</button>
                 <div id="chat-header-operator" class="text-right">
                     <!-- Mostra operador atual ou status -->
                 </div>
@@ -475,8 +571,9 @@
             <span id="audio-recording-time" class="hidden min-w-10 text-[10px] font-black text-rose-300">00:00</span>
             <span id="attachment-name" class="hidden max-w-32 truncate rounded-lg bg-white/10 px-2 py-1 text-[10px] text-slate-300"></span>
             <div id="emoji-picker" class="hidden absolute bottom-16 left-3 z-30 grid w-72 grid-cols-8 gap-1 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl"></div>
-            <div id="gif-picker" class="hidden absolute bottom-16 left-12 z-30 w-80 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl">
-                <div id="gif-grid" class="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto"></div>
+            <div id="gif-picker" class="hidden absolute bottom-16 left-12 z-30 w-96 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl">
+                <div class="mb-2 flex items-center justify-between"><span class="text-[10px] font-black uppercase tracking-widest text-slate-300">Mais GIFs</span><span class="text-[9px] text-slate-500">Clique para enviar</span></div>
+                <div id="gif-grid" class="grid max-h-80 grid-cols-4 gap-2 overflow-y-auto"></div>
             </div>
             <textarea id="msg-input" rows="1" disabled onkeydown="handleInputKeydown(event)" class="flex-grow px-4 py-2.5 rounded-xl text-[#e9edef] text-[15px] bg-[#2a3942] border-none resize-none focus:outline-none disabled:cursor-not-allowed disabled:opacity-60" placeholder="Selecione uma conversa para responder" style="min-height: 44px; max-height: 120px;"></textarea>
             <button id="send-message" onclick="sendMessage()" disabled class="w-10 h-10 ml-1 flex-shrink-0 bg-[#00a884] text-[#111b21] rounded-full flex items-center justify-center hover:bg-[#00c59b] transition-colors shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
@@ -507,12 +604,17 @@
                 <div>Operador: <span id="contact-assigned" class="font-mono text-slate-300">--</span></div>
             </div>
 
+            <details class="operator-options rounded-xl border border-white/5 bg-slate-950/20">
+                <summary class="cursor-pointer px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-white">Mais opções</summary>
+                <div class="space-y-3 px-3 pb-3">
             <label class="block text-[9px] font-black uppercase tracking-widest text-slate-500" for="contact-internal-status">Status interno</label>
             <select id="contact-internal-status" onchange="saveContactInternalStatus(this.value)" disabled class="w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-xs font-bold text-slate-200 outline-none focus:border-indigo-400 disabled:cursor-not-allowed disabled:opacity-50">
                 <option value="Normal">Normal</option><option value="Aguardando retorno">Aguardando retorno</option><option value="Em atendimento">Em atendimento</option><option value="VIP">VIP</option><option value="Bloqueado">Bloqueado</option><option value="Prioridade">Prioridade</option>
             </select>
 
-            <button onclick="copyPhone()" class="w-full px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-black text-xs uppercase rounded-xl">Copiar Telefone</button>
+            <button onclick="copyPhone()" class="w-full px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-black text-xs uppercase rounded-xl">Copiar telefone</button>
+                </div>
+            </details>
         </div>
 
         <div class="mobile-transfer-panel detail-section space-y-2">
@@ -558,8 +660,8 @@
             </details>
         </div>
         
-        <div>
-            <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Gerenciamento</h3>
+        <details class="operator-options">
+            <summary class="mb-4 cursor-pointer text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white">Classificação do atendimento</summary>
             <div class="space-y-4">
                 <div>
                     <label class="block text-[8px] text-slate-500 font-black uppercase tracking-widest mb-1.5">Prioridade do Ticket</label>
@@ -580,7 +682,7 @@
                     </select>
                 </div>
             </div>
-        </div>
+        </details>
         
         <div class="pt-6 border-t border-white/5 space-y-3 flex-grow flex flex-col justify-end">
             <div id="assumir-btn-area">
@@ -638,11 +740,67 @@
     </div>
 </div>
 
+<div id="image-preview-modal" class="fixed inset-0 z-[130] items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Visualização da imagem">
+    <button type="button" id="image-preview-close" class="absolute right-5 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20" aria-label="Fechar visualização">×</button>
+    <img id="image-preview-content" src="" alt="Imagem ampliada" class="rounded-xl shadow-2xl">
+</div>
+
 <script>
+    // O aplicativo Tauri abre esta mesma tela com ?desktop=1. Nesse modo,
+    // deixamos a interface focada na fila e na conversa; detalhes secundários
+    // continuam acessíveis pelo sistema web.
+    let tauriStorage = false;
+    try { tauriStorage = localStorage.getItem('central_atendimento_tauri') === '1'; } catch (_) {}
+    const isDesktopApp = new URLSearchParams(window.location.search).get('desktop') === '1' || tauriStorage;
+    if (isDesktopApp) { try { localStorage.setItem('central_atendimento_tauri', '1'); } catch (_) {} }
+    if (isDesktopApp) {
+        document.body.classList.add('desktop-focus');
+
+        // O executável Tauri é exclusivo para atendimento. Impede que links
+        // do portal geral abram outras áreas dentro da janela do aplicativo.
+        document.addEventListener('click', (event) => {
+            const link = event.target.closest?.('a[href]');
+            if (!link) return;
+            const target = new URL(link.href, window.location.href);
+            const allowed = target.origin === window.location.origin && (
+                target.pathname === '/central-atendimento' ||
+                target.pathname.startsWith('/api/whatsapp/')
+            );
+            if (!allowed) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof mostrarToast === 'function') mostrarToast('Esta área não está disponível no aplicativo de atendimento.');
+            }
+        }, true);
+    }
+
     const currentUser = "{{ user_name }}";
     const is_admin = {{ 'true' if is_admin else 'false' }};
     const canManageAtendimento = {{ 'true' if can_manage_atendimento else 'false' }};
     const isReception = {{ 'true' if is_reception else 'false' }};
+
+    async function sincronizarPerfilAtual() {
+        try {
+            const response = await fetch('/api/whatsapp/identity/me', { cache: 'no-store' });
+            if (!response.ok) return;
+            const profile = await response.json();
+            const card = document.querySelector('.profile-identity-card');
+            if (!card) return;
+            const title = card.querySelector('p');
+            if (title) title.textContent = profile.nome || 'Atendente';
+            const currentImage = card.querySelector('img');
+            if (profile.foto_url && currentImage) currentImage.src = '/' + profile.foto_url;
+            if (profile.foto_url && !currentImage) {
+                const placeholder = card.querySelector('span');
+                const image = document.createElement('img');
+                image.src = '/' + profile.foto_url;
+                image.alt = 'Foto do atendente';
+                image.className = 'h-16 w-16 rounded-full border-2 border-emerald-400/40 bg-slate-950 object-cover shadow-lg';
+                placeholder?.replaceWith(image);
+            }
+        } catch (_) {}
+    }
+    sincronizarPerfilAtual();
     
     let currentQueue = 'aguardando'; // aguardando | atendendo | resolvidos
     let currentGroup = 'todos';
@@ -667,6 +825,37 @@
     let messageSelectionMode = false;
     let selectedMessageIds = new Set();
     let forwardRecipientResolver = null;
+
+    function openImagePreview(url) {
+        const modal = document.getElementById('image-preview-modal');
+        const image = document.getElementById('image-preview-content');
+        if (!modal || !image || !url) return;
+        image.src = url;
+        modal.classList.add('is-open');
+        document.body.classList.add('overflow-hidden');
+    }
+
+    function closeImagePreview() {
+        const modal = document.getElementById('image-preview-modal');
+        const image = document.getElementById('image-preview-content');
+        modal?.classList.remove('is-open');
+        image?.removeAttribute('src');
+        document.body.classList.remove('overflow-hidden');
+    }
+
+    document.addEventListener('click', (event) => {
+        const trigger = event.target.closest?.('.media-image-trigger');
+        if (trigger) {
+            event.preventDefault();
+            event.stopPropagation();
+            openImagePreview(trigger.dataset.imageUrl || trigger.href);
+            return;
+        }
+        if (event.target.id === 'image-preview-modal' || event.target.closest?.('#image-preview-close')) closeImagePreview();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeImagePreview();
+    });
 
     function escapeHtml(value) {
         return String(value || '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -1127,6 +1316,7 @@
                     ? 'Em atendimento'
                     : 'Triagem';
 
+            card.style.borderLeft = `3px solid ${c.instance_color || '#00a884'}`;
             card.innerHTML = `
                 <div class="flex items-center gap-3 min-w-0 w-full">
                     <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold flex-shrink-0 text-lg">
@@ -1142,6 +1332,7 @@
                                 <span class="w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-[#00a884]' : 'bg-slate-600'} inline-block"></span>
                                 ${groupName}
                             </span>
+                            <span class="text-[9px] font-black uppercase tracking-wider" style="color:${c.instance_color || '#00a884'}">${c.whatsapp_instance || 'Número principal'}</span>
                             <span class="inline-flex items-center gap-1 text-[9px] text-slate-500 uppercase font-bold">
                                 <span class="priority-dot ${(c.prioridade || 'Media').toLowerCase().split(' ')[0]}"></span>${c.prioridade || 'Media'}
                             </span>
@@ -1176,6 +1367,15 @@
         document.querySelectorAll('.atend-tab').forEach(t => t.classList.remove('active'));
         document.getElementById(`tab-${tabName}`).classList.add('active');
         renderChatsList();
+    }
+
+    function toggleQueueMenu() {
+        document.getElementById('queue-menu')?.classList.toggle('is-open');
+    }
+
+    function selectQueueMenu(tabName) {
+        changeQueueTab(tabName);
+        document.getElementById('queue-menu')?.classList.remove('is-open');
     }
 
     function clearActiveConversation() {
@@ -1256,7 +1456,10 @@
         document.getElementById('chat-header-phone').innerText = formatDisplayPhone(chat.whatsapp_cliente);
         document.getElementById('chat-header-avatar').innerText = getChatDisplayName(chat).substring(0, 2).toUpperCase();
         // Instância e presença
-        document.getElementById('chat-header-instance').innerText = chat.whatsapp_instance || '--';
+        const instanceBadge = document.getElementById('chat-header-instance');
+        instanceBadge.innerText = chat.whatsapp_instance || '--';
+        instanceBadge.style.color = chat.instance_color || '#00a884';
+        instanceBadge.style.borderColor = `${chat.instance_color || '#00a884'}66`;
         const pres = document.getElementById('chat-header-presence');
         if (chat.connected) {
             pres.classList.remove('bg-slate-600'); pres.classList.add('bg-emerald-400');
@@ -1282,6 +1485,14 @@
             if (mobileTransferSelect) mobileTransferSelect.disabled = false;
             if (mobileTransferButton) mobileTransferButton.disabled = false;
             fillTransferOperators(chat.assigned_user);
+        } else if (isGroupConversation) {
+            // Grupos ficam abertos e podem receber respostas sem assumir atendimento.
+            operatorSpan.innerHTML = `<span class="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[9px] font-black text-emerald-300 uppercase tracking-widest">Grupo aberto</span>`;
+            if (transferBar) transferBar.classList.add('hidden');
+            if (transferSelect) transferSelect.disabled = true;
+            if (transferButton) transferButton.disabled = true;
+            if (mobileTransferSelect) mobileTransferSelect.disabled = true;
+            if (mobileTransferButton) mobileTransferButton.disabled = true;
         } else {
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-[9px] font-black text-amber-400 uppercase tracking-widest animate-pulse">Aguardando</span>`;
             if (isReception && !isGroupConversation) {
@@ -1313,7 +1524,17 @@
                 <button onclick="promoverChamado(${chat.id})" class="mt-2 w-full rounded-lg bg-amber-500 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-950 hover:bg-amber-400">Abrir chamado técnico</button>
             </div>
         ` : '';
-        if (!chat.assigned_user) {
+        if (isGroupConversation) {
+            assumirArea.innerHTML = `
+                ${promoteButton}
+                <div class="text-center p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                    <span class="block text-[8px] text-emerald-400 font-black uppercase tracking-widest">Grupo aberto</span>
+                    <span class="block text-xs font-black text-slate-300">Responda sem assumir a conversa</span>
+                </div>
+            `;
+            document.getElementById('btn-resolver').disabled = true;
+            document.getElementById('btn-resolver').classList.add('hidden');
+        } else if (!chat.assigned_user) {
             assumirArea.innerHTML = isReception ? `
                 <div class="w-full py-4 bg-amber-500/10 border border-amber-500/20 text-amber-300 font-black text-xs uppercase tracking-widest rounded-xl text-center">
                     Triagem: selecione o atendente acima
@@ -1413,14 +1634,14 @@
             const direction = m.is_me ? 'enviado' : 'recebido';
             const directionF = m.is_me ? 'enviada' : 'recebida';
             if (media.type === 'image') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar imagem"><img src="${escapeHtml(media.url)}" class="max-h-64 max-w-full rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
             } else if (media.type === 'gif') {
                 const isVideoGif = String(media.mime || '').startsWith('video/');
                 formattedMsg = isVideoGif
                     ? `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><video autoplay loop muted playsinline controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`
-                    : `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-64 max-w-full rounded-xl object-contain" alt="GIF ${direction}">${caption}</a>`;
+                    : `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar GIF"><img src="${escapeHtml(media.url)}" class="max-h-64 max-w-full rounded-xl object-contain" alt="GIF ${direction}">${caption}</a>`;
             } else if (media.type === 'sticker') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🙂 Sticker ${direction}</div><a href="${media.url}" target="_blank" rel="noopener"><img src="${media.url}" class="max-h-48 max-w-48 object-contain" alt="Sticker ${direction}">${caption}</a>`;
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🙂 Sticker ${direction}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar sticker"><img src="${escapeHtml(media.url)}" class="max-h-48 max-w-48 object-contain" alt="Sticker ${direction}">${caption}</a>`;
             } else if (media.type === 'video') {
                 formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎥 Vídeo ${direction}</div><video controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`;
             } else if (media.type === 'audio') {
@@ -1592,7 +1813,13 @@
                     body: JSON.stringify({ticket_id: activeTicketId, message_id: messageId, reaction: emoji})
                 });
                 if (!response.ok) {
+                    let reactionError = '';
+                    try { reactionError = (await response.json()).detail || ''; } catch (_) {}
                     picker.remove();
+                    if (reactionError) {
+                        mostrarToast(reactionError);
+                        return;
+                    }
                     mostrarToast('Não foi possível enviar a reação ao WhatsApp.');
                     return;
                 }
@@ -1884,26 +2111,28 @@
         'https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif',
         'https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif',
         'https://media.giphy.com/media/l46CyJmS9KUbokzsI/giphy.gif',
-        'https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif',
-        'https://media.giphy.com/media/3o7TKRkkgqUK3oNw8g/giphy.gif',
-        'https://media.giphy.com/media/3o7abldj0b3i5b6ZyE/giphy.gif',
-        'https://media.giphy.com/media/3oKIPf3C7HqqYBVcCk/giphy.gif',
-        'https://media.giphy.com/media/12gdy2b6O2W7bG/giphy.gif',
-        'https://media.giphy.com/media/14aUO0Mf7dWDXW/giphy.gif',
-        'https://media.giphy.com/media/OkJat1YNdoD3W/giphy.gif',
-        'https://media.giphy.com/media/2tRloHD0GpkGoiaX4k/giphy.gif',
-        'https://media.giphy.com/media/111ebonMs90YLu/giphy.gif'
+        'https://media.giphy.com/media/3o6ZsYeltfhsqPF6A8/giphy.gif',
+        'https://media.giphy.com/media/edE0oMB7nDYIdMeQph/giphy.gif',
+        'https://media.giphy.com/media/l77h85YxJpdfpqv8nh/giphy.gif',
+        'https://media.giphy.com/media/njIhgNElKSj6vYKFff/giphy.gif',
+        'https://media.giphy.com/media/RfF4fXRvVVIEumYLoB/giphy.gif',
+        'https://media.giphy.com/media/BLy2B7ue1djmAEnRHi/giphy.gif',
+        'https://media.giphy.com/media/4VSuZmB6p8RDwM1fxB/giphy.gif',
+        'https://media.giphy.com/media/u4ARuKtC4OQXkeMKhh/giphy.gif',
+        'https://media.giphy.com/media/DfwlVzwwScDjsb0yCj/giphy.gif',
+        'https://media.giphy.com/media/2mEfLz2zLRJZH0iMfq/giphy.gif',
+        'https://media.giphy.com/media/TJrS7r0f6SOthGTiPe/giphy.gif'
     ];
 
     function renderGifCatalog() {
         const grid = document.getElementById('gif-grid');
         if (!grid) return;
         grid.innerHTML = '';
-        gifCatalog.forEach(url => {
+        [...new Set(gifCatalog)].forEach(url => {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'overflow-hidden rounded-lg border border-white/10 bg-black/20 transition hover:border-emerald-400';
-            button.innerHTML = `<img src="${url}" alt="GIF" loading="lazy" class="h-20 w-full object-cover">`;
+            button.innerHTML = `<img src="${url}" alt="GIF" loading="lazy" onerror="this.closest('button')?.remove()" class="h-20 w-full object-cover">`;
             button.onclick = () => sendGif(url);
             grid.appendChild(button);
         });
@@ -2331,9 +2560,13 @@
                         remoteTyping = false;
                         document.getElementById('typing-indicator')?.classList.add('hidden');
                     }
-                    if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
-                    
                     const tId = data.chamado_id || data.ticket_id;
+                    const visibleChat = chatsData.find(x => x.id === tId);
+                    if (data.whatsapp_instance && !visibleChat) {
+                        loadChats();
+                        return;
+                    }
+                    if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
 
                     if (sameTicket(tId, activeTicketId)) {
                             appendMessageToTimeline({
@@ -2375,6 +2608,7 @@
                     }
                 } 
                 else if (data.event === "new_whatsapp_chat") {
+                    if (data.whatsapp_instance && !chatsData.some(x => x.id === data.ticket_id)) return;
                     notifyIncomingMessage(data, true);
                     if (data.ticket_id) notificationSnapshot.set(String(data.ticket_id), 1);
                     loadChats();
@@ -2597,12 +2831,46 @@
         backdrop?.classList.add('active-mobile');
     }
 
+    function toggleDesktopDetails() {
+        if (!document.body.classList.contains('desktop-focus')) return;
+        document.body.classList.toggle('desktop-details-open');
+    }
+
     function closeMobileDrawers() {
         document.querySelector('.col-sidebar')?.classList.remove('active-mobile');
         document.querySelector('.col-actions')?.classList.remove('active-mobile');
         const backdrop = document.getElementById('mobile-drawer-backdrop');
         backdrop?.classList.add('hidden');
         backdrop?.classList.remove('active-mobile');
+    }
+
+    async function openTauriStatusModal() {
+        const modal = document.getElementById('tauriStatusModal');
+        if (!modal) return;
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+        const res = await fetch('/api/status-empresa');
+        const statuses = await res.json();
+        document.getElementById('tauri-status-list').innerHTML = statuses.map(item => `<div class="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2"><span class="truncate text-xs text-white">${item.titulo}</span><button type="button" onclick="removeTauriStatus(${item.id})" class="text-[9px] font-black uppercase text-rose-400">Remover</button></div>`).join('') || '<span class="text-xs text-slate-500">Nenhum Status ativo.</span>';
+    }
+    function closeTauriStatusModal() { const modal = document.getElementById('tauriStatusModal'); modal?.classList.add('hidden'); modal?.classList.remove('flex'); }
+    async function saveTauriStatus() {
+        const form = new FormData();
+        form.append('titulo', document.getElementById('tauri-status-title').value || 'Status da empresa');
+        form.append('mensagem', document.getElementById('tauri-status-message').value || '');
+        const file = document.getElementById('tauri-status-media').files[0];
+        if (file) form.append('media', file);
+        const res = await fetch('/api/status-empresa', { method: 'POST', body: form });
+        if (!res.ok) { const data = await res.json().catch(() => ({})); mostrarToast(data.detail || 'Não foi possível publicar o Status.'); return; }
+        document.getElementById('tauri-status-title').value = ''; document.getElementById('tauri-status-message').value = ''; document.getElementById('tauri-status-media').value = '';
+        const result = await res.json().catch(() => ({}));
+        mostrarToast(result.whatsapp?.ok === false
+            ? 'Status interno publicado, mas não foi enviado ao WhatsApp: ' + (result.whatsapp.detail || 'verifique a conexão.')
+            : 'Status publicado no portal e no WhatsApp por 24 horas.');
+        openTauriStatusModal();
+    }
+    async function removeTauriStatus(id) {
+        const res = await fetch('/api/status-empresa/' + id, { method: 'DELETE' });
+        if (res.ok) openTauriStatusModal();
     }
 </script>
 {% endblock %}

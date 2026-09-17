@@ -3,6 +3,27 @@
 {% block title %}Configuração WhatsApp | {{ config.APP_NAME }}{% endblock %}
 
 {% block content %}
+<script>
+    let tauriStorage = false;
+    try { tauriStorage = localStorage.getItem('central_atendimento_tauri') === '1'; } catch (_) {}
+    if (new URLSearchParams(window.location.search).get('desktop') === '1' || tauriStorage) {
+        document.documentElement.classList.add('tauri-config-mode');
+    }
+</script>
+<div class="profile-identity-card mx-auto mb-5 max-w-7xl rounded-2xl border border-emerald-400/20 bg-slate-900/70 p-5">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            {% if config.APP_LOGO_URL %}<img src="/{{ config.APP_LOGO_URL }}" alt="Logo atual" class="h-12 w-12 rounded-full border border-emerald-400/30 object-cover">{% else %}<div class="flex h-12 w-12 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-500/10 text-xl">💬</div>{% endif %}
+            <div><h3 class="text-sm font-bold text-white">Identificação da Central</h3><p class="text-xs text-slate-400">Logo da empresa ou foto para aparecer no Tauri.</p></div>
+        </div>
+        {% if can_edit_identity %}<div class="flex flex-wrap items-center justify-end gap-2"><input id="tauri-identity-name" value="{{ config.APP_NAME or '' }}" class="w-48 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-xs text-white" placeholder="Nome da empresa"><input id="tauri-logo-upload" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" class="max-w-[230px] text-xs text-slate-400"><button type="button" onclick="saveTauriLogo()" class="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-emerald-500">Salvar identificação</button></div>{% endif %}
+    </div>
+</div>
+<style>
+    html.tauri-config-mode body > header { display: none !important; }
+    html.tauri-config-mode body > main { max-width: none !important; width: 100%; padding: 1.25rem !important; }
+    html.tauri-config-mode body > main > div:first-child { margin-bottom: 1rem; }
+</style>
 <div class="mx-auto mb-4 flex max-w-7xl flex-wrap justify-between gap-3 px-4">
     <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-300">← Voltar para conversas</a>
     <a href="/" class="rounded-xl bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300">⌂ Portal inicial</a>
@@ -96,6 +117,15 @@
             <div id="instances-list" class="wa-card rounded-2xl overflow-hidden divide-y divide-white/5 shadow-md">
                 <div class="p-6 text-center wa-text-muted text-sm">Carregando aparelhos...</div>
             </div>
+
+            {% if is_admin %}
+            <div class="wa-card rounded-2xl p-6 mt-6 shadow-md">
+                <h3 class="text-[#e9edef] text-lg font-medium mb-1">Permissão por número</h3>
+                <p class="wa-text-muted text-sm leading-relaxed mb-4">Escolha quais operadores podem visualizar e atender cada WhatsApp. Sem operadores selecionados, o número fica liberado para todos.</p>
+                <div id="instance-access-list" class="space-y-4"></div>
+                <button type="button" onclick="saveInstanceAccess(); saveInstanceColors()" class="wa-btn-primary rounded-lg px-5 py-2.5 mt-5 text-xs font-bold">Salvar permissões e cores</button>
+            </div>
+            {% endif %}
             
             <p class="wa-text-muted text-xs text-center mt-6">
                 Suas mensagens pessoais possuem a criptografia de ponta a ponta em todos os seus aparelhos conectados.
@@ -162,6 +192,10 @@
     let pollingInterval = null;
     let targetInstanceName = null;
     const isAdmin = {{ 'true' if is_admin else 'false' }};
+    const isTauriConfig = {{ 'true' if desktop_mode else 'false' }} || tauriStorage;
+    let instanceAccess = {};
+    let instanceColors = {};
+    let operatorsData = [];
 
     async function loadInstances() {
         try {
@@ -169,6 +203,8 @@
             if (res.ok) {
                 const data = await res.json();
                 instancesData = data.instances || [];
+                instanceAccess = data.instance_access || {};
+                instanceColors = data.instance_colors || {};
                 const toggle = document.getElementById('auto-create-tickets');
                 if (toggle) toggle.checked = data.auto_create_tickets !== false;
                 const groupsToggle = document.getElementById('show-groups');
@@ -178,10 +214,54 @@
                 if (bgColor) bgColor.value = data.chat_background_color || '#0b141a';
                 if (bgImage) bgImage.value = data.chat_background_image || '';
                 renderInstancesList();
+                if (isAdmin) {
+                    const operatorsRes = await fetch('/api/whatsapp/operators');
+                    operatorsData = operatorsRes.ok ? await operatorsRes.json() : [];
+                    renderInstanceAccess();
+                }
             }
         } catch(e) {
             console.error("Erro ao carregar instâncias", e);
         }
+    }
+
+    function renderInstanceAccess() {
+        const target = document.getElementById('instance-access-list');
+        if (!target) return;
+        target.innerHTML = instancesData.map(instance => {
+            const allowed = Array.isArray(instanceAccess[instance.instanceName]) ? instanceAccess[instance.instanceName] : [];
+            const users = operatorsData.map(user => `
+                <label class="inline-flex items-center gap-2 text-xs text-slate-300 mr-4 mb-2">
+                    <input type="checkbox" class="instance-access-user accent-emerald-500" data-instance="${instance.instanceName}" value="${user.name}" ${allowed.includes(user.name) ? 'checked' : ''}>
+                    ${user.name}
+                </label>`).join('');
+            return `<div class="rounded-xl border border-white/10 bg-[#111b21] p-4">
+                <div class="flex items-center justify-between gap-3 mb-2"><div class="text-sm font-semibold text-white">${instance.label || instance.instanceName}</div><label class="inline-flex items-center gap-2 text-[10px] text-slate-400">Cor <input type="color" class="instance-color h-7 w-9 cursor-pointer rounded border border-white/10 bg-transparent" data-instance="${instance.instanceName}" value="${instanceColors[instance.instanceName] || '#00a884'}"></label></div>
+                <div>${users || '<span class="text-xs text-slate-500">Nenhum operador ativo encontrado.</span>'}</div>
+            </div>`;
+        }).join('') || '<span class="text-xs text-slate-500">Adicione um aparelho primeiro.</span>';
+    }
+
+    async function saveInstanceAccess() {
+        const access = {};
+        document.querySelectorAll('.instance-access-user:checked').forEach(input => {
+            const instance = input.dataset.instance;
+            (access[instance] ||= []).push(input.value);
+        });
+        const res = await fetch('/api/whatsapp/instances/access', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({access})
+        });
+        if (res.ok) { instanceAccess = access; alert('Permissões salvas com sucesso.'); }
+        else { const data = await res.json().catch(() => ({})); alert(data.detail || 'Não foi possível salvar as permissões.'); }
+    }
+
+    async function saveInstanceColors() {
+        const colors = {};
+        document.querySelectorAll('.instance-color').forEach(input => colors[input.dataset.instance] = input.value);
+        const res = await fetch('/api/whatsapp/instances/colors', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({colors})
+        });
+        if (!res.ok) alert('Não foi possível salvar as cores dos números.');
     }
 
     async function saveAutoCreateTickets(enabled) {
@@ -548,6 +628,47 @@
         loadInstances();
         // Fallback polling on the list
         setInterval(loadInstances, 10000);
+        const back = document.querySelector('a[href^="/central-atendimento"]');
+        if (back && isTauriConfig) {
+            back.href = '/central-atendimento?desktop=1';
+            back.addEventListener('click', event => {
+                event.preventDefault();
+                window.location.href = '/central-atendimento?desktop=1';
+            });
+        }
+        const profileName = {{ profile_name|default('')|tojson }};
+        const profilePhoto = {{ profile_photo_url|default('')|tojson }};
+        const profileNameInput = document.getElementById('tauri-identity-name');
+        if (profileNameInput) profileNameInput.value = profileName;
+        const profileCard = document.querySelector('.profile-identity-card');
+        const profileImage = profileCard?.querySelector('img');
+        if (profileImage && profilePhoto) profileImage.src = '/' + profilePhoto;
+        if (profileCard) {
+            const title = profileCard.querySelector('h3');
+            const description = profileCard.querySelector('p');
+            if (title) title.textContent = 'Seu perfil na Central';
+            if (description) description.textContent = 'Nome e foto usados neste computador/Tauri.';
+        }
     });
+
+    async function saveTauriLogo() {
+        const input = document.getElementById('tauri-logo-upload');
+        const name = document.getElementById('tauri-identity-name')?.value?.trim() || '';
+        if (!input?.files?.[0] && !name) { alert('Informe o nome ou selecione uma imagem.'); return; }
+        const form = new FormData();
+        form.append('nome', name);
+        if (input?.files?.[0]) form.append('logo', input.files[0]);
+        let response;
+        try {
+            response = await fetch('/api/whatsapp/identity', { method: 'POST', body: form });
+        } catch (error) {
+            alert('Não foi possível conectar ao servidor para salvar o perfil.');
+            return;
+        }
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data.success) alert('Perfil salvo com sucesso.');
+        if (!response.ok || !data.success) { alert(data.detail || 'Não foi possível salvar a logo.'); return; }
+        window.location.href = '/central-atendimento/configuracoes' + (isTauriConfig ? '?desktop=1' : '');
+    }
 </script>
 {% endblock %}

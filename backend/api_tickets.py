@@ -37,6 +37,11 @@ def _calc_sla(prioridade: str) -> datetime:
     return datetime.now() + timedelta(hours=hours)
 
 
+def _check_whatsapp_instance_access(request: Request, chamado: Chamado):
+    if chamado.origem == "WhatsApp" and not api_whatsapp.user_can_access_instance(request, chamado.whatsapp_instance):
+        raise HTTPException(status_code=403, detail="Você não tem permissão para este número WhatsApp.")
+
+
 # ─── Contagem de tickets (usado no badge do menu) ───────────────────────────
 
 @router.get("/count")
@@ -357,6 +362,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
         chamado = session.get(Chamado, chamado_id)
         if not chamado:
             raise HTTPException(status_code=404)
+        _check_whatsapp_instance_access(request, chamado)
 
         msgs = session.exec(
             select(ChamadoInteracao)
@@ -367,6 +373,14 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
             .order_by(ChamadoInteracao.data_hora)
         ).all()
         _sync_group_history_name(session, chamado, msgs)
+
+        # Grupos sao conversas abertas: ao abrir/atualizar o historico,
+        # qualquer mensagem pendente deve ser considerada lida automaticamente.
+        if str(chamado.whatsapp_cliente or "").lower().endswith("@g.us"):
+            chamado.unread_admin = 0
+            chamado.unread_user = 0
+            session.add(chamado)
+            session.commit()
 
         # Deduplicação por whatsapp_message_id (evita mensagens duplicadas do webhook)
         seen_whatsapp_ids = set()
@@ -415,6 +429,11 @@ async def send_chat_message(
     anexo: UploadFile = File(None),
 ):
     user_name, user_role = _get_user(request)
+    with Session(engine) as access_session:
+        access_ticket = access_session.get(Chamado, chamado_id)
+        if not access_ticket:
+            raise HTTPException(status_code=404)
+        _check_whatsapp_instance_access(request, access_ticket)
     msg_text = mensagem.strip()
     if not msg_text and not (anexo and anexo.filename):
         raise HTTPException(status_code=400, detail="Mensagem vazia")
@@ -693,6 +712,7 @@ def get_chat_legacy(chamado_id: int, request: Request):
         chamado = session.get(Chamado, chamado_id)
         if not chamado:
             raise HTTPException(status_code=404)
+        _check_whatsapp_instance_access(request, chamado)
         if user_role == "admin":
             chamado.unread_admin = 0
         else:
@@ -746,6 +766,7 @@ async def post_chat(chamado_id: int, request: Request, background_tasks: Backgro
         chamado = session.get(Chamado, chamado_id)
         if not chamado:
             raise HTTPException(status_code=404)
+        _check_whatsapp_instance_access(request, chamado)
 
         msg = ChamadoInteracao(chamado_id=chamado_id, usuario=user_name, mensagem=msg_text)
         session.add(msg)
