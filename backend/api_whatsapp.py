@@ -207,6 +207,15 @@ def get_whatsapp_instances():
     return normalized, default_instance
 
 
+def resolve_configured_instance(instance: Optional[str] = None) -> Optional[str]:
+    """Usa a instância padrão para atendimentos antigos cujo aparelho foi removido."""
+    instances, default_instance = get_whatsapp_instances()
+    valid = {item["instanceName"] for item in instances}
+    if instance and instance in valid:
+        return instance
+    return default_instance or (instances[0]["instanceName"] if instances else None)
+
+
 def save_whatsapp_config(config: dict):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -340,6 +349,7 @@ def get_whatsapp_group_name(group_jid: str, instance_name: Optional[str] = None)
 
 
 def send_whatsapp_text(number: str, text: str, instance: Optional[str] = None) -> bool:
+    instance = resolve_configured_instance(instance)
     base_url, wa_token, instance = get_evolution_api_endpoints(instance)
     if not base_url:
         print("[WhatsApp API] URL da API não configurada.")
@@ -362,6 +372,7 @@ def send_whatsapp_text(number: str, text: str, instance: Optional[str] = None) -
 
 
 def send_whatsapp_text_for_interaction(interaction_id: int, number: str, text: str, instance: Optional[str] = None) -> bool:
+    instance = resolve_configured_instance(instance)
     """Envia a mensagem e salva o ID retornado pelo WhatsApp na interação local."""
     base_url, wa_token, resolved_instance = get_evolution_api_endpoints(instance)
     if not base_url:
@@ -420,9 +431,8 @@ def edit_whatsapp_message(number: str, message_id: str, text: str, instance: Opt
 
 
 def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance: Optional[str] = None, remote_jid: Optional[str] = None, from_me: bool = False, participant: Optional[str] = None) -> tuple[bool, str]:
+    instance = resolve_configured_instance(instance)
     base_url, wa_token, resolved_instance = get_evolution_api_endpoints(instance)
-    if base_url and base_url.startswith("http://evolution-api:8080"):
-        base_url = base_url.replace("http://evolution-api:8080", "http://127.0.0.1:8081", 1)
     if not base_url or not message_id:
         return False, "Evolution API nao configurada"
     headers = {"Content-Type": "application/json"}
@@ -482,20 +492,33 @@ def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None
                 targets.append(candidate)
         ok = False
         reaction_error = ""
+        is_group_target = str(chamado.whatsapp_cliente or "").lower().endswith("@g.us") or any(
+            str(target).lower().endswith("@g.us") for target in targets
+        )
+        participant_candidates = [interaction.whatsapp_participant]
+        if is_group_target and interaction.whatsapp_participant:
+            participant_text = str(interaction.whatsapp_participant).strip()
+            if "@" not in participant_text and participant_text.isdigit():
+                participant_candidates.append(f"{participant_text}@s.whatsapp.net")
+        if is_group_target:
+            participant_candidates.append(None)
         for target in targets:
             for from_me in (False, True):
-                sent, error = send_whatsapp_reaction(
-                    chamado.whatsapp_cliente,
-                    interaction.whatsapp_message_id,
-                    reaction,
-                    chamado.whatsapp_instance,
-                    target,
-                    from_me,
-                    interaction.whatsapp_participant,
-                )
-                reaction_error = error or reaction_error
-                if sent:
-                    ok = True
+                for participant in participant_candidates:
+                    sent, error = send_whatsapp_reaction(
+                        chamado.whatsapp_cliente,
+                        interaction.whatsapp_message_id,
+                        reaction,
+                        chamado.whatsapp_instance,
+                        target,
+                        from_me,
+                        participant,
+                    )
+                    reaction_error = error or reaction_error
+                    if sent:
+                        ok = True
+                        break
+                if ok:
                     break
             if ok:
                 break
