@@ -7,7 +7,7 @@ Protótipo Tauri que abre somente a tela `/central-atendimento` do sistema.
 - Node.js
 - Rust com `rustup`
 - WebView2 (já presente na maioria dos Windows 10/11)
-- Servidor do sistema disponível em `http://192.168.1.230:3001`
+- Servidor do sistema disponível em `http://localhost:3001`
 
 ## Executar em desenvolvimento
 

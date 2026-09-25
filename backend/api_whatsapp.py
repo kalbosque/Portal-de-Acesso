@@ -445,17 +445,24 @@ def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance
     if participant:
         key["participant"] = str(participant)
     payload = {"key": key, "reaction": reaction}
-    try:
-        response = requests.post(f"{base_url}/message/sendReaction/{resolved_instance}", json=payload, headers=headers, timeout=8)
-        if response.status_code in (200, 201):
-            return True, ""
-        error = f"Evolution API ({response.status_code}): {response.text[:300]}"
-        print(f"[WhatsApp API] Erro ao enviar reacao: {error}")
-        return False, error
-        print(f"[WhatsApp API] Erro ao enviar reação: {response.status_code} - {response.text[:300]}")
-    except Exception as exc:
-        print(f"[WhatsApp API] Erro ao enviar reação: {exc}")
-    return False, "Falha de comunicacao com a Evolution API"
+    last_error = ""
+    for attempt in range(2):
+        try:
+            response = requests.post(f"{base_url}/message/sendReaction/{resolved_instance}", json=payload, headers=headers, timeout=15)
+            if response.status_code in (200, 201):
+                return True, ""
+            last_error = f"Evolution API ({response.status_code}): {response.text[:300]}"
+            print(f"[WhatsApp API] Erro ao enviar reacao (tentativa {attempt+1}): {last_error}")
+        except requests.exceptions.Timeout:
+            last_error = "Timeout ao conectar com a Evolution API"
+            print(f"[WhatsApp API] Timeout ao enviar reação (tentativa {attempt+1})")
+        except Exception as exc:
+            last_error = f"Falha de comunicacao com a Evolution API: {exc}"
+            print(f"[WhatsApp API] Erro ao enviar reação (tentativa {attempt+1}): {exc}")
+        if attempt == 0:
+            import time
+            time.sleep(0.5)
+    return False, last_error or "Falha de comunicacao com a Evolution API"
 
 
 @router.post("/message/reaction")
@@ -495,13 +502,17 @@ def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None
         is_group_target = str(chamado.whatsapp_cliente or "").lower().endswith("@g.us") or any(
             str(target).lower().endswith("@g.us") for target in targets
         )
-        participant_candidates = [interaction.whatsapp_participant]
+        participant_candidates = []
         if is_group_target and interaction.whatsapp_participant:
             participant_text = str(interaction.whatsapp_participant).strip()
-            if "@" not in participant_text and participant_text.isdigit():
-                participant_candidates.append(f"{participant_text}@s.whatsapp.net")
-        if is_group_target:
-            participant_candidates.append(None)
+            # Ignorar JIDs @lid — o WhatsApp/Baileys nao consegue resolver esse
+            # formato e causa timeout indefinido na Evolution API.
+            if not participant_text.lower().endswith("@lid"):
+                participant_candidates.append(participant_text)
+                if "@" not in participant_text and participant_text.isdigit():
+                    participant_candidates.append(f"{participant_text}@s.whatsapp.net")
+        # Sem participant (funciona para grupos com formato @lid)
+        participant_candidates.append(None)
         for target in targets:
             for from_me in (False, True):
                 for participant in participant_candidates:
@@ -580,12 +591,33 @@ def send_whatsapp_media(number: str, media_base64: str, media_type: str, mime_ty
     return False
 
 
+def _is_probably_thumbnail(candidate: str) -> bool:
+    if not isinstance(candidate, str):
+        return False
+    if candidate.startswith("http"):
+        return "/thumbnail" in candidate.lower() or "/thumb" in candidate.lower() or "?size=" in candidate.lower()
+    if candidate.startswith("data:"):
+        return len(candidate) < 20000
+    return len(candidate) < 20000
+
+
 def _find_base64(value):
     if isinstance(value, dict):
-        for key in ("base64", "data", "fileBase64"):
+        priority_keys = ("base64", "data", "fileBase64", "imageData", "binaryData", "url", "directPath", "mediaUrl", "imageUrl")
+        fallback_keys = ("preview", "thumbnail", "jpegThumbnail")
+
+        for key in priority_keys:
             candidate = value.get(key)
-            if isinstance(candidate, str) and (candidate.startswith("data:") or len(candidate) > 200):
-                return candidate
+            if isinstance(candidate, str) and (candidate.startswith("data:") or candidate.startswith("http") or len(candidate) >= 32):
+                if not _is_probably_thumbnail(candidate):
+                    return candidate
+
+        for key in fallback_keys:
+            candidate = value.get(key)
+            if isinstance(candidate, str) and (candidate.startswith("data:") or candidate.startswith("http") or len(candidate) >= 32):
+                if not _is_probably_thumbnail(candidate):
+                    return candidate
+
         for child in value.values():
             found = _find_base64(child)
             if found:
@@ -598,25 +630,65 @@ def _find_base64(value):
     return None
 
 
+def _download_media_from_url(url: str):
+    try:
+        response = requests.get(url, timeout=20)
+        if response.ok:
+            return response.content
+    except Exception as exc:
+        print(f"[Webhook] Falha ao baixar mídia por URL: {exc}")
+    return None
+
+
 def _save_incoming_media(message_obj: dict, message_key: dict, instance: str, media_kind: str, caption: str = ""):
     """Salva mídia recebida e retorna um marcador renderizável no frontend."""
     media_node = message_obj.get(f"{media_kind}Message", {}) or {}
     if not media_node and media_kind == "gif":
         media_node = message_obj.get("videoMessage", {}) or message_obj.get("imageMessage", {}) or {}
     raw_media = _find_base64(media_node) or _find_base64(message_obj)
-
+    direct_url = None
+    if raw_media and raw_media.startswith(("http://", "https://")):
+        direct_url = raw_media
+        raw_media = None
+    if not raw_media and isinstance(media_node, dict):
+        for key in ("url", "directPath", "mediaUrl", "imageUrl"):
+            candidate = media_node.get(key)
+            if isinstance(candidate, str) and candidate.startswith(("http://", "https://")):
+                direct_url = candidate
+                break
     if not raw_media and message_key.get("id"):
         base_url, wa_token, resolved = get_evolution_api_endpoints(instance)
         if base_url:
             try:
+                payload = {
+                    "message": {
+                        "key": message_key,
+                        "message": message_obj
+                    }
+                }
                 response = requests.post(
-                    f"{base_url}/chat/getBase64FromMediaMessage/{resolved}",
+                    f"{base_url}/chat/downloadMediaMessage/{resolved}",
                     headers={"apikey": wa_token, "Content-Type": "application/json"},
-                    json={"message": {"key": {"id": message_key["id"]}}},
-                    timeout=15,
+                    json=payload,
+                    timeout=20,
                 )
                 if response.ok:
-                    raw_media = _find_base64(response.json())
+                    try:
+                        json_payload = response.json()
+                        raw_media = _find_base64(json_payload)
+                    except Exception:
+                        content_type = response.headers.get("content-type", "image/jpeg")
+                        if response.content:
+                            raw_media = f"data:{content_type};base64,{base64.b64encode(response.content).decode('utf-8')}"
+                if not raw_media:
+                    response = requests.post(
+                        f"{base_url}/chat/getBase64FromMediaMessage/{resolved}",
+                        headers={"apikey": wa_token, "Content-Type": "application/json"},
+                        json=payload,
+                        timeout=15,
+                    )
+                    if response.ok:
+                        raw_media = _find_base64(response.json())
             except Exception as exc:
                 print(f"[Webhook] Falha ao obter mídia {media_kind}: {exc}")
 
@@ -632,7 +704,7 @@ def _save_incoming_media(message_obj: dict, message_key: dict, instance: str, me
             extension = mime.split("/")[-1].replace("jpeg", "jpg")
         raw_media = re.sub(r"\s+", "", raw_media)
         binary = base64.b64decode(raw_media)
-        media_dir = os.path.join("public_html", "uploads", "whatsapp_media")
+        media_dir = os.path.join(_BASE_DIR, "public_html", "uploads", "whatsapp_media")
         os.makedirs(media_dir, exist_ok=True)
         safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(message_key.get("id") or int(time.time())))
         filename = f"{safe_id}.{extension}"
@@ -1627,6 +1699,9 @@ def get_whatsapp_contacts(request: Request, instance: Optional[str] = None):
 
 @router.post("/contacts/start")
 def start_whatsapp_contact(payload: dict = Body(...), request: Request = None, background_tasks: BackgroundTasks = None):
+    payload = payload or {}
+    if request is None:
+        raise HTTPException(status_code=401, detail="Sessão inválida para iniciar conversa")
     _require_atendimento_access(request)
     user_name, _ = _get_user(request)
     number = str(payload.get("number") or "").strip()
@@ -1635,24 +1710,58 @@ def start_whatsapp_contact(payload: dict = Body(...), request: Request = None, b
     instance = str(payload.get("instance") or get_default_whatsapp_instance(get_whatsapp_config()) or "").strip()
     if not number:
         raise HTTPException(status_code=400, detail="Número do contato é obrigatório")
-    with Session(engine) as session:
-        chamado = session.exec(select(Chamado).where(
-            Chamado.whatsapp_cliente == number,
-            Chamado.whatsapp_instance == instance,
-            Chamado.status != "Resolvido",
-        ).order_by(desc(Chamado.data_abertura))).first()
-        if not chamado:
-            chamado = Chamado(usuario=contact_name, titulo="Atendimento WhatsApp", categoria="WhatsApp", descricao=message_text or "Conversa iniciada pelo atendente", origem="WhatsApp", whatsapp_cliente=number, whatsapp_instance=instance, status="Aberto", prioridade="Media", visivel_suporte=True, assigned_user=user_name)
-            session.add(chamado)
-            session.commit()
-            session.refresh(chamado)
-        if message_text:
-            interaction = ChamadoInteracao(chamado_id=chamado.id, usuario=user_name, mensagem=message_text, whatsapp_status="sent")
-            session.add(interaction)
-            session.commit()
-            if background_tasks:
-                background_tasks.add_task(send_whatsapp_text, number, f"*{user_name}*:\n{message_text}", instance)
-    return {"success": True, "ticket_id": chamado.id}
+
+    ticket_id = None
+    warning = ""
+    try:
+        with Session(engine) as session:
+            chamado = session.exec(select(Chamado).where(
+                Chamado.whatsapp_cliente == number,
+                Chamado.whatsapp_instance == instance,
+                Chamado.status != "Resolvido",
+            ).order_by(desc(Chamado.data_abertura))).first()
+            if not chamado:
+                chamado = Chamado(
+                    usuario=contact_name,
+                    titulo="Atendimento WhatsApp",
+                    categoria="WhatsApp",
+                    descricao=message_text or "Conversa iniciada pelo atendente",
+                    origem="WhatsApp",
+                    whatsapp_cliente=number,
+                    whatsapp_instance=instance,
+                    status="Aberto",
+                    prioridade="Media",
+                    visivel_suporte=True,
+                    assigned_user=user_name,
+                )
+                session.add(chamado)
+                session.commit()
+                session.refresh(chamado)
+
+            ticket_id = chamado.id
+
+            if message_text:
+                interaction = ChamadoInteracao(chamado_id=chamado.id, usuario=user_name, mensagem=message_text, whatsapp_status="sent")
+                session.add(interaction)
+                session.commit()
+                try:
+                    if background_tasks:
+                        background_tasks.add_task(send_whatsapp_text, number, f"*{user_name}*:\n{message_text}", instance)
+                    else:
+                        send_whatsapp_text(number, f"*{user_name}*:\n{message_text}", instance)
+                except Exception as send_exc:
+                    print(f"[WHATSAPP_CONTACT_START] Falha ao disparar envio WhatsApp: {send_exc}")
+                    warning = f"Conversa iniciada, mas o envio do WhatsApp não foi confirmado: {send_exc}"
+
+        response = {"success": True, "ticket_id": ticket_id}
+        if warning:
+            response["warning"] = warning
+        return response
+    except Exception as exc:
+        print(f"[WHATSAPP_CONTACT_START] Falha ao iniciar conversa: {exc}")
+        if ticket_id:
+            return {"success": True, "ticket_id": ticket_id, "warning": f"Conversa iniciada, mas houve um erro de finalização: {exc}"}
+        raise HTTPException(status_code=500, detail=f"Não foi possível iniciar a conversa: {exc}") from exc
 
 
 @router.post("/contacts/local")
@@ -2089,8 +2198,14 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
             media_kind = "gif" if message_obj["videoMessage"].get("gifPlayback") else "video"
             msg_text = _save_incoming_media(message_obj, key, instance_from_payload, media_kind, caption)
         elif "documentMessage" in message_obj:
-            fname = message_obj["documentMessage"].get("fileName", "")
-            msg_text = f"[Documento]{': ' + fname if fname else ''}"
+            doc = message_obj["documentMessage"] or {}
+            mime = str(doc.get("mimetype") or "").lower()
+            fname = doc.get("fileName", "")
+            if mime.startswith("image/"):
+                caption = doc.get("caption", "") or fname
+                msg_text = _save_incoming_media(message_obj, key, instance_from_payload, "image", caption)
+            else:
+                msg_text = f"[Documento]{': ' + fname if fname else ''}"
         elif "audioMessage" in message_obj:
             msg_text = _save_incoming_media(message_obj, key, instance_from_payload, "audio")
         elif "stickerMessage" in message_obj:

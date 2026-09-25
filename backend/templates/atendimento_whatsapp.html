@@ -86,9 +86,16 @@
         z-index: 0;
         pointer-events: none;
     }
-    .media-image-trigger { display: block; max-width: 100%; cursor: zoom-in; }
-    .media-image-trigger img { transition: transform .18s ease, filter .18s ease; }
-    .media-image-trigger:hover img { transform: scale(1.02); filter: brightness(1.08); }
+    .media-image-trigger { display: block; max-width: min(100%, 350px); cursor: zoom-in; }
+    .media-image-trigger img {
+        display: block;
+        width: auto;
+        max-width: min(100%, 350px);
+        max-height: 350px;
+        height: auto;
+        transition: transform .18s ease, filter .18s ease;
+    }
+    .media-image-trigger:hover img { transform: scale(1.01); filter: brightness(1.08); }
     .col-sidebar > .p-4 { position: relative; }
     .queue-menu { display: none; position: absolute; top: 10.6rem; left: 1rem; right: 1rem; z-index: 120; max-height: min(22rem, calc(100vh - 11rem)); overflow-y: auto; }
     .queue-inline-logo { display: none !important; }
@@ -104,7 +111,13 @@
     body.desktop-focus .desktop-app-menu + .p-4 { padding-top: .85rem; }
     #image-preview-modal { display: none; }
     #image-preview-modal.is-open { display: flex; }
-    #image-preview-content { max-width: min(92vw, 1200px); max-height: 86vh; object-fit: contain; }
+    #image-preview-content {
+        width: auto;
+        max-width: min(95vw, 1400px);
+        max-height: 90vh;
+        height: auto;
+        object-fit: contain;
+    }
 
     .col-actions {
         display: flex;
@@ -468,6 +481,7 @@
 
             <div id="queue-menu" class="queue-menu rounded-xl border border-white/10 bg-slate-900 p-1 shadow-xl">
                 {% if can_edit_identity %}<button type="button" onclick="window.location.href='/central-atendimento/configuracoes?desktop=1'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/10">Configurações</button>{% endif %}
+                <button type="button" onclick="window.location.href='/central-atendimento/contatos?desktop=1'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/10">Lista de contatos</button>
                 <button type="button" onclick="selectQueueMenu('aguardando')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Fila de atendimento</button>
                 <button type="button" onclick="selectQueueMenu('atendendo')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Meus atendimentos</button>
                 {% if config.get('WHATSAPP_SHOW_GROUPS', false) %}<button type="button" onclick="selectQueueMenu('grupos')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Grupos</button>{% endif %}
@@ -745,6 +759,17 @@
     <img id="image-preview-content" src="" alt="Imagem ampliada" class="rounded-xl shadow-2xl">
 </div>
 
+<!-- Banner de permissão de notificação -->
+<div id="notif-permission-banner" class="hidden fixed top-0 left-0 right-0 z-[200] flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 shadow-lg">
+    <div class="flex items-center gap-2 text-sm font-bold text-amber-950">
+        🔔 Ative as notificações para não perder mensagens dos clientes!
+    </div>
+    <button id="btn-allow-notif" type="button" class="shrink-0 rounded-lg bg-amber-950 px-4 py-1.5 text-xs font-black text-amber-100 hover:bg-amber-900 transition-colors">
+        ATIVAR NOTIFICAÇÕES
+    </button>
+    <button type="button" onclick="this.closest('#notif-permission-banner').classList.add('hidden')" class="shrink-0 text-amber-900 hover:text-amber-950 text-lg leading-none">×</button>
+</div>
+
 <script>
     // O aplicativo Tauri abre esta mesma tela com ?desktop=1. Nesse modo,
     // deixamos a interface focada na fila e na conversa; detalhes secundários
@@ -764,7 +789,8 @@
             const target = new URL(link.href, window.location.href);
             const allowed = target.origin === window.location.origin && (
                 target.pathname === '/central-atendimento' ||
-                target.pathname.startsWith('/api/whatsapp/')
+                target.pathname.startsWith('/api/whatsapp/') ||
+                target.pathname.startsWith('/uploads/')
             );
             if (!allowed) {
                 event.preventDefault();
@@ -816,6 +842,28 @@
     let typingNotifyTimer = null;
     let toastTimer = null;
     let unreadTitleCount = 0;
+    let titleBlinkInterval = null;
+    const _originalTitle = 'Central de Atendimento';
+
+    function stopTitleBlink() {
+        if (titleBlinkInterval) {
+            clearInterval(titleBlinkInterval);
+            titleBlinkInterval = null;
+        }
+        unreadTitleCount = 0;
+        document.title = _originalTitle;
+    }
+
+    function startTitleBlink(label) {
+        unreadTitleCount += 1;
+        if (titleBlinkInterval) return; // já piscando
+        let on = true;
+        document.title = `⚠️ (${unreadTitleCount}) ${label}`;
+        titleBlinkInterval = setInterval(() => {
+            on = !on;
+            document.title = on ? `⚠️ (${unreadTitleCount}) ${label}` : _originalTitle;
+        }, 900);
+    }
     let notificationSnapshot = new Map();
     let notificationSnapshotReady = false;
     let audioContext = null;
@@ -1015,11 +1063,31 @@
             else if (media && media.__wa_media__) mediaTitle = 'Nova mídia';
         } catch (_) {}
         mostrarToast(`${name}: ${preview}`, mediaTitle);
-        if (document.hidden) {
-            unreadTitleCount += 1;
-            document.title = `(${unreadTitleCount}) Nova mensagem · Central`;
+
+        // Título piscante sempre (mesmo com o app em foco mas sem olhar a fila)
+        startTitleBlink(mediaTitle);
+
+        // Notificação nativa do Windows via Tauri (funciona mesmo com app minimizado)
+        const isTauriApp = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+        if (isTauriApp) {
+            try {
+                window.__TAURI_INTERNALS__
+                    ? window.__TAURI_INTERNALS__.invoke('trigger_message_alert', { sender: name })
+                    : window.__TAURI__.core.invoke('trigger_message_alert', { sender: name });
+            } catch (_) {
+                // fallback: notificação do browser
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(mediaTitle, { body: `${name}: ${preview}` });
+                }
+            }
+        } else {
+            // No browser web, usa Notification API padrão
             if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(mediaTitle, { body: `${name}: ${preview}` });
+            } else if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission().then(p => {
+                    if (p === 'granted') new Notification(mediaTitle, { body: `${name}: ${preview}` });
+                });
             }
         }
     }
@@ -1258,7 +1326,13 @@
         let filtered = [];
         const isGroupChat = _isGroupChat;
         if (currentQueue === 'grupos') {
-            filtered = chatsData.filter(c => isGroupChat(c));
+            const gruposMap = new Map();
+            chatsData.filter(c => isGroupChat(c)).forEach(c => {
+                if (!gruposMap.has(c.whatsapp_cliente)) {
+                    gruposMap.set(c.whatsapp_cliente, c);
+                }
+            });
+            filtered = Array.from(gruposMap.values());
         } else if (currentQueue === 'aguardando') {
             filtered = chatsData.filter(c => !isGroupChat(c) && c.status === 'Aberto' && !c.assigned_user);
         } else if (currentQueue === 'resolvidos') {
@@ -1630,18 +1704,23 @@
 
         let formattedMsg = messageText.replace(/\n/g, '<br>');
         if (media) {
+            let mediaUrl = media.url;
+            if (mediaUrl && mediaUrl.startsWith('/')) {
+                const baseUrl = "{{ config.URL_ATENDIMENTO | default('http://192.168.1.230:3001/central-atendimento') }}".replace("/central-atendimento", "");
+                media.url = baseUrl + mediaUrl;
+            }
             const caption = media.caption ? `<div class="mt-2 text-sm">${media.caption}</div>` : '';
             const direction = m.is_me ? 'enviado' : 'recebido';
             const directionF = m.is_me ? 'enviada' : 'recebida';
             if (media.type === 'image') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar imagem"><img src="${escapeHtml(media.url)}" class="max-h-64 max-w-full rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar imagem"><img src="${escapeHtml(media.url)}" class="rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
             } else if (media.type === 'gif') {
                 const isVideoGif = String(media.mime || '').startsWith('video/');
                 formattedMsg = isVideoGif
-                    ? `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><video autoplay loop muted playsinline controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`
-                    : `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar GIF"><img src="${escapeHtml(media.url)}" class="max-h-64 max-w-full rounded-xl object-contain" alt="GIF ${direction}">${caption}</a>`;
+                    ? `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><video autoplay loop muted playsinline controls preload="metadata" src="${media.url}" class="max-w-full rounded-xl"></video>${caption}`
+                    : `<div class="mb-2 text-xs font-black uppercase tracking-wider text-slate-400">GIF ${direction}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar GIF"><img src="${escapeHtml(media.url)}" class="rounded-xl object-contain" alt="GIF ${direction}">${caption}</a>`;
             } else if (media.type === 'sticker') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🙂 Sticker ${direction}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar sticker"><img src="${escapeHtml(media.url)}" class="max-h-48 max-w-48 object-contain" alt="Sticker ${direction}">${caption}</a>`;
+                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🙂 Sticker ${direction}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar sticker"><img src="${escapeHtml(media.url)}" class="max-w-[220px] rounded-xl object-contain" alt="Sticker ${direction}">${caption}</a>`;
             } else if (media.type === 'video') {
                 formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">🎥 Vídeo ${direction}</div><video controls preload="metadata" src="${media.url}" class="max-h-64 max-w-full rounded-xl"></video>${caption}`;
             } else if (media.type === 'audio') {
@@ -1801,35 +1880,43 @@
             button.type = 'button';
             button.className = 'rounded-full p-1 text-lg leading-none transition hover:scale-125 hover:bg-white/10';
             button.textContent = emoji;
-            button.onclick = async () => {
+            button.onclick = async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
                 const messageData = window.__messageCache?.[messageId];
                 if (!messageData?.whatsapp_message_id) {
                     picker.remove();
-                    mostrarToast('Esta mensagem ainda não pode receber reação.');
+                    mostrarToast('Esta mensagem não pode receber reação no WhatsApp.');
                     return;
                 }
-                const response = await fetch('/api/whatsapp/message/reaction', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ticket_id: activeTicketId, message_id: messageId, reaction: emoji})
-                });
-                if (!response.ok) {
-                    let reactionError = '';
-                    try { reactionError = (await response.json()).detail || ''; } catch (_) {}
-                    picker.remove();
-                    if (reactionError) {
-                        mostrarToast(reactionError);
+                try {
+                    const response = await fetch('/api/whatsapp/message/reaction', {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ticket_id: activeTicketId, message_id: messageId, reaction: emoji})
+                    });
+                    if (!response.ok) {
+                        let reactionError = '';
+                        try { reactionError = (await response.json()).detail || ''; } catch (_) {}
+                        picker.remove();
+                        if (reactionError) {
+                            mostrarToast(reactionError);
+                            return;
+                        }
+                        mostrarToast('Não foi possível enviar a reação ao WhatsApp.');
                         return;
                     }
-                    mostrarToast('Não foi possível enviar a reação ao WhatsApp.');
-                    return;
+                    row.querySelector('.message-reaction')?.remove();
+                    const badge = document.createElement('span');
+                    badge.className = 'message-reaction absolute -bottom-2 left-3 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm shadow';
+                    badge.textContent = emoji;
+                    row.querySelector('.bubble')?.appendChild(badge);
+                    picker.remove();
+                    mostrarToast(`Reação ${emoji} adicionada`);
+                } catch (error) {
+                    console.error('Erro ao reagir à mensagem:', error);
+                    picker.remove();
+                    mostrarToast('Não foi possível enviar a reação. Verifique a conexão com o WhatsApp.');
                 }
-                row.querySelector('.message-reaction')?.remove();
-                const badge = document.createElement('span');
-                badge.className = 'message-reaction absolute -bottom-2 left-3 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm shadow';
-                badge.textContent = emoji;
-                row.querySelector('.bubble')?.appendChild(badge);
-                picker.remove();
-                mostrarToast(`Reação ${emoji} adicionada`);
             };
             picker.appendChild(button);
         });
@@ -2569,17 +2656,27 @@
                     if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
 
                     if (sameTicket(tId, activeTicketId)) {
+                        const activeMessageId = data.msg_id || data.message_id || data.id;
+                        const existingRow = activeMessageId ? document.querySelector(`[data-message-id="${CSS.escape(String(activeMessageId))}"]`) : null;
+                        if (!existingRow) {
                             appendMessageToTimeline({
-                            id: data.msg_id,
-                            is_me: data.usuario === currentUser,
-                            usuario: data.usuario || 'Cliente',
-                            mensagem: data.preview || data.mensagem || '...',
-                            data_hora: new Date().toLocaleString('pt-BR', {
-                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit'
-                            })
-                        }, true);
-                        
+                                id: activeMessageId,
+                                is_me: data.usuario === currentUser,
+                                usuario: data.usuario || 'Cliente',
+                                mensagem: data.preview || data.mensagem || '...',
+                                data_hora: new Date().toLocaleString('pt-BR', {
+                                    day: '2-digit', month: '2-digit', year: 'numeric',
+                                    hour: '2-digit', minute: '2-digit'
+                                })
+                            }, true);
+                        }
+                        // Recarrega o histórico completo para garantir que a conversa aberta
+                        // mostre mensagens recebidas mesmo quando o payload do WebSocket
+                        // chega incompleto ou antes de a lista de mensagens estar sincronizada.
+                        setTimeout(() => {
+                            if (sameTicket(activeTicketId, tId)) loadMessages(tId);
+                        }, 180);
+
                         if (data.usuario !== currentUser) {
                             markAsRead(tId);
                         }
@@ -2636,11 +2733,13 @@
     document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
-                unreadTitleCount = 0;
-                document.title = 'Central de Atendimento';
+                stopTitleBlink();
                 loadChats();
             }
         });
+        // Para o piscar ao clicar na janela
+        document.addEventListener('click', stopTitleBlink, { capture: true, passive: true });
+        window.addEventListener('focus', stopTitleBlink);
         document.addEventListener('click', () => {
             try {
                 audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
@@ -2648,6 +2747,34 @@
             } catch (_) {}
             if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
         }, {once: true});
+
+        // Solicita permissão de notificação assim que a página carrega
+        function pedirPermissaoNotificacao() {
+            if (!('Notification' in window)) return;
+            if (Notification.permission === 'granted') {
+                document.getElementById('notif-permission-banner')?.remove();
+                return;
+            }
+            if (Notification.permission === 'default') {
+                // Mostra o banner visível
+                const banner = document.getElementById('notif-permission-banner');
+                if (banner) banner.classList.remove('hidden');
+            }
+        }
+        // Chama logo ao abrir
+        setTimeout(pedirPermissaoNotificacao, 1500);
+
+        document.getElementById('btn-allow-notif')?.addEventListener('click', () => {
+            Notification.requestPermission().then(result => {
+                const banner = document.getElementById('notif-permission-banner');
+                if (result === 'granted') {
+                    banner?.remove();
+                    mostrarToast('✅ Notificações ativadas com sucesso!');
+                } else {
+                    if (banner) banner.innerHTML = `<span class="text-rose-300 text-xs font-bold">⚠️ Permissão negada. Ative nas configurações do navegador/Windows.</span>`;
+                }
+            });
+        });
         loadChats().then(() => {
             const ticketFromUrl = Number(new URLSearchParams(window.location.search).get('ticket'));
             if (ticketFromUrl) openChat(ticketFromUrl);

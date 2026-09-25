@@ -13,8 +13,15 @@
     <div class="loading">Abrindo a Central de Atendimento...</div>
     <script>
       const server = 'http://192.168.1.230:3001';
-      localStorage.setItem('central_atendimento_tauri', '1');
-      const target = `${server}/central-atendimento?desktop=1`;
+      const isTauriRuntime = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+
+      if (isTauriRuntime) {
+        try {
+          localStorage.setItem('central_atendimento_tauri', '1');
+        } catch (_) {}
+      }
+
+      const target = `${server}/atendimento/login?desktop=1`;
       window.location.replace(target);
     </script>
   </body>

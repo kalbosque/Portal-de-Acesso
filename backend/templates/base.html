@@ -658,7 +658,45 @@
                         break;
                     case 'new_message':
                         playNotificationSound();
-                        showToast(`Nova mensagem de ${data.usuario}`, '#6366f1', '💬');
+                        const mensagemTexto = `Nova mensagem de ${data.usuario}`;
+                        showToast(mensagemTexto, '#6366f1', '💬');
+
+                        if (window.parent !== window) {
+                            try { window.parent.postMessage({ type: 'central_message_alert', payload: { sender: data.usuario || 'Cliente', title: 'Nova mensagem', message: mensagemTexto } }, '*'); } catch (_) {}
+                        }
+
+                        const isDesktopApp = new URLSearchParams(window.location.search).get('desktop') === '1'
+                            || localStorage.getItem('central_atendimento_tauri') === '1';
+                        if (isDesktopApp) {
+                            const key = `new_message|${data.usuario}|${data.chamado_id || data.ticket_id}`;
+                            if (window.__lastIncomingAlertKey !== key) {
+                                window.__lastIncomingAlertKey = key;
+                                setTimeout(() => { window.__lastIncomingAlertKey = ''; }, 4000);
+
+                                try {
+                                    let flash = document.getElementById('desktop-message-flash');
+                                    if (!flash) {
+                                        flash = document.createElement('div');
+                                        flash.id = 'desktop-message-flash';
+                                        flash.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646;background:rgba(250,204,21,0.35);opacity:0;transition:opacity 0.2s ease;';
+                                        document.body.appendChild(flash);
+                                    }
+                                    flash.style.opacity = '1';
+                                    setTimeout(() => { flash.style.opacity = '0'; }, 500);
+                                    setTimeout(() => { flash.style.opacity = '0'; }, 1000);
+                                } catch (_) {}
+
+                                try {
+                                    document.title = `⚠️ Nova mensagem · ${data.usuario || 'Central'}`;
+                                    setTimeout(() => {
+                                        if (document.title.startsWith('⚠️ Nova mensagem')) {
+                                            document.title = 'Central de Atendimento';
+                                        }
+                                    }, 5000);
+                                } catch (_) {}
+                            }
+                        }
+
                         // Atualiza badge de não-lidas
                         const badge = document.querySelector(`.unread-badge-${data.chamado_id}`);
                         if (badge) { badge.style.display=''; badge.textContent = (parseInt(badge.textContent||0)+1); }

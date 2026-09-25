@@ -1194,7 +1194,7 @@ async def save_configuracoes(
         logo = app_logo_url
         guia_url = guia_suporte_url
         
-        upload_dir = "public_html/uploads"
+        upload_dir = os.path.join(BASE_DIR, "public_html", "uploads")
         os.makedirs(upload_dir, exist_ok=True)
 
         # Remove somente os nomes de logo criados por este sistema.
@@ -1690,13 +1690,18 @@ async def view_central_atendimento_dashboard(request: Request):
 
 @app.get("/central-atendimento/contatos", response_class=HTMLResponse)
 async def view_whatsapp_contacts(request: Request):
+    desktop_mode = request.query_params.get("desktop") == "1" or request.cookies.get("central_atendimento_tauri") == "1"
+    if not desktop_mode and "desktop=1" in (request.headers.get("referer") or ""):
+        return RedirectResponse(url="/central-atendimento/contatos?desktop=1", status_code=307)
+
     user_id = request.cookies.get("user_id")
     user_role = request.cookies.get("user_role")
     if not user_id:
         return RedirectResponse(url="/login")
     if not _can_access_atendimento(request):
         return RedirectResponse(url="/central-atendimento")
-    return templates.TemplateResponse(
+
+    response = templates.TemplateResponse(
         request=request,
         name="whatsapp_contacts.html",
         context={
@@ -1705,8 +1710,12 @@ async def view_whatsapp_contacts(request: Request):
             "user_role": user_role,
             "authenticated": True,
             "user_name": request.cookies.get("user_name", ""),
+            "desktop_mode": desktop_mode,
         },
     )
+    if request.query_params.get("desktop") == "1":
+        response.set_cookie("central_atendimento_tauri", "1", httponly=False, samesite="lax")
+    return response
 
 @app.get("/central-atendimento/configuracoes", response_class=HTMLResponse)
 async def view_whatsapp_config(request: Request):

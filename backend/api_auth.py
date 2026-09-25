@@ -55,6 +55,7 @@ async def login(
     login_id: str = Form(...),
     password: str = Form(...),
     intent: str = Form("suporte"),
+    desktop: str = Form("0"),
 ):
     login_id = login_id.strip()
     if not login_id or not password:
@@ -97,10 +98,16 @@ async def login(
             except Exception:
                 user_perms = []
 
+            desktop_mode = desktop == "1"
             if intent == "atendimento":
                 if user.role != "admin" and "Atendimento" not in user_perms and "Suporte" not in user_perms:
                     return JSONResponse({"success": False, "detail": "Este usuário não possui permissão para Atendimento."}, status_code=403)
-                redirect = "/central-atendimento/dashboard" if user.role in ("admin", "recepcao", "recepção", "recepcionista") else "/central-atendimento"
+                if desktop_mode:
+                    redirect = "/central-atendimento?desktop=1"
+                elif user.role in ("admin", "recepcao", "recepção", "recepcionista"):
+                    redirect = "/central-atendimento/dashboard"
+                else:
+                    redirect = "/central-atendimento"
             elif intent == "suporte":
                 redirect = "/chamados"
             elif user.role in ("admin", "gestor") and intent == "gestao":
@@ -111,6 +118,8 @@ async def login(
             response = JSONResponse({"success": True, "redirect": redirect})
             session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(), "user_id": user.id})
             session.commit()
+            if desktop_mode:
+                response.set_cookie("central_atendimento_tauri", "1", path="/", httponly=False, samesite="Lax")
             _set_session_cookies(response, user)
             return response
     except Exception as exc:

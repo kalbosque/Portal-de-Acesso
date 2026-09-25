@@ -1,31 +1,23 @@
-FROM php:8.2-apache-bookworm
+FROM python:3.11-slim
 
-# Install dependencies
+WORKDIR /app
+
+# Instalar dependências do sistema necessárias para PostgreSQL e outras libs
 RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
+    gcc \
     libpq-dev \
-    postgresql-client \
-    libsnmp-dev \
-    iputils-ping \
-    fping \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install gd pdo pdo_pgsql pgsql snmp calendar
+    && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache mod_rewrite and set ServerName
-RUN a2enmod rewrite \
-    && echo "ServerName localhost" >> /etc/apache2/apache2.conf
+# Copiar e instalar dependências do Python
+COPY backend/requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar os arquivos da aplicação (pasta public_html vira o /var/www/html)
-COPY public_html/ /var/www/html/
+# Copiar todo o código do backend e os arquivos estáticos (HTML/CSS)
+COPY backend/ /app/backend/
+COPY public_html/ /app/public_html/
 
-# Copiar os arquivos JSON de dados
-COPY status_maquinas.json status_usuarios.json status_usuarios_anterior.json status_usuarios_historico.json /var/www/
+# Expor a porta que a API utiliza
+EXPOSE 8000
 
-# Ajustar permissões para que o Apache consiga acessar e gravar os arquivos
-RUN chown -R www-data:www-data /var/www/html /var/www/*.json && \
-    chmod 664 /var/www/*.json
-
-# Expor a porta 80 (padrão do Apache) para o Render
-EXPOSE 80
+# Comando para iniciar o servidor web
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

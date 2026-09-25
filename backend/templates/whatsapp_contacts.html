@@ -94,7 +94,50 @@ function closeNewContact() { editingContactId = null; const modal = document.get
 async function saveNewContact(event) { event.preventDefault(); const id = editingContactId; const url = id ? `/api/whatsapp/contacts/local/${id}` : '/api/whatsapp/contacts/local'; const res = await fetch(url, {method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:document.getElementById('new-name').value,number:document.getElementById('new-number').value,company:document.getElementById('new-company').value,note:document.getElementById('new-note').value})}); if (!res.ok) { alert('Não foi possível salvar o contato.'); return; } closeNewContact(); await syncContacts(); }
 function openStartModal(contact) { document.getElementById('modal-contact-name').textContent = `Conversar com ${contact.name}`; document.getElementById('modal-contact-number').value = contact.number; document.getElementById('modal-contact-instance').value = contact.instance || ''; document.getElementById('modal-message').value = ''; document.getElementById('start-modal').classList.remove('hidden'); document.getElementById('start-modal').classList.add('flex'); document.getElementById('modal-message').focus(); }
 function closeStartModal() { document.getElementById('start-modal').classList.add('hidden'); document.getElementById('start-modal').classList.remove('flex'); }
-async function startConversation() { const res = await fetch('/api/whatsapp/contacts/start', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({number:document.getElementById('modal-contact-number').value,name:document.getElementById('modal-contact-name').textContent.replace('Conversar com ',''),instance:document.getElementById('modal-contact-instance').value,message:document.getElementById('modal-message').value})}); if (!res.ok) { alert('Não foi possível iniciar a conversa.'); return; } const data = await res.json(); window.location.href = `/central-atendimento?ticket=${data.ticket_id}`; }
+async function startConversation() {
+    const number = document.getElementById('modal-contact-number').value;
+    const name = document.getElementById('modal-contact-name').textContent.replace('Conversar com ', '');
+    const instance = document.getElementById('modal-contact-instance').value;
+    const message = document.getElementById('modal-message').value;
+    try {
+        const res = await fetch('/api/whatsapp/contacts/start', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ number, name, instance, message })
+        });
+
+        let payload = {};
+        const text = await res.text();
+        if (text) {
+            try {
+                payload = JSON.parse(text);
+            } catch (_) {
+                payload = { detail: text };
+            }
+        }
+
+        const ticketId = payload?.ticket_id || payload?.id;
+        const hasSuccessfulTicket = Boolean(ticketId) || payload?.success === true;
+
+        if (!res.ok && !hasSuccessfulTicket) {
+            const detail = payload?.detail || payload?.message || 'Erro desconhecido';
+            console.error('startConversation failed:', detail, { status: res.status, responseText: text });
+            alert(`Não foi possível iniciar a conversa.\n\n${detail}`);
+            return;
+        }
+
+        if (hasSuccessfulTicket) {
+            window.location.href = `/central-atendimento?ticket=${ticketId || payload?.ticket_id || payload?.id || ''}`;
+            return;
+        }
+
+        window.location.href = `/central-atendimento?ticket=${ticketId || ''}`;
+    } catch (error) {
+        console.error('startConversation error:', error);
+        alert('Não foi possível iniciar a conversa. Verifique a conexão com o servidor e tente novamente.');
+    }
+}
 document.addEventListener('DOMContentLoaded', async () => { await loadContactInstances(); await syncContacts(); });
 </script>
 {% endblock %}
