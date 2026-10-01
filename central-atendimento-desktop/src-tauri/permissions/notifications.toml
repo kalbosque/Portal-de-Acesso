@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-trigger-message-alert"
+description = "Permite que a Central exiba alertas nativos para novas mensagens."
+commands.allow = ["trigger_message_alert"]

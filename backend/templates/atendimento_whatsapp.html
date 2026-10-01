@@ -566,6 +566,9 @@
         <div id="chat-timeline" class="flex-grow custom-scroll p-6 flex flex-col gap-4 bg-slate-950/10">
             <!-- Balões carregados dinamicamente -->
         </div>
+        <button id="scroll-latest-button" type="button" onclick="scrollToLatestMessage()" class="hidden absolute bottom-24 right-5 z-30 h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-slate-800/95 text-xl text-slate-200 shadow-2xl backdrop-blur transition hover:scale-105 hover:bg-emerald-600 hover:text-white" title="Ir para a última mensagem" aria-label="Ir para a última mensagem">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6"/></svg>
+        </button>
         
         <!-- Chat Input Bar -->
         <div id="chat-input-bar" class="p-3 border-t border-white/5 bg-[#202c33] flex-shrink-0 relative z-10 flex items-end gap-2">
@@ -598,6 +601,10 @@
     
     <!-- COLUNA 3: DETALHES DO CHAMADO E AÇÕES -->
     <div class="col-actions glass-panel rounded-[1.35rem] border border-white/5 bg-slate-900/20 p-5 space-y-5">
+        <div class="flex items-center justify-between border-b border-white/5 pb-3">
+            <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Detalhes do atendimento</span>
+            <button type="button" onclick="closeDetailsPanel()" class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-lg leading-none text-slate-400 hover:bg-rose-500/20 hover:text-rose-300" title="Fechar detalhes" aria-label="Fechar detalhes">×</button>
+        </div>
         <!-- Painel Lateral de Contato -->
         <div id="contact-panel" class="detail-section space-y-4">
             <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Contato</h3>
@@ -873,6 +880,37 @@
     let messageSelectionMode = false;
     let selectedMessageIds = new Set();
     let forwardRecipientResolver = null;
+    const contactPhotoMap = new Map();
+    let contactPhotosLoaded = false;
+
+    function contactPhoneKey(value) {
+        return String(value || '').split('@')[0].split(':')[0].replace(/\D/g, '');
+    }
+
+    function contactPictureUrl(number, instance) {
+        if (!number) return '';
+        return `/api/whatsapp/contact/profile-picture?number=${encodeURIComponent(number)}&instance=${encodeURIComponent(instance || '')}`;
+    }
+
+    async function loadContactPhotos() {
+        if (contactPhotosLoaded) return;
+        try {
+            const res = await fetch('/api/whatsapp/contacts', { credentials: 'include', cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach(contact => {
+                if (!contact.number) return;
+                const pictureUrl = contact.profile_picture || `/api/whatsapp/contact/profile-picture?number=${encodeURIComponent(contact.number)}&instance=${encodeURIComponent(contact.instance || '')}`;
+                contactPhotoMap.set(contactPhoneKey(contact.number), pictureUrl);
+            });
+            contactPhotosLoaded = true;
+            renderChatsList();
+            if (activeTicketId) {
+                const activeChat = chatsData.find(chat => chat.id === activeTicketId);
+                if (activeChat) setAvatar('chat-header-avatar', getChatDisplayName(activeChat), activeChat.profile_picture || contactPhotoMap.get(contactPhoneKey(activeChat.whatsapp_cliente)));
+            }
+        } catch (_) {}
+    }
 
     function openImagePreview(url) {
         const modal = document.getElementById('image-preview-modal');
@@ -907,6 +945,49 @@
 
     function escapeHtml(value) {
         return String(value || '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    }
+
+    function reactionPeopleTitle(message) {
+        try {
+            const people = JSON.parse(message.reacao_detalhes || '[]');
+            const names = people.filter(item => item && item.name).map(item => item.name);
+            return names.length ? `Reagiram: ${names.join(', ')}` : 'Reação recebida';
+        } catch (_) {
+            return 'Reação recebida';
+        }
+    }
+
+    function showReactionPeople(messageId, event) {
+        event?.preventDefault();
+        event?.stopPropagation();
+        document.querySelectorAll('.reaction-people-popover').forEach(item => item.remove());
+        const message = window.__messageCache?.[messageId];
+        const badge = event?.currentTarget;
+        if (!message || !badge) return;
+        let people = [];
+        try {
+            const parsed = JSON.parse(message.reacao_detalhes || '[]');
+            people = Array.isArray(parsed) ? parsed.filter(item => item && item.name) : [];
+        } catch (_) {}
+        if (!people.length) people = [{name: 'Você', emoji: message.reacao || ''}];
+        const popover = document.createElement('div');
+        popover.className = 'reaction-people-popover fixed z-[100] min-w-[190px] max-w-[260px] rounded-xl border border-white/10 bg-slate-800 p-3 text-xs text-slate-200 shadow-2xl';
+        popover.innerHTML = `<div class="mb-2 border-b border-white/10 pb-2 text-[10px] font-black uppercase tracking-wider text-emerald-300">${escapeHtml(message.reacao || 'Reações')} · ${people.length}</div>${people.map(person => `<div class="flex items-center gap-2 py-1"><span class="text-base">${escapeHtml(person.emoji || message.reacao || '')}</span><span class="truncate">${escapeHtml(person.name)}</span></div>`).join('')}`;
+        document.body.appendChild(popover);
+        const rect = badge.getBoundingClientRect();
+        const left = Math.min(Math.max(8, rect.left), window.innerWidth - popover.offsetWidth - 8);
+        const top = rect.top > 150 ? rect.top - popover.offsetHeight - 8 : rect.bottom + 8;
+        popover.style.left = `${left}px`;
+        popover.style.top = `${Math.max(8, top)}px`;
+        setTimeout(() => {
+            const close = (click) => {
+                if (!click.target.closest('.reaction-people-popover') && click.target !== badge) {
+                    popover.remove();
+                    document.removeEventListener('click', close, true);
+                }
+            };
+            document.addEventListener('click', close, true);
+        }, 0);
     }
 
     function replyToMessage(messageId) {
@@ -1050,7 +1131,7 @@
         toastTimer = setTimeout(() => toast.classList.remove('show'), 4500);
     }
 
-    function notifyIncomingMessage(data, isNewChat = false) {
+    async function notifyIncomingMessage(data, isNewChat = false) {
         playNotificationSound();
         const name = data.usuario || 'Cliente';
         const rawPreview = data.preview || data.mensagem || 'Nova mensagem recebida';
@@ -1071,9 +1152,10 @@
         const isTauriApp = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
         if (isTauriApp) {
             try {
-                window.__TAURI_INTERNALS__
+                const invokeResult = window.__TAURI_INTERNALS__
                     ? window.__TAURI_INTERNALS__.invoke('trigger_message_alert', { sender: name })
                     : window.__TAURI__.core.invoke('trigger_message_alert', { sender: name });
+                await Promise.resolve(invokeResult);
             } catch (_) {
                 // fallback: notificação do browser
                 if ('Notification' in window && Notification.permission === 'granted') {
@@ -1104,6 +1186,7 @@
     function formatDisplayPhone(value) {
         if (!value) return '--';
         const raw = String(value).trim();
+        if (raw.toLowerCase().includes('@lid')) return 'Número não disponível';
         if (raw.includes('@lid')) return 'Telefone não disponível';
         let digits = raw.split('@')[0].split(':')[0].replace(/\D/g, '');
         if (!digits) return '--';
@@ -1269,9 +1352,23 @@
     async function loadChats() {
         if (chatsLoading || document.hidden) return;
         chatsLoading = true;
+        const listDiv = document.getElementById('chats-list');
         try {
-            const res = await fetch('/api/whatsapp/chats');
+            const res = await fetch('/api/whatsapp/chats', {
+                cache: 'no-store',
+                credentials: 'include',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!res.ok) {
+                if (res.status === 401 || res.status === 403) {
+                    throw new Error('Sessao expirada. Faca login novamente.');
+                }
+                throw new Error(`Servidor retornou HTTP ${res.status}.`);
+            }
             const incomingChats = await res.json();
+            if (!Array.isArray(incomingChats)) {
+                throw new Error('Resposta invalida da API de conversas.');
+            }
             if (notificationSnapshotReady) {
                 incomingChats.forEach(chat => {
                     const key = String(chat.id);
@@ -1291,8 +1388,16 @@
             renderGroupsList();
             renderContactsList();
             renderChatsList();
+            loadContactPhotos();
         } catch(e) {
             console.error("Erro ao carregar chats:", e);
+            if (listDiv && !chatsData.length) {
+                listDiv.innerHTML = `<div class="text-center py-10 px-4 text-amber-300 text-xs font-bold">
+                    <div class="mb-3">Nao foi possivel carregar as conversas.</div>
+                    <div class="mb-4 text-slate-400 font-normal">${e.message || 'Verifique a conexao com o servidor.'}</div>
+                    <button onclick="loadChats()" class="rounded-lg bg-emerald-500/20 px-4 py-2 text-emerald-300 hover:bg-emerald-500/30">Tentar novamente</button>
+                </div>`;
+            }
         } finally {
             chatsLoading = false;
         }
@@ -1383,6 +1488,10 @@
 
             const displayName = getChatDisplayName(c);
             const nameInitial = displayName.substring(0, 2).toUpperCase();
+            const photoUrl = c.profile_picture || contactPhotoMap.get(contactPhoneKey(c.whatsapp_cliente)) || contactPictureUrl(c.whatsapp_cliente, c.whatsapp_instance);
+            const avatarContent = photoUrl
+                ? `<img src="${photoUrl}" alt="" class="h-full w-full cursor-zoom-in rounded-full object-cover" onclick="event.stopPropagation(); openImagePreview(this.src)" onerror="this.replaceWith(Object.assign(document.createElement('span'), {textContent:'${nameInitial}'}))">`
+                : nameInitial;
             const isConnected = !!(c.connected || c.is_connected || c.presence === 'connected');
             const groupName = c.status === 'Resolvido'
                 ? 'Finalizado'
@@ -1393,8 +1502,8 @@
             card.style.borderLeft = `3px solid ${c.instance_color || '#00a884'}`;
             card.innerHTML = `
                 <div class="flex items-center gap-3 min-w-0 w-full">
-                    <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold flex-shrink-0 text-lg">
-                        ${nameInitial}
+                    <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold flex-shrink-0 text-lg overflow-hidden">
+                        ${avatarContent}
                     </div>
                     <div class="min-w-0 flex-grow">
                         <div class="flex items-center justify-between w-full mb-0.5">
@@ -1502,6 +1611,31 @@
         }
     }
 
+    function setAvatar(elementId, name, photoUrl) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        const initials = (name || 'WA').substring(0, 2).toUpperCase();
+        element.innerHTML = '';
+        if (!photoUrl) {
+            element.textContent = initials;
+            return;
+        }
+        const image = document.createElement('img');
+        image.src = photoUrl;
+        image.alt = '';
+        image.className = 'h-full w-full cursor-zoom-in rounded-full object-cover';
+        image.title = 'Clique para ampliar a foto';
+        image.onclick = (event) => {
+            event.stopPropagation();
+            openImagePreview(photoUrl);
+        };
+        image.onerror = () => {
+            element.innerHTML = '';
+            element.textContent = initials;
+        };
+        element.appendChild(image);
+    }
+
     // --- Abertura do Chat e Detalhes ---
 
     async function openChat(ticketId) {
@@ -1528,7 +1662,7 @@
         // Preenche o Header do Chat
         document.getElementById('chat-header-name').innerText = getChatDisplayName(chat);
         document.getElementById('chat-header-phone').innerText = formatDisplayPhone(chat.whatsapp_cliente);
-        document.getElementById('chat-header-avatar').innerText = getChatDisplayName(chat).substring(0, 2).toUpperCase();
+        setAvatar('chat-header-avatar', getChatDisplayName(chat), chat.profile_picture || contactPhotoMap.get(contactPhoneKey(chat.whatsapp_cliente)) || contactPictureUrl(chat.whatsapp_cliente, chat.whatsapp_instance));
         // Instância e presença
         const instanceBadge = document.getElementById('chat-header-instance');
         instanceBadge.innerText = chat.whatsapp_instance || '--';
@@ -1669,10 +1803,28 @@
             
             setTimeout(() => {
                 timeline.scrollTop = timeline.scrollHeight;
+                updateLatestMessageButton();
             }, 50);
         } catch(e) {
             console.error("Erro ao carregar mensagens:", e);
         }
+    }
+
+    function updateLatestMessageButton() {
+        const timeline = document.getElementById('chat-timeline');
+        const button = document.getElementById('scroll-latest-button');
+        if (!timeline || !button) return;
+        const awayFromBottom = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight;
+        const show = awayFromBottom > 100;
+        button.classList.toggle('hidden', !show);
+        button.classList.toggle('flex', show);
+    }
+
+    function scrollToLatestMessage() {
+        const timeline = document.getElementById('chat-timeline');
+        if (!timeline) return;
+        timeline.scrollTo({top: timeline.scrollHeight, behavior: 'smooth'});
+        setTimeout(updateLatestMessageButton, 350);
     }
 
     function appendMessageToTimeline(m, smoothScroll = true) {
@@ -1756,7 +1908,7 @@
             <div class="mb-1 text-[10px] font-black uppercase tracking-wider ${m.is_me ? 'text-emerald-300' : 'text-slate-400'}">${m.is_me ? 'Atendente · ' + currentUser : (m.usuario || 'Cliente')}</div>
             ${m.responde_a_id ? `<div class="mb-2 rounded-lg border-l-2 border-emerald-400 bg-black/10 px-2 py-1"><div class="text-[9px] font-black text-emerald-300">${escapeHtml(m.responde_a_usuario || 'Mensagem')}</div><div class="truncate text-[10px] text-slate-400">${escapeHtml(m.responde_a_texto || '')}</div></div>` : ''}
             <div class="text-[14.2px]">${formattedMsg}</div>
-            ${m.reacao ? `<span class="message-reaction absolute -bottom-2 left-3 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm shadow">${escapeHtml(m.reacao)}</span>` : ''}
+            ${m.reacao ? `<button type="button" class="message-reaction absolute -bottom-2 left-3 inline-flex items-center gap-0.5 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm leading-none shadow hover:border-emerald-400/60" title="${escapeHtml(reactionPeopleTitle(m))}" onclick="showReactionPeople(${m.id}, event)"><span>${escapeHtml(m.reacao)}</span>${Number(m.reacao_quantidade || 0) > 1 ? `<span class="text-[10px] font-black text-slate-300">${Number(m.reacao_quantidade)}</span>` : ''}</button>` : ''}
             ${m.favorito ? `<span class="favorite-message-indicator" title="Mensagem favoritada" aria-label="Mensagem favoritada">★</span>` : ''}
             ${messageActions}
             <div class="flex items-end justify-between gap-4 mt-1">
@@ -1822,6 +1974,7 @@
                 top: timeline.scrollHeight,
                 behavior: 'smooth'
             });
+            setTimeout(updateLatestMessageButton, 350);
         }
     }
 
@@ -1906,9 +2059,17 @@
                         return;
                     }
                     row.querySelector('.message-reaction')?.remove();
-                    const badge = document.createElement('span');
-                    badge.className = 'message-reaction absolute -bottom-2 left-3 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm shadow';
-                    badge.textContent = emoji;
+                    const cachedMessage = window.__messageCache?.[messageId];
+                    if (cachedMessage) {
+                        cachedMessage.reacao = emoji;
+                        cachedMessage.reacao_quantidade = 1;
+                        cachedMessage.reacao_detalhes = JSON.stringify([{name: currentUser || 'Você', emoji}]);
+                    }
+                    const badge = document.createElement('button');
+                    badge.type = 'button';
+                    badge.className = 'message-reaction absolute -bottom-2 left-3 inline-flex items-center gap-0.5 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm leading-none shadow';
+                    badge.innerHTML = `<span>${escapeHtml(emoji)}</span><span class="text-[10px] font-black text-slate-300">1</span>`;
+                    badge.onclick = (click) => showReactionPeople(messageId, click);
                     row.querySelector('.bubble')?.appendChild(badge);
                     picker.remove();
                     mostrarToast(`Reação ${emoji} adicionada`);
@@ -1999,7 +2160,7 @@
         const unique = new Map();
         chatsData.forEach(chat => {
             const number = String(chat.whatsapp_cliente || '').trim();
-            if (!number || number === 'null' || number === 'undefined') return;
+            if (!number || number === 'null' || number === 'undefined' || number.toLowerCase().includes('@lid')) return;
             if (Number(chat.id) === Number(activeTicketId)) return;
             const name = getChatDisplayName(chat) || number;
             if (!unique.has(number)) unique.set(number, {number, name});
@@ -2648,12 +2809,12 @@
                         document.getElementById('typing-indicator')?.classList.add('hidden');
                     }
                     const tId = data.chamado_id || data.ticket_id;
-                    const visibleChat = chatsData.find(x => x.id === tId);
+                    const visibleChat = chatsData.find(x => sameTicket(x.id, tId));
+                    if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
                     if (data.whatsapp_instance && !visibleChat) {
                         loadChats();
                         return;
                     }
-                    if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
 
                     if (sameTicket(tId, activeTicketId)) {
                         const activeMessageId = data.msg_id || data.message_id || data.id;
@@ -2682,7 +2843,7 @@
                         }
                     } else {
                         if (data.usuario !== currentUser) {
-                            const c = chatsData.find(x => x.id === tId);
+                            const c = chatsData.find(x => sameTicket(x.id, tId));
                             if(c) {
                                 c.unread_admin = (c.unread_admin || 0) + 1;
                                 notificationSnapshot.set(String(tId), Number(c.unread_admin || 0));
@@ -2696,7 +2857,7 @@
                         const d = new Date();
                         c.data_ultima_mensagem = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
                         
-                        chatsData = chatsData.filter(x => x.id !== tId);
+                        chatsData = chatsData.filter(x => !sameTicket(x.id, tId));
                         chatsData.unshift(c);
                         renderChatsList();
                     } else {
@@ -2731,6 +2892,7 @@
 
     // Inicialização
     document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('chat-timeline')?.addEventListener('scroll', updateLatestMessageButton, {passive: true});
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
                 stopTitleBlink();
@@ -2792,6 +2954,12 @@
                 pollActiveMessages();
             }
         }, 1500);
+
+        // Fallback curto para quando o WebSocket perde um evento ou reconecta.
+        // O snapshot evita repetir alertas já processados pelo WebSocket.
+        setInterval(() => {
+            if (!document.hidden && !chatsLoading) loadChats();
+        }, 5000);
         // Sincronização de segurança: também avisa quando o WebSocket perde um evento.
         setInterval(() => {
             loadChats();
@@ -2809,7 +2977,8 @@
             if (!res.ok) return;
             const data = await res.json();
 
-            document.getElementById('contact-avatar').innerText = (data.usuario || 'WA').substring(0,2).toUpperCase();
+            setAvatar('contact-avatar', data.usuario || 'WA', data.profile_picture);
+            setAvatar('chat-header-avatar', data.usuario || 'WA', data.profile_picture);
             document.getElementById('contact-name').innerText = data.usuario || '--';
             document.getElementById('contact-phone').innerText = formatDisplayPhone(data.phone);
             document.getElementById('contact-instance').innerText = data.instance || '--';
@@ -2961,6 +3130,13 @@
     function toggleDesktopDetails() {
         if (!document.body.classList.contains('desktop-focus')) return;
         document.body.classList.toggle('desktop-details-open');
+    }
+
+    function closeDetailsPanel() {
+        document.body.classList.remove('desktop-details-open');
+        document.querySelector('.col-actions')?.classList.remove('active-mobile');
+        document.getElementById('mobile-drawer-backdrop')?.classList.add('hidden');
+        document.getElementById('mobile-drawer-backdrop')?.classList.remove('active-mobile');
     }
 
     function closeMobileDrawers() {

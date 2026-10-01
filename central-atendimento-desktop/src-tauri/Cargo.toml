@@ -1,6 +1,6 @@
 [package]
 name = "central-atendimento-operador"
-version = "0.1.1"
+version = "0.1.4"
 description = "Aplicativo Windows da Central de Atendimento - Operador"
 authors = ["Atual RNC"]
 edition = "2021"

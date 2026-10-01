@@ -298,6 +298,8 @@ def _ensure_typing_schema():
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_message_id VARCHAR(160) NULL"))
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_remote_jid VARCHAR(180) NULL"))
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao VARCHAR(32) NULL"))
+        conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_quantidade INTEGER DEFAULT 0"))
+        conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_detalhes TEXT NULL"))
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS favorito BOOLEAN DEFAULT FALSE"))
     _typing_schema_ready = True
 
@@ -406,6 +408,8 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
                     "whatsapp_message_id": m.whatsapp_message_id,
                     "whatsapp_remote_jid": m.whatsapp_remote_jid,
                     "reacao": m.reacao,
+                    "reacao_quantidade": int(getattr(m, "reacao_quantidade", 0) or (1 if m.reacao else 0)),
+                    "reacao_detalhes": m.reacao_detalhes or "[]",
                     "favorito": bool(getattr(m, "favorito", False)),
                     "is_me": m.usuario == user_name,
                     "can_edit": _message_can_edit(m, user_name),

@@ -20,7 +20,7 @@
             <h2 class="mt-2 text-3xl font-black text-white">Contatos</h2>
             <p class="mt-2 text-sm text-slate-400">Sincronize os contatos do celular e inicie uma conversa.</p>
         </div>
-        <div class="flex gap-2"><button onclick="openNewContact()" class="rounded-xl bg-indigo-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-400">Novo contato</button><button onclick="syncContacts()" class="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-emerald-400">Sincronizar contatos</button></div>
+        <div class="flex flex-wrap gap-2"><button onclick="openNewContact()" class="rounded-xl bg-indigo-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-400">Novo contato</button><button onclick="document.getElementById('import-contacts-file').click()" class="rounded-xl bg-sky-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-sky-400">Importar lista</button><button onclick="syncContacts()" class="rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-emerald-400">Sincronizar contatos</button><input id="import-contacts-file" type="file" accept=".csv,.txt,text/csv,text/plain" class="hidden" onchange="importContactsFile(event)"></div>
     </div>
     <div class="mb-5 flex flex-wrap items-center gap-3">
         <label class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -52,9 +52,41 @@
     </form>
 </div>
 
+<div id="contact-photo-preview" class="fixed inset-0 z-[130] hidden items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm" onclick="if (event.target === this) closeImagePreview()">
+    <button type="button" onclick="closeImagePreview()" class="absolute right-5 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20" aria-label="Fechar visualização">×</button>
+    <img id="contact-photo-preview-image" src="" alt="Foto ampliada" class="max-h-[90vh] max-w-[95vw] rounded-2xl object-contain shadow-2xl">
+</div>
+
 <script>
 let contacts = [];
 let editingContactId = null;
+function openImagePreview(url) {
+    if (!url) return;
+    const modal = document.getElementById('contact-photo-preview');
+    const image = document.getElementById('contact-photo-preview-image');
+    image.src = url;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeImagePreview() {
+    const modal = document.getElementById('contact-photo-preview');
+    const image = document.getElementById('contact-photo-preview-image');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    image.removeAttribute('src');
+}
+document.addEventListener('keydown', event => { if (event.key === 'Escape') closeImagePreview(); });
+function formatContactPhone(value) {
+    if (!value) return '--';
+    const raw = String(value).trim();
+    if (raw.toLowerCase().includes('@lid')) return 'Número não disponível';
+    let digits = raw.split('@')[0].split(':')[0].replace(/\D/g, '');
+    if (!digits) return '--';
+    if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;
+    if (digits.startsWith('55') && digits.length === 13) return `+55 (${digits.slice(2, 4)}) ${digits[4]} ${digits.slice(5, 9)}-${digits.slice(9)}`;
+    if (digits.startsWith('55') && digits.length === 12) return `+55 (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+    return `+${digits}`;
+}
 async function loadContactInstances() {
     const select = document.getElementById('contact-instance');
     try {
@@ -79,6 +111,63 @@ async function syncContacts() {
     try { const instance = document.getElementById('contact-instance').value; const url = instance ? `/api/whatsapp/contacts?instance=${encodeURIComponent(instance)}` : '/api/whatsapp/contacts'; const res = await fetch(url); if (!res.ok) throw new Error(); contacts = await res.json(); renderContacts(); addEditButtonsForSynced(); }
     catch (_) { grid.innerHTML = '<div class="col-span-full py-20 text-center text-sm text-rose-300">Não foi possível sincronizar os contatos.</div>'; }
 }
+function parseContactLine(line, delimiter) {
+    const values = [];
+    let value = '', quoted = false;
+    for (let i = 0; i < line.length; i += 1) {
+        const char = line[i];
+        if (char === '"') { if (quoted && line[i + 1] === '"') { value += '"'; i += 1; } else { quoted = !quoted; } }
+        else if (char === delimiter && !quoted) { values.push(value.trim()); value = ''; }
+        else { value += char; }
+    }
+    values.push(value.trim());
+    return values;
+}
+function normalizeImportedNumber(value) {
+    const raw = String(value || '').trim();
+    if (!raw || raw.toLowerCase().includes('@lid') || raw.toLowerCase().includes('@g.us')) return '';
+    return raw.split('@')[0].split(':')[0].replace(/\D/g, '');
+}
+function contactAvatar(c) {
+    const initials = (c.name || 'WA').slice(0, 2).toUpperCase();
+    const pictureUrl = c.profile_picture || `/api/whatsapp/contact/profile-picture?number=${encodeURIComponent(c.number || '')}&instance=${encodeURIComponent(c.instance || '')}`;
+    return c.number ? `<img src="${pictureUrl}" alt="" title="Clique para ampliar a foto" class="h-full w-full cursor-zoom-in rounded-full object-cover" onclick="event.stopPropagation(); openImagePreview(this.src)" onerror="this.replaceWith(Object.assign(document.createElement('span'), {textContent:'${initials}'}))">` : initials;
+}
+async function importContactsFile(event) {
+    const input = event.target;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+        const lines = (await file.text()).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        if (!lines.length) { alert('A lista está vazia.'); return; }
+        const first = lines[0];
+        const delimiter = first.includes(';') ? ';' : first.includes('\t') ? '\t' : ',';
+        const firstValues = parseContactLine(first, delimiter).map(value => value.toLowerCase());
+        const nameIndex = firstValues.findIndex(value => ['nome', 'name', 'contato', 'contact'].includes(value));
+        const numberIndex = firstValues.findIndex(value => ['numero', 'número', 'number', 'telefone', 'phone', 'celular', 'whatsapp'].includes(value));
+        const hasHeader = nameIndex >= 0 || numberIndex >= 0;
+        const start = hasHeader ? 1 : 0;
+        const contactsToImport = [];
+        for (let i = start; i < lines.length; i += 1) {
+            const values = parseContactLine(lines[i], delimiter);
+            const numberValue = hasHeader && numberIndex >= 0 ? values[numberIndex] : values.length > 1 ? values[1] : values[0];
+            const number = normalizeImportedNumber(numberValue);
+            if (number.length < 8) continue;
+            const nameValue = hasHeader && nameIndex >= 0 ? values[nameIndex] : values.length > 1 ? values[0] : '';
+            contactsToImport.push({ name: nameValue || `Contato ${number}`, number });
+        }
+        if (!contactsToImport.length) { alert('Nenhum número válido foi encontrado. Use o formato Nome;Número ou um número por linha.'); return; }
+        const instance = document.getElementById('contact-instance').value;
+        const res = await fetch('/api/whatsapp/contacts/import', { method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ contacts: contactsToImport, instance }) });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(result.detail || 'Falha ao importar a lista.');
+        alert(`Importação concluída: ${result.imported || 0} novo(s), ${result.updated || 0} já existente(s), ${result.ignored || 0} ignorado(s).`);
+        await syncContacts();
+    } catch (error) {
+        alert(error.message || 'Não foi possível importar a lista.');
+    }
+}
 function openNewContact() { document.getElementById('new-contact-modal').classList.remove('hidden'); document.getElementById('new-contact-modal').classList.add('flex'); document.getElementById('new-name').focus(); }
 function closeNewContact() { document.getElementById('new-contact-modal').classList.add('hidden'); document.getElementById('new-contact-modal').classList.remove('flex'); }
 async function saveNewContact(event) { event.preventDefault(); const res = await fetch('/api/whatsapp/contacts/local', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:document.getElementById('new-name').value,number:document.getElementById('new-number').value,company:document.getElementById('new-company').value,note:document.getElementById('new-note').value})}); if (!res.ok) { alert('Não foi possível salvar o contato.'); return; } closeNewContact(); await syncContacts(); }
@@ -87,7 +176,7 @@ function renderContacts() {
     const query = (document.getElementById('contact-search').value || '').toLowerCase();
     const list = contacts.filter(c => `${c.name} ${c.number}`.toLowerCase().includes(query));
     document.getElementById('contact-count').textContent = `${list.length} contato(s)`;
-    document.getElementById('contacts-grid').innerHTML = list.length ? list.map(c => `<div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/50 p-4"><div class="flex min-w-0 items-center gap-3"><div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-indigo-500/15 font-black text-indigo-300">${(c.name || 'WA').slice(0,2).toUpperCase()}</div><div class="min-w-0"><div class="truncate text-sm font-bold text-white">${c.name}</div><div class="text-xs text-slate-500">${c.number}</div></div></div><div class="flex shrink-0 gap-2">${c.local ? `<button onclick='openNewContact(${JSON.stringify(c)})' class="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-300">Editar</button>` : ''}<button onclick='openStartModal(${JSON.stringify(c)})' class="shrink-0 rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black uppercase text-emerald-300 hover:bg-emerald-500/25">Conversar</button></div></div>`).join('') : '<div class="col-span-full py-20 text-center text-sm text-slate-500">Nenhum contato encontrado.</div>';
+    document.getElementById('contacts-grid').innerHTML = list.length ? list.map(c => `<div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/50 p-4"><div class="flex min-w-0 items-center gap-3"><div class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-500/15 font-black text-indigo-300">${contactAvatar(c)}</div><div class="min-w-0"><div class="truncate text-sm font-bold text-white">${c.name}</div><div class="text-xs text-slate-500">${formatContactPhone(c.number)}</div></div></div><div class="flex shrink-0 gap-2">${c.local ? `<button onclick='openNewContact(${JSON.stringify(c)})' class="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-300">Editar</button>` : ''}<button onclick='openStartModal(${JSON.stringify(c)})' class="shrink-0 rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black uppercase text-emerald-300 hover:bg-emerald-500/25">Conversar</button></div></div>`).join('') : '<div class="col-span-full py-20 text-center text-sm text-slate-500">Nenhum contato encontrado.</div>';
 }
 function openNewContact(contact = null) { editingContactId = contact?.local ? contact.id : null; const modal = document.getElementById('new-contact-modal'); modal.querySelector('h3').textContent = contact ? 'Editar contato' : 'Novo contato'; document.getElementById('new-name').value = contact?.name || ''; document.getElementById('new-number').value = contact?.number || ''; document.getElementById('new-company').value = contact?.company || ''; document.getElementById('new-note').value = contact?.note || ''; modal.classList.remove('hidden'); modal.classList.add('flex'); document.getElementById('new-name').focus(); }
 function closeNewContact() { editingContactId = null; const modal = document.getElementById('new-contact-modal'); modal.classList.add('hidden'); modal.classList.remove('flex'); }

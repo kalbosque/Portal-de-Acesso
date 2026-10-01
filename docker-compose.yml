@@ -21,7 +21,7 @@ services:
 
   # ─── Evolution API (WhatsApp) ────────────────────────────────────────────────
   evolution-api:
-    image: evoapicloud/evolution-api:v2.3.0
+    image: evoapicloud/evolution-api:v2.3.7
     restart: unless-stopped
     ports:
       - "8081:8080"

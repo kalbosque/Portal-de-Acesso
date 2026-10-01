@@ -14,13 +14,13 @@
     "WHATSAPP_WEBHOOK_TOKEN": "printdash_evo_key_2024",
     "WHATSAPP_INSTANCES": [
         {
-            "instanceName": "kalbosque-chip2",
-            "label": "kalbosque-chip2"
+            "instanceName": "portal-de-acesso",
+            "label": "portal-de-acesso"
         }
     ],
     "WHATSAPP_SHOW_GROUPS": true,
     "WHATSAPP_AUTO_CREATE_TICKETS": false,
-    "WHATSAPP_DEFAULT_INSTANCE": "kalbosque-chip2",
     "WHATSAPP_CHAT_BACKGROUND_IMAGE": "",
-    "WHATSAPP_CHAT_BACKGROUND_COLOR": "#0b141a"
+    "WHATSAPP_CHAT_BACKGROUND_COLOR": "#0b141a",
+    "WHATSAPP_DEFAULT_INSTANCE": "portal-de-acesso"
 }

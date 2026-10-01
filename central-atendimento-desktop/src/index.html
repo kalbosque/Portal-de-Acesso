@@ -6,14 +6,73 @@
     <title>Central de Atendimento</title>
     <style>
       html, body { margin: 0; width: 100%; height: 100%; background: #07131a; }
-      .loading { display: grid; place-items: center; height: 100%; color: #a7f3d0; font: 600 14px Arial, sans-serif; }
+      body { color: #e2e8f0; font: 14px Arial, sans-serif; }
+      .loading { display: grid; place-items: center; height: 100%; color: #a7f3d0; font-weight: 600; }
+      .panel { width: min(440px, calc(100% - 40px)); padding: 30px; border: 1px solid #1e3a46; border-radius: 18px; background: #0d2029; box-shadow: 0 20px 60px #0008; }
+      h1 { margin: 0 0 8px; font-size: 20px; color: #f8fafc; }
+      p { margin: 0 0 22px; color: #94a3b8; line-height: 1.5; font-weight: 400; }
+      label { display: block; margin: 14px 0 6px; color: #a7f3d0; font-size: 12px; }
+      input { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #294653; border-radius: 9px; outline: 0; background: #07131a; color: #f8fafc; font-size: 14px; }
+      input:focus { border-color: #10b981; }
+      button { width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 9px; background: #059669; color: white; font-weight: 700; cursor: pointer; }
+      button:hover { background: #10b981; }
+      .config-link { position: fixed; right: 18px; bottom: 15px; width: auto; margin: 0; padding: 7px 10px; background: transparent; color: #64748b; font-size: 11px; font-weight: 400; }
+      .config-link:hover { color: #a7f3d0; background: transparent; }
+      .error { min-height: 18px; margin-top: 10px; color: #fda4af; font-size: 12px; }
     </style>
   </head>
   <body>
-    <div class="loading">Abrindo a Central de Atendimento...</div>
+    <div id="app" class="loading">Abrindo a Central de Atendimento...</div>
     <script>
-      const server = 'http://192.168.1.230:3001';
       const isTauriRuntime = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+      const SERVER_KEY = 'central_atendimento_server_url';
+      // Mantém o comportamento anterior: abre automaticamente no servidor
+      // atual quando ainda não existe uma configuração salva.
+      const DEFAULT_SERVER = 'http://192.168.1.230:3001';
+      let redirectTimer;
+
+      function normalizeServer(value) {
+        let server = String(value || '').trim().replace(/\/+$/, '');
+        server = server.replace(/\/central-atendimento(\/.*)?$/i, '');
+        return server;
+      }
+
+      function renderSetup(message = '') {
+        clearTimeout(redirectTimer);
+        const saved = localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER;
+        document.getElementById('app').innerHTML = `
+          <form class="panel" id="server-form">
+            <h1>Configurar servidor</h1>
+            <p>Informe o IP ou nome do servidor da Central. Esta configuração fica salva somente neste computador.</p>
+            <label for="server-url">Endereço do servidor</label>
+            <input id="server-url" value="${saved.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" placeholder="http://192.168.10.50:8080" autocomplete="url">
+            <div class="error" id="server-error">${message}</div>
+            <button type="submit">Salvar e abrir Central</button>
+          </form>
+          <button class="config-link" id="cancel-config" type="button">Cancelar</button>`;
+        document.getElementById('server-form').addEventListener('submit', event => {
+          event.preventDefault();
+          const input = document.getElementById('server-url');
+          const server = normalizeServer(input.value);
+          try {
+            const parsed = new URL(server);
+            if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error();
+          } catch (_) {
+            document.getElementById('server-error').textContent = 'Informe um endereço válido, como http://192.168.10.50:8080';
+            return;
+          }
+          localStorage.setItem(SERVER_KEY, server);
+          openServer(server);
+        });
+        document.getElementById('cancel-config').addEventListener('click', () => {
+          const server = localStorage.getItem(SERVER_KEY);
+          if (server) openServer(server);
+        });
+      }
+
+      function openServer(server) {
+        window.location.replace(`${normalizeServer(server)}/atendimento/login?desktop=1`);
+      }
 
       if (isTauriRuntime) {
         try {
@@ -21,8 +80,14 @@
         } catch (_) {}
       }
 
-      const target = `${server}/atendimento/login?desktop=1`;
-      window.location.replace(target);
+      const savedServer = normalizeServer(localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER);
+      if (new URLSearchParams(window.location.search).has('config')) {
+        renderSetup();
+      } else {
+        document.getElementById('app').innerHTML = '<div>Abrindo a Central de Atendimento...</div><button class="config-link" id="change-server" type="button">Configurar servidor</button>';
+        document.getElementById('change-server').addEventListener('click', renderSetup);
+        redirectTimer = setTimeout(() => openServer(savedServer), 700);
+      }
     </script>
   </body>
 </html>

@@ -15,6 +15,7 @@
     "core:window:allow-unminimize",
     "core:window:allow-is-focused",
     "core:window:allow-is-minimized",
+    "allow-trigger-message-alert",
     "notification:default",
     "notification:allow-notify",
     "notification:allow-request-permission",

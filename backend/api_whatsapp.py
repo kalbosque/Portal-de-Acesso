@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Body, UploadFile, File, Form
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import text
 from sqlmodel import Session, select, desc
 
@@ -21,6 +22,96 @@ router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
 _whatsapp_columns_ready = False
 _connected_map_cache = {"expires_at": 0.0, "value": {}}
+
+
+def _normalize_contact_number(value: str) -> Optional[str]:
+    """Padroniza telefones brasileiros com código do país quando possível."""
+    raw = str(value or "").strip()
+    if not raw or "@lid" in raw.lower() or "@g.us" in raw.lower():
+        return None
+    digits = re.sub(r"\D", "", raw.split("@")[0].split(":")[0])
+    if len(digits) in (10, 11):
+        return f"55{digits}"
+    return digits if len(digits) >= 8 else None
+
+
+def _real_contact_number(item: dict) -> Optional[str]:
+    """Obtém somente telefone real, nunca o identificador interno @lid."""
+    if not isinstance(item, dict):
+        return None
+
+    for key in ("number", "phoneNumber", "phone", "remoteJid", "jid", "id"):
+        raw = str(item.get(key) or "").strip()
+        if not raw or "@lid" in raw.lower() or "@g.us" in raw.lower():
+            continue
+        number = _normalize_contact_number(raw)
+        if number:
+            return number
+    return None
+
+
+def _fetch_profile_picture_url(base_url: str, token: str, instance: str, number: str) -> Optional[str]:
+    """Busca a foto quando findContacts não a fornece diretamente."""
+    raw_number = str(number or "").strip()
+    is_group = raw_number.lower().endswith("@g.us")
+    normalized = raw_number if is_group else _normalize_contact_number(raw_number)
+    if not base_url or not normalized:
+        # O WhatsApp pode entregar o contato como @lid. Primeiro resolve o
+        # LID no catálogo da Evolution para obter o telefone real e/ou a foto.
+        if not base_url or is_group or "@lid" not in raw_number.lower():
+            return None
+        normalized = raw_number
+    try:
+        if is_group:
+            group_response = requests.get(
+                f"{base_url}/group/findGroupInfos/{instance}",
+                headers={"apikey": token or ""},
+                params={"groupJid": normalized},
+                timeout=8,
+            )
+            if group_response.ok:
+                group_payload = group_response.json()
+                candidates = [group_payload] if isinstance(group_payload, dict) else []
+                for item in candidates:
+                    picture = item.get("pictureUrl") or item.get("profilePictureUrl") or item.get("profilePicUrl") or item.get("picture")
+                    if picture:
+                        return picture
+            return None
+
+        if "@lid" in raw_number.lower():
+            contacts_response = requests.post(
+                f"{base_url}/chat/findContacts/{instance}",
+                headers={"apikey": token or "", "Content-Type": "application/json"},
+                json={"where": {}, "take": 1000, "skip": 0, "orderBy": {}},
+                timeout=8,
+            )
+            contacts_payload = contacts_response.json() if contacts_response.ok else []
+            if isinstance(contacts_payload, dict):
+                contacts_payload = contacts_payload.get("contacts") or contacts_payload.get("data") or contacts_payload.get("results") or []
+            if isinstance(contacts_payload, list):
+                lid = raw_number.split("@")[0].split(":")[0]
+                match = next((item for item in contacts_payload if isinstance(item, dict) and lid == str(item.get("id") or item.get("remoteJid") or item.get("jid") or "").split("@")[0].split(":")[0]), None)
+                if match:
+                    picture = match.get("profilePictureUrl") or match.get("profilePicUrl") or match.get("profile_picture")
+                    if picture:
+                        return picture
+                    normalized = _real_contact_number(match)
+            if not normalized or "@lid" in str(normalized).lower():
+                return None
+        response = requests.post(
+            f"{base_url}/chat/fetchProfilePictureUrl/{instance}",
+            headers={"apikey": token or "", "Content-Type": "application/json"},
+            json={"number": normalized},
+            timeout=8,
+        )
+        if not response.ok:
+            return None
+        payload = response.json()
+        if isinstance(payload, dict):
+            return payload.get("profilePictureUrl") or payload.get("profilePicUrl") or payload.get("picture")
+    except Exception:
+        pass
+    return None
 
 # Caminho absoluto relativo ao diretório do script — garante leitura do config correto
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -148,6 +239,8 @@ def _ensure_whatsapp_columns():
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_remote_jid VARCHAR(180) NULL",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_participant VARCHAR(180) NULL",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao VARCHAR(32) NULL",
+        "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_quantidade INTEGER DEFAULT 0",
+        "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_detalhes TEXT NULL",
         "ALTER TABLE contatos_whatsapp ADD COLUMN IF NOT EXISTS status_interno VARCHAR(40) DEFAULT 'Normal'"
     ]
     with engine.begin() as conn:
@@ -308,10 +401,16 @@ def get_evolution_api_endpoints(instance_name: Optional[str] = None):
         if len(parts) > 1 and parts[1]:
             instance = parts[1].split("?")[0]
 
-    if instance_name:
+    configured_instances, configured_default = get_whatsapp_instances()
+    valid_instances = {item.get("instanceName") for item in configured_instances if item.get("instanceName")}
+    if instance_name and instance_name in valid_instances:
         instance = instance_name
+    elif instance_name and configured_default:
+        # Chamados antigos podem guardar o nome de uma instância removida.
+        # Usa a instância atual para buscar fotos, grupos e contatos.
+        instance = configured_default
     elif not instance:
-        instance = get_default_whatsapp_instance(config)
+        instance = configured_default or get_default_whatsapp_instance(config)
             
     if not instance:
         instance = "printdash"
@@ -448,7 +547,10 @@ def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance
     last_error = ""
     for attempt in range(2):
         try:
-            response = requests.post(f"{base_url}/message/sendReaction/{resolved_instance}", json=payload, headers=headers, timeout=15)
+            # Reações em grupos podem ficar penduradas na Baileys quando o
+            # participant é um @lid. O endpoint da API não precisa bloquear a
+            # requisição por 15 segundos em cada combinação tentada abaixo.
+            response = requests.post(f"{base_url}/message/sendReaction/{resolved_instance}", json=payload, headers=headers, timeout=8)
             if response.status_code in (200, 201):
                 return True, ""
             last_error = f"Evolution API ({response.status_code}): {response.text[:300]}"
@@ -468,6 +570,7 @@ def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance
 @router.post("/message/reaction")
 def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None):
     _require_atendimento_access(request)
+    _ensure_whatsapp_columns()
     ticket_id = payload.get("ticket_id")
     message_id = str(payload.get("message_id") or "").strip()
     reaction = str(payload.get("reaction") or "").strip()
@@ -492,14 +595,19 @@ def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None
         # Mensagens recebidas usam fromMe=false; mensagens enviadas pelo
         # atendente usam fromMe=true. Há registros antigos sem essa marcação,
         # então tentamos as duas formas e os JIDs disponíveis no chamado.
+        is_group_target = str(chamado.whatsapp_cliente or "").lower().endswith("@g.us")
         targets = []
         for candidate in (interaction.whatsapp_remote_jid, chamado.whatsapp_cliente):
             candidate = str(candidate or '').strip()
+            # Em grupo, o remoteJid da chave da reação precisa ser o JID do
+            # grupo. Nunca enviar a reação para o JID do participante.
+            if is_group_target and not candidate.lower().endswith('@g.us'):
+                continue
             if candidate and candidate not in targets:
                 targets.append(candidate)
         ok = False
         reaction_error = ""
-        is_group_target = str(chamado.whatsapp_cliente or "").lower().endswith("@g.us") or any(
+        is_group_target = is_group_target or any(
             str(target).lower().endswith("@g.us") for target in targets
         )
         participant_candidates = []
@@ -511,25 +619,39 @@ def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None
                 participant_candidates.append(participant_text)
                 if "@" not in participant_text and participant_text.isdigit():
                     participant_candidates.append(f"{participant_text}@s.whatsapp.net")
+        if is_group_target:
+            for candidate in (
+                interaction.whatsapp_participant,
+                getattr(interaction, "whatsapp_sender_phone", None),
+            ):
+                candidate = str(candidate or "").strip()
+                if candidate and "@lid" not in candidate.lower() and candidate not in participant_candidates:
+                    participant_candidates.append(candidate if "@" in candidate else f"{candidate}@s.whatsapp.net")
         # Sem participant (funciona para grupos com formato @lid)
         participant_candidates.append(None)
         for target in targets:
-            for from_me in (False, True):
-                for participant in participant_candidates:
-                    sent, error = send_whatsapp_reaction(
-                        chamado.whatsapp_cliente,
-                        interaction.whatsapp_message_id,
-                        reaction,
-                        chamado.whatsapp_instance,
-                        target,
-                        from_me,
-                        participant,
-                    )
-                    reaction_error = error or reaction_error
-                    if sent:
-                        ok = True
-                        break
-                if ok:
+            # Para mensagem recebida em grupo, a combinação correta é
+            # fromMe=false + participant real. Só usa as alternativas antigas
+            # quando não temos essa informação (mensagens históricas).
+            combinations = []
+            if is_group_target and participant_candidates and participant_candidates[0] is not None:
+                combinations.append((False, participant_candidates[0]))
+                combinations.append((False, None))
+            else:
+                combinations.extend((from_me, participant) for from_me in (False, True) for participant in participant_candidates)
+            for from_me, participant in combinations:
+                sent, error = send_whatsapp_reaction(
+                    chamado.whatsapp_cliente,
+                    interaction.whatsapp_message_id,
+                    reaction,
+                    chamado.whatsapp_instance,
+                    target,
+                    from_me,
+                    participant,
+                )
+                reaction_error = error or reaction_error
+                if sent:
+                    ok = True
                     break
             if ok:
                 break
@@ -537,7 +659,22 @@ def react_to_whatsapp_message(payload: dict = Body(...), request: Request = None
             if reaction_error:
                 raise HTTPException(status_code=502, detail=reaction_error)
             raise HTTPException(status_code=502, detail="Não foi possível enviar a reação ao WhatsApp")
-        interaction.reacao = reaction
+        reaction_name = get_signed_cookie(request, "user_name", "Atendente") or "Atendente"
+        reaction_people = [{"name": reaction_name, "emoji": reaction}]
+        try:
+            reaction_people = json.loads(interaction.reacao_detalhes or "[]")
+            if not isinstance(reaction_people, list): reaction_people = []
+        except Exception:
+            reaction_people = []
+        if interaction.reacao == reaction:
+            if not any(str(item.get("name")) == reaction_name for item in reaction_people if isinstance(item, dict)):
+                reaction_people.append({"name": reaction_name, "emoji": reaction})
+            interaction.reacao_quantidade = max(len(reaction_people), (interaction.reacao_quantidade or 1))
+        else:
+            interaction.reacao = reaction
+            interaction.reacao_quantidade = 1
+            reaction_people = [{"name": reaction_name, "emoji": reaction}]
+        interaction.reacao_detalhes = json.dumps(reaction_people, ensure_ascii=False)
         session.add(interaction)
         session.commit()
         return {"success": True, "reaction": reaction}
@@ -1087,7 +1224,8 @@ def get_contact_details(ticket_id: Optional[int] = None, request: Request = None
 
     with Session(engine) as session:
         chamado = session.get(Chamado, ticket_id)
-        if chamado and chamado.whatsapp_cliente and "@lid" in str(chamado.whatsapp_cliente):
+        profile_picture = None
+        if chamado and chamado.whatsapp_cliente:
             try:
                 base_url, wa_token, resolved = get_evolution_api_endpoints(chamado.whatsapp_instance)
                 if base_url:
@@ -1097,13 +1235,28 @@ def get_contact_details(ticket_id: Optional[int] = None, request: Request = None
                         json={"where": {}, "take": 1000, "skip": 0, "orderBy": {}},
                         timeout=8,
                     )
-                    contacts = response.json() if response.ok and isinstance(response.json(), list) else []
+                    payload = response.json() if response.ok else []
+                    if isinstance(payload, list):
+                        contacts = payload
+                    elif isinstance(payload, dict):
+                        contacts = payload.get("contacts") or payload.get("data") or payload.get("results") or []
+                    else:
+                        contacts = []
                     lid = str(chamado.whatsapp_cliente).split("@")[0]
-                    match = next((item for item in contacts if isinstance(item, dict) and str(item.get("id") or "").split("@")[0] == lid and item.get("number")), None)
+                    current_number = _normalize_contact_number(chamado.whatsapp_cliente)
+                    match = next((item for item in contacts if isinstance(item, dict) and (
+                        ("@lid" in str(chamado.whatsapp_cliente).lower() and str(item.get("id") or "").split("@")[0] == lid)
+                        or (current_number and _real_contact_number(item) == current_number)
+                    )), None)
                     if match:
-                        chamado.whatsapp_cliente = str(match["number"]).split("@")[0].split(":")[0]
-                        session.add(chamado)
-                        session.commit()
+                        profile_picture = match.get("profilePictureUrl") or match.get("profilePicUrl") or match.get("profile_picture")
+                        real_number = _real_contact_number(match)
+                        if real_number and real_number != chamado.whatsapp_cliente:
+                            chamado.whatsapp_cliente = real_number
+                            session.add(chamado)
+                            session.commit()
+                    if not profile_picture:
+                        profile_picture = _fetch_profile_picture_url(base_url, wa_token, resolved, chamado.whatsapp_cliente)
             except Exception:
                 pass
         if not chamado:
@@ -1155,11 +1308,39 @@ def get_contact_details(ticket_id: Optional[int] = None, request: Request = None
             "categoria": chamado.categoria,
             "data_abertura": chamado.data_abertura.strftime("%d/%m/%Y %H:%M:%S"),
             "assigned_user": chamado.assigned_user,
+            "profile_picture": profile_picture,
             "nota_interna": chamado.nota_tecnica or "",
             "status_interno": (contato.status_interno if contato and contato.status_interno else "Normal"),
             "last_messages": last_messages,
             "previous_tickets": previous_tickets
         }
+
+
+@router.get("/contact/profile-picture")
+def get_contact_profile_picture(number: str, request: Request, instance: Optional[str] = None):
+    """Entrega a foto pelo backend para evitar falhas do navegador no link pps.whatsapp.net."""
+    _require_atendimento_access(request)
+    base_url, wa_token, resolved = get_evolution_api_endpoints(instance)
+    picture_url = _fetch_profile_picture_url(base_url, wa_token, resolved, number)
+    if not picture_url:
+        raise HTTPException(status_code=404, detail="Foto não disponível")
+    try:
+        picture_response = requests.get(picture_url, timeout=10)
+        if not picture_response.ok or not picture_response.content:
+            raise HTTPException(status_code=404, detail="Foto não disponível")
+        media_type = picture_response.headers.get("content-type", "image/jpeg").split(";", 1)[0]
+        if not media_type.startswith("image/"):
+            media_type = "image/jpeg"
+        return Response(
+            content=picture_response.content,
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"[WhatsApp] Não foi possível baixar foto de {number}: {exc}")
+        raise HTTPException(status_code=404, detail="Foto não disponível")
 
 
 @router.post("/contact/note")
@@ -1681,15 +1862,15 @@ def get_whatsapp_contacts(request: Request, instance: Optional[str] = None):
             contacts = []
         synced = [{
             "id": item.get("id") or item.get("number"),
-            "name": item.get("pushName") or item.get("name") or item.get("number") or "Sem nome",
-            "number": item.get("number") or str(item.get("id") or "").split("@")[0],
-            "profile_picture": item.get("profilePictureUrl"),
+            "name": item.get("pushName") or item.get("name") or "Sem nome",
+            "number": _real_contact_number(item),
+            "profile_picture": item.get("profilePictureUrl") or item.get("profilePicUrl") or item.get("profile_picture"),
             "instance": resolved,
-        } for item in contacts if isinstance(item, dict) and (item.get("number") or item.get("id"))]
+        } for item in contacts if _real_contact_number(item)]
         with Session(engine) as session:
             local = session.exec(select(ContatoWhatsApp).order_by(ContatoWhatsApp.nome)).all()
         existing = {str(item.get("number")) for item in synced}
-        synced.extend({"id": item.id, "name": item.nome, "number": item.numero, "company": item.empresa or "", "note": item.observacao or "", "instance": item.whatsapp_instance or resolved, "local": True} for item in local if item.numero not in existing)
+        synced.extend({"id": item.id, "name": item.nome, "number": _real_contact_number({"number": item.numero}), "company": item.empresa or "", "note": item.observacao or "", "instance": item.whatsapp_instance or resolved, "local": True} for item in local if _real_contact_number({"number": item.numero}) and _real_contact_number({"number": item.numero}) not in existing)
         return synced
     except HTTPException:
         raise
@@ -1768,7 +1949,7 @@ def start_whatsapp_contact(payload: dict = Body(...), request: Request = None, b
 def create_local_contact(payload: dict = Body(...), request: Request = None):
     _require_atendimento_access(request)
     name = str(payload.get("name") or "").strip()
-    number = "".join(ch for ch in str(payload.get("number") or "") if ch.isdigit())
+    number = _normalize_contact_number(payload.get("number")) or ""
     if not name or len(number) < 8:
         raise HTTPException(status_code=400, detail="Informe nome e um número válido")
     with Session(engine) as session:
@@ -1779,11 +1960,58 @@ def create_local_contact(payload: dict = Body(...), request: Request = None):
         return {"success": True, "id": contact.id}
 
 
+@router.post("/contacts/import")
+def import_local_contacts(payload: dict = Body(...), request: Request = None):
+    """Importa uma lista de contatos externos, ignorando identificadores @lid."""
+    _require_atendimento_access(request)
+    raw_contacts = payload.get("contacts") or []
+    if not isinstance(raw_contacts, list):
+        raise HTTPException(status_code=400, detail="A lista de contatos é inválida")
+
+    instance = str(payload.get("instance") or get_default_whatsapp_instance(get_whatsapp_config()) or "").strip()
+    normalized = {}
+    ignored = 0
+    for item in raw_contacts:
+        if not isinstance(item, dict):
+            ignored += 1
+            continue
+        number = _normalize_contact_number(item.get("number")) or ""
+        if len(number) < 8:
+            ignored += 1
+            continue
+        name = str(item.get("name") or "").strip() or f"Contato {number}"
+        normalized[number] = name[:180]
+
+    if not normalized:
+        return {"success": True, "imported": 0, "updated": 0, "ignored": ignored}
+
+    imported = 0
+    updated = 0
+    with Session(engine) as session:
+        existing = session.exec(select(ContatoWhatsApp).where(ContatoWhatsApp.numero.in_(list(normalized.keys())))).all()
+        existing_by_number = {str(contact.numero): contact for contact in existing}
+        for number, name in normalized.items():
+            contact = existing_by_number.get(number)
+            if contact:
+                if not contact.nome or contact.nome.startswith("Contato "):
+                    contact.nome = name
+                if instance and not contact.whatsapp_instance:
+                    contact.whatsapp_instance = instance
+                session.add(contact)
+                updated += 1
+                continue
+            session.add(ContatoWhatsApp(nome=name, numero=number, whatsapp_instance=instance or None))
+            imported += 1
+        session.commit()
+
+    return {"success": True, "imported": imported, "updated": updated, "ignored": ignored}
+
+
 @router.put("/contacts/local/{contact_id}")
 def update_local_contact(contact_id: int, payload: dict = Body(...), request: Request = None):
     _require_atendimento_access(request)
     name = str(payload.get("name") or "").strip()
-    number = "".join(ch for ch in str(payload.get("number") or "") if ch.isdigit())
+    number = _normalize_contact_number(payload.get("number")) or ""
     if not name or len(number) < 8:
         raise HTTPException(status_code=400, detail="Informe nome e um número válido")
     with Session(engine) as session:
@@ -2174,7 +2402,32 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 with Session(engine) as session:
                     target_message = session.exec(select(ChamadoInteracao).where(ChamadoInteracao.whatsapp_message_id == str(target_message_id))).first()
                     if target_message:
-                        target_message.reacao = str(reaction_value)[:32]
+                        reaction_text = str(reaction_value)[:32]
+                        reactor_name = data.get("pushName") or data.get("notifyName") or data.get("senderName") or "Participante"
+                        # O participant dentro de reactionMessage.key pertence à
+                        # mensagem reagida, não necessariamente à pessoa que
+                        # clicou na reação. Para identificar o reator, use a
+                        # chave externa do evento (key) e os campos do payload.
+                        participant = (
+                            key.get("participant") or key.get("senderPn") or key.get("phoneNumber")
+                            or data.get("participant") or data.get("senderPn") or data.get("phoneNumber") or ""
+                        )
+                        if reactor_name == "Participante" and participant:
+                            reactor_name = str(participant).split("@")[0].split(":")[0]
+                        try:
+                            reaction_people = json.loads(target_message.reacao_detalhes or "[]")
+                            if not isinstance(reaction_people, list): reaction_people = []
+                        except Exception:
+                            reaction_people = []
+                        if target_message.reacao == reaction_text:
+                            if not any(str(item.get("name")) == str(reactor_name) for item in reaction_people if isinstance(item, dict)):
+                                reaction_people.append({"name": str(reactor_name), "emoji": reaction_text})
+                            target_message.reacao_quantidade = max(len(reaction_people), (target_message.reacao_quantidade or 1))
+                        else:
+                            target_message.reacao = reaction_text
+                            target_message.reacao_quantidade = 1
+                            reaction_people = [{"name": str(reactor_name), "emoji": reaction_text}]
+                        target_message.reacao_detalhes = json.dumps(reaction_people, ensure_ascii=False)
                         session.add(target_message)
                         session.commit()
                         background_tasks.add_task(manager.broadcast, {"event": "whatsapp_reaction", "ticket_id": target_message.chamado_id, "message_id": target_message.id, "reaction": target_message.reacao})
@@ -2276,7 +2529,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     mensagem=msg_text,
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
-                    whatsapp_participant=str(key.get("participant") or data.get("participant") or "") or None,
+                    whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
                     data_hora=datetime.now()
                 )
                 session.add(interacao)
@@ -2331,7 +2584,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     mensagem=msg_text,
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
-                    whatsapp_participant=str(key.get("participant") or data.get("participant") or "") or None,
+                    whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
                     data_hora=datetime.now()
                 )
                 session.add(interacao)
