@@ -901,7 +901,8 @@
         document.getElementById('timerStartBreak').onclick = () => { const state = { endsAt: Date.now() + 15 * 60 * 1000, remaining: 15 * 60, paused: false, finished: false, break: true, materia: '' }; alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); setState(state); setActiveTimerButton('timerStart'); startTicker(); };
         document.getElementById('timerReset').onclick = () => { localStorage.removeItem(key); clearInterval(ticker); stopBlink(); setActiveTimerButton('timerReset'); if (registroInicio) registroInicio.value = ''; if (registroFim) registroFim.value = ''; display.textContent = '00:50:00'; status.textContent = 'Pronto para iniciar'; status.className = 'text-xs font-bold text-slate-400'; const btnPause = document.getElementById('timerPause'); if(btnPause) btnPause.textContent = 'Pausar'; };
         document.getElementById('timerCloseAlert').onclick = () => { alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); document.dispatchEvent(new CustomEvent('estudos:ir-para-registro')); };
-        if (getState()) startTicker();
+        const _initialTimerState = getState();
+        if (_initialTimerState) { syncRecordFields(_initialTimerState); startTicker(); }
     })();
 </script>
 <script>
@@ -994,6 +995,8 @@
         else if (hash === '#historico' && !savedView) initialView = 'historico';
 
         showView(initialView);
+        // Se abriu direto na aba de registro (ex: reload), sincroniza a matéria do cronômetro
+        if (initialView === 'registro') sincronizarFormularioComCronometro();
 
         // Remove o estilo de flash-fix após aplicar a aba correta
         var flashFix = document.getElementById('estudos-flash-fix');
