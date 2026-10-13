@@ -853,8 +853,9 @@
             if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
             const old = getState();
             const state = old && old.paused && !old.finished ? { ...old, sessionId: old.sessionId || createSessionId(), durationSeconds: old.durationSeconds || old.remaining, paused: false, endsAt: Date.now() + old.remaining * 1000 } : { endsAt: Date.now() + selectedSeconds * 1000, remaining: selectedSeconds, paused: false, finished: false, materia: materia.value.trim(), startedAt: Date.now(), sessionId: createSessionId(), durationSeconds: selectedSeconds };
-            syncRecordFields(state); setState(state); setActiveTimerButton('timerStart'); status.textContent = `Iniciando${state.materia ? ' · ' + state.materia : ''}`; status.className = 'text-xs font-bold text-amber-300'; startTicker();
+            setState(state); setActiveTimerButton('timerStart'); status.textContent = `Iniciando${state.materia ? ' · ' + state.materia : ''}`; status.className = 'text-xs font-bold text-amber-300'; startTicker();
             // Muda para aba "Registrar estudo" para mostrar o pré-cadastro com horário de início
+            // syncRecordFields é chamado APÓS a aba ser exibida (via evento estudos:ir-para-registro)
             document.dispatchEvent(new CustomEvent('estudos:ir-para-registro'));
         };
         document.getElementById('timerPause').onclick = () => { 
@@ -996,6 +997,22 @@
         document.addEventListener('estudos:ir-para-registro', () => {
             localStorage.setItem('estudos_aba_ativa', 'registro');
             showView('registro');
+            // Após exibir a aba, sincroniza a matéria do cronômetro no formulário
+            try {
+                const cronKey = 'estudos_cronometro';
+                const cronState = JSON.parse(localStorage.getItem(cronKey) || 'null');
+                if (cronState && cronState.materia && !cronState.break) {
+                    const selectAssunto = document.querySelector('select[name="assunto"]');
+                    const inputInicio = document.getElementById('registroHorarioInicio');
+                    const inputFim = document.getElementById('registroHorarioFim');
+                    if (selectAssunto && [...selectAssunto.options].some(o => o.value === cronState.materia)) {
+                        selectAssunto.value = cronState.materia;
+                    }
+                    const fmt = ts => ts ? new Date(ts).toTimeString().slice(0, 5) : '';
+                    if (inputInicio && cronState.startedAt) inputInicio.value = fmt(cronState.startedAt);
+                    if (inputFim && cronState.finishedAt) inputFim.value = fmt(cronState.finishedAt);
+                }
+            } catch (e) {}
         });
     })();
 </script>
