@@ -791,7 +791,17 @@
             if (state.break) return;
             if (registroInicio) registroInicio.value = clockValue(state.startedAt);
             if (registroFim) registroFim.value = clockValue(state.finishedAt);
-            if (registroMateria && state.materia && [...registroMateria.options].some(option => option.value === state.materia)) registroMateria.value = state.materia;
+            if (registroMateria && state.materia) {
+                // Tenta setar pelo value exato; se não bater (encoding), busca por texto
+                registroMateria.value = state.materia;
+                if (!registroMateria.value) {
+                    const match = [...registroMateria.options].find(o =>
+                        o.value.trim().toLowerCase() === state.materia.trim().toLowerCase() ||
+                        o.text.trim().toLowerCase() === state.materia.trim().toLowerCase()
+                    );
+                    if (match) registroMateria.value = match.value;
+                }
+            }
         }
 
         function registerCompletedStudy(state) {
@@ -853,9 +863,8 @@
             if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
             const old = getState();
             const state = old && old.paused && !old.finished ? { ...old, sessionId: old.sessionId || createSessionId(), durationSeconds: old.durationSeconds || old.remaining, paused: false, endsAt: Date.now() + old.remaining * 1000 } : { endsAt: Date.now() + selectedSeconds * 1000, remaining: selectedSeconds, paused: false, finished: false, materia: materia.value.trim(), startedAt: Date.now(), sessionId: createSessionId(), durationSeconds: selectedSeconds };
-            setState(state); setActiveTimerButton('timerStart'); status.textContent = `Iniciando${state.materia ? ' · ' + state.materia : ''}`; status.className = 'text-xs font-bold text-amber-300'; startTicker();
+            syncRecordFields(state); setState(state); setActiveTimerButton('timerStart'); status.textContent = `Iniciando${state.materia ? ' · ' + state.materia : ''}`; status.className = 'text-xs font-bold text-amber-300'; startTicker();
             // Muda para aba "Registrar estudo" para mostrar o pré-cadastro com horário de início
-            // syncRecordFields é chamado APÓS a aba ser exibida (via evento estudos:ir-para-registro)
             document.dispatchEvent(new CustomEvent('estudos:ir-para-registro'));
         };
         document.getElementById('timerPause').onclick = () => { 
@@ -969,6 +978,8 @@
             const tabName = tab.dataset.tab;
             localStorage.setItem('estudos_aba_ativa', tabName);
             showView(tabName);
+            // Ao abrir "Registrar estudo" manualmente, sincroniza com o cronômetro ativo
+            if (tabName === 'registro') sincronizarFormularioComCronometro();
         }));
 
         // Lê o hash apenas se veio de uma navegação intencional (link interno)
@@ -993,26 +1004,37 @@
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
         }
 
+        // Sincroniza os campos do formulário com o estado atual do cronômetro
+        function sincronizarFormularioComCronometro() {
+            try {
+                const cronState = JSON.parse(localStorage.getItem('estudos_cronometro') || 'null');
+                if (!cronState || cronState.break) return;
+                const selectAssunto = document.querySelector('select[name="assunto"]');
+                const inputInicio = document.getElementById('registroHorarioInicio');
+                const inputFim = document.getElementById('registroHorarioFim');
+                if (selectAssunto && cronState.materia) {
+                    // Atribuição direta; se não funcionar (encoding), busca por texto
+                    selectAssunto.value = cronState.materia;
+                    if (!selectAssunto.value) {
+                        const match = [...selectAssunto.options].find(o =>
+                            o.value.trim().toLowerCase() === cronState.materia.trim().toLowerCase() ||
+                            o.text.trim().toLowerCase() === cronState.materia.trim().toLowerCase()
+                        );
+                        if (match) selectAssunto.value = match.value;
+                    }
+                }
+                const fmt = ts => ts ? new Date(ts).toTimeString().slice(0, 5) : '';
+                if (inputInicio && cronState.startedAt) inputInicio.value = fmt(cronState.startedAt);
+                if (inputFim && cronState.finishedAt) inputFim.value = fmt(cronState.finishedAt);
+            } catch (e) {}
+        }
+
         // Quando o cronômetro inicia ou termina, muda automaticamente para "Registrar estudo"
         document.addEventListener('estudos:ir-para-registro', () => {
             localStorage.setItem('estudos_aba_ativa', 'registro');
             showView('registro');
-            // Após exibir a aba, sincroniza a matéria do cronômetro no formulário
-            try {
-                const cronKey = 'estudos_cronometro';
-                const cronState = JSON.parse(localStorage.getItem(cronKey) || 'null');
-                if (cronState && cronState.materia && !cronState.break) {
-                    const selectAssunto = document.querySelector('select[name="assunto"]');
-                    const inputInicio = document.getElementById('registroHorarioInicio');
-                    const inputFim = document.getElementById('registroHorarioFim');
-                    if (selectAssunto && [...selectAssunto.options].some(o => o.value === cronState.materia)) {
-                        selectAssunto.value = cronState.materia;
-                    }
-                    const fmt = ts => ts ? new Date(ts).toTimeString().slice(0, 5) : '';
-                    if (inputInicio && cronState.startedAt) inputInicio.value = fmt(cronState.startedAt);
-                    if (inputFim && cronState.finishedAt) inputFim.value = fmt(cronState.finishedAt);
-                }
-            } catch (e) {}
+            // Sincroniza matéria/horários APÓS o form estar visível
+            sincronizarFormularioComCronometro();
         });
     })();
 </script>
