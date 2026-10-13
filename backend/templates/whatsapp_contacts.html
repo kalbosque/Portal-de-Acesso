@@ -176,10 +176,27 @@ function renderContacts() {
     const query = (document.getElementById('contact-search').value || '').toLowerCase();
     const list = contacts.filter(c => `${c.name} ${c.number}`.toLowerCase().includes(query));
     document.getElementById('contact-count').textContent = `${list.length} contato(s)`;
-    document.getElementById('contacts-grid').innerHTML = list.length ? list.map(c => `<div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/50 p-4"><div class="flex min-w-0 items-center gap-3"><div class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-500/15 font-black text-indigo-300">${contactAvatar(c)}</div><div class="min-w-0"><div class="truncate text-sm font-bold text-white">${c.name}</div><div class="text-xs text-slate-500">${formatContactPhone(c.number)}</div></div></div><div class="flex shrink-0 gap-2">${c.local ? `<button onclick='openNewContact(${JSON.stringify(c)})' class="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-300">Editar</button>` : ''}<button onclick='openStartModal(${JSON.stringify(c)})' class="shrink-0 rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black uppercase text-emerald-300 hover:bg-emerald-500/25">Conversar</button></div></div>`).join('') : '<div class="col-span-full py-20 text-center text-sm text-slate-500">Nenhum contato encontrado.</div>';
+    document.getElementById('contacts-grid').innerHTML = list.length ? list.map(c => {
+        const isLocalContact = Boolean(c.local || c.is_local);
+        return `<div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/50 p-4"><div class="flex min-w-0 items-center gap-3"><div class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-500/15 font-black text-indigo-300">${contactAvatar(c)}</div><div class="min-w-0"><div class="truncate text-sm font-bold text-white">${c.name}</div><div class="text-xs text-slate-500">${formatContactPhone(c.number)}</div></div></div><div class="flex shrink-0 gap-2">${isLocalContact ? `<button onclick='openNewContact(${JSON.stringify(c)})' class="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-300">Editar</button><button onclick='deleteLocalContact(${c.id})' class="rounded-lg bg-rose-500/15 px-3 py-2 text-[10px] font-black uppercase text-rose-300 hover:bg-rose-500/25">Excluir</button>` : ''}<button onclick='openStartModal(${JSON.stringify(c)})' class="shrink-0 rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black uppercase text-emerald-300 hover:bg-emerald-500/25">Conversar</button></div></div>`;
+    }).join('') : '<div class="col-span-full py-20 text-center text-sm text-slate-500">Nenhum contato encontrado.</div>';
 }
 function openNewContact(contact = null) { editingContactId = contact?.local ? contact.id : null; const modal = document.getElementById('new-contact-modal'); modal.querySelector('h3').textContent = contact ? 'Editar contato' : 'Novo contato'; document.getElementById('new-name').value = contact?.name || ''; document.getElementById('new-number').value = contact?.number || ''; document.getElementById('new-company').value = contact?.company || ''; document.getElementById('new-note').value = contact?.note || ''; modal.classList.remove('hidden'); modal.classList.add('flex'); document.getElementById('new-name').focus(); }
 function closeNewContact() { editingContactId = null; const modal = document.getElementById('new-contact-modal'); modal.classList.add('hidden'); modal.classList.remove('flex'); }
+async function deleteLocalContact(contactId) {
+    if (!contactId) return;
+    const confirmed = window.confirm('Deseja excluir este contato local?');
+    if (!confirmed) return;
+    try {
+        const res = await fetch(`/api/whatsapp/contacts/local/${contactId}`, { method: 'DELETE', credentials: 'include' });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.detail || 'Não foi possível excluir o contato.');
+        alert('Contato excluído com sucesso.');
+        await syncContacts();
+    } catch (error) {
+        alert(error.message || 'Não foi possível excluir o contato.');
+    }
+}
 async function saveNewContact(event) { event.preventDefault(); const id = editingContactId; const url = id ? `/api/whatsapp/contacts/local/${id}` : '/api/whatsapp/contacts/local'; const res = await fetch(url, {method: id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:document.getElementById('new-name').value,number:document.getElementById('new-number').value,company:document.getElementById('new-company').value,note:document.getElementById('new-note').value})}); if (!res.ok) { alert('Não foi possível salvar o contato.'); return; } closeNewContact(); await syncContacts(); }
 function openStartModal(contact) { document.getElementById('modal-contact-name').textContent = `Conversar com ${contact.name}`; document.getElementById('modal-contact-number').value = contact.number; document.getElementById('modal-contact-instance').value = contact.instance || ''; document.getElementById('modal-message').value = ''; document.getElementById('start-modal').classList.remove('hidden'); document.getElementById('start-modal').classList.add('flex'); document.getElementById('modal-message').focus(); }
 function closeStartModal() { document.getElementById('start-modal').classList.add('hidden'); document.getElementById('start-modal').classList.remove('flex'); }

@@ -96,6 +96,52 @@
         transition: transform .18s ease, filter .18s ease;
     }
     .media-image-trigger:hover img { transform: scale(1.01); filter: brightness(1.08); }
+    .media-album {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 3px;
+        width: min(100%, 360px);
+        overflow: hidden;
+        border-radius: 0.8rem;
+        margin-bottom: 0.25rem;
+        background: #202c33;
+        padding: 3px;
+    }
+    .media-album-header {
+        grid-column: 1 / -1;
+        min-width: 0;
+        padding: 0.4rem 0.45rem 0.3rem;
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
+    }
+    .media-album-header[data-album-side="received"] { color: #94a3b8; text-align: left; }
+    .media-album-header[data-album-side="sent"] { color: #6ee7b7; text-align: right; }
+    .media-album[data-album-side="sent"] { align-self: flex-end; }
+    .media-album[data-album-side="received"] { align-self: flex-start; }
+    .media-album > .message-row { position: relative; display: block; width: auto; height: 170px; min-width: 0; margin: 0; overflow: hidden; }
+    .media-album > .message-row > .bubble { display: block; width: 100%; max-width: none; height: 100%; padding: 0; overflow: hidden; border-radius: 0.4rem; background: transparent; box-shadow: none; }
+    .media-album > .message-row > .bubble::before { display: none; }
+    .media-album .message-sender-label,
+    .media-album .media-type-label,
+    .media-album .bubble-meta,
+    .media-album .reply-action { display: none; }
+    .media-album .message-content,
+    .media-album .media-image-trigger { display: block; width: 100%; height: 100%; max-width: none; }
+    .media-album .media-image-trigger { position: relative; overflow: hidden; cursor: zoom-in; }
+    .media-album .media-image-trigger img { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: cover; background: #0b141a; }
+    .media-album > .media-album-footer { grid-column: 1 / -1; display: flex; justify-content: flex-end; padding: 0.15rem 0.4rem 0.3rem; }
+    .media-album > .media-album-footer .bubble-meta { display: flex; }
+    .media-album .message-actions { opacity: 0; transition: opacity .15s ease; }
+    .media-album > .message-row:hover .message-actions,
+    .media-album > .message-row:focus-within .message-actions { opacity: 1; }
+    .media-album-overflow { display: none !important; }
+    .media-album-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.52); color: white; font-size: 2rem; font-weight: 800; pointer-events: none; }
+    @media (max-width: 640px) {
+        .media-album { width: min(100%, 340px); }
+        .media-album > .message-row { height: 150px; }
+    }
     .col-sidebar > .p-4 { position: relative; }
     .queue-menu { display: none; position: absolute; top: 10.6rem; left: 1rem; right: 1rem; z-index: 120; max-height: min(22rem, calc(100vh - 11rem)); overflow-y: auto; }
     .queue-inline-logo { display: none !important; }
@@ -763,7 +809,10 @@
 
 <div id="image-preview-modal" class="fixed inset-0 z-[130] items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Visualização da imagem">
     <button type="button" id="image-preview-close" class="absolute right-5 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20" aria-label="Fechar visualização">×</button>
+    <button type="button" id="image-preview-prev" class="absolute left-4 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Imagem anterior">‹</button>
     <img id="image-preview-content" src="" alt="Imagem ampliada" class="rounded-xl shadow-2xl">
+    <button type="button" id="image-preview-next" class="absolute right-4 top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Próxima imagem">›</button>
+    <span id="image-preview-counter" class="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-sm font-semibold text-white"></span>
 </div>
 
 <!-- Banner de permissão de notificação -->
@@ -840,6 +889,7 @@
     let chatsData = [];
     let activeTicketId = null;
     let lastTimelineMessageId = 0;
+    let messageHistoryLoadToken = 0;
     let typingTimer = null;
     let remoteTyping = false;
     let remoteTypingTimeout = null;
@@ -912,13 +962,47 @@
         } catch (_) {}
     }
 
-    function openImagePreview(url) {
+    let imagePreviewItems = [];
+    let imagePreviewIndex = -1;
+
+    function renderImagePreview() {
         const modal = document.getElementById('image-preview-modal');
         const image = document.getElementById('image-preview-content');
-        if (!modal || !image || !url) return;
-        image.src = url;
+        const previous = document.getElementById('image-preview-prev');
+        const next = document.getElementById('image-preview-next');
+        const counter = document.getElementById('image-preview-counter');
+        const item = imagePreviewItems[imagePreviewIndex];
+        if (!modal || !image || !item) return;
+
+        image.src = item.dataset.imageUrl || item.href;
+        image.alt = item.querySelector('img')?.alt || 'Imagem ampliada';
+        const hasMultipleImages = imagePreviewItems.length > 1;
+        previous?.classList.toggle('hidden', !hasMultipleImages);
+        next?.classList.toggle('hidden', !hasMultipleImages);
+        if (previous) previous.disabled = imagePreviewIndex === 0;
+        if (next) next.disabled = imagePreviewIndex === imagePreviewItems.length - 1;
+        if (counter) {
+            counter.textContent = hasMultipleImages ? `${imagePreviewIndex + 1} / ${imagePreviewItems.length}` : '';
+            counter.classList.toggle('hidden', !hasMultipleImages);
+        }
         modal.classList.add('is-open');
         document.body.classList.add('overflow-hidden');
+    }
+
+    function openImagePreview(trigger) {
+        const timeline = document.getElementById('chat-timeline');
+        if (!timeline || !trigger) return;
+        imagePreviewItems = Array.from(timeline.querySelectorAll('.media-image-trigger'));
+        imagePreviewIndex = imagePreviewItems.indexOf(trigger);
+        if (imagePreviewIndex < 0) return;
+        renderImagePreview();
+    }
+
+    function navigateImagePreview(direction) {
+        const nextIndex = imagePreviewIndex + direction;
+        if (nextIndex < 0 || nextIndex >= imagePreviewItems.length) return;
+        imagePreviewIndex = nextIndex;
+        renderImagePreview();
     }
 
     function closeImagePreview() {
@@ -926,6 +1010,8 @@
         const image = document.getElementById('image-preview-content');
         modal?.classList.remove('is-open');
         image?.removeAttribute('src');
+        imagePreviewItems = [];
+        imagePreviewIndex = -1;
         document.body.classList.remove('overflow-hidden');
     }
 
@@ -934,13 +1020,25 @@
         if (trigger) {
             event.preventDefault();
             event.stopPropagation();
-            openImagePreview(trigger.dataset.imageUrl || trigger.href);
+            openImagePreview(trigger);
+            return;
+        }
+        if (event.target.closest?.('#image-preview-prev')) {
+            navigateImagePreview(-1);
+            return;
+        }
+        if (event.target.closest?.('#image-preview-next')) {
+            navigateImagePreview(1);
             return;
         }
         if (event.target.id === 'image-preview-modal' || event.target.closest?.('#image-preview-close')) closeImagePreview();
     });
     document.addEventListener('keydown', (event) => {
+        const modal = document.getElementById('image-preview-modal');
+        if (!modal?.classList.contains('is-open')) return;
         if (event.key === 'Escape') closeImagePreview();
+        if (event.key === 'ArrowLeft') navigateImagePreview(-1);
+        if (event.key === 'ArrowRight') navigateImagePreview(1);
     });
 
     function escapeHtml(value) {
@@ -1561,6 +1659,13 @@
         document.getElementById('queue-menu')?.classList.remove('is-open');
     }
 
+    document.addEventListener('click', (event) => {
+        const menu = document.getElementById('queue-menu');
+        if (!menu?.classList.contains('is-open')) return;
+        if (event.target.closest?.('#queue-menu, [aria-label="Menu de atendimentos"]')) return;
+        menu.classList.remove('is-open');
+    }, true);
+
     function clearActiveConversation() {
         activeTicketId = null;
         remoteTyping = false;
@@ -1789,10 +1894,12 @@
     }
 
     async function loadMessages(ticketId) {
+        const loadToken = ++messageHistoryLoadToken;
         try {
-            const res = await fetch(`/api/tickets/chat/${ticketId}`);
+            const res = await fetch(`/api/tickets/chat?chamado_id=${ticketId}`);
             if (!res.ok) throw new Error(`Falha ao carregar histórico (${res.status})`);
             const payload = await res.json();
+            if (loadToken !== messageHistoryLoadToken || !sameTicket(ticketId, activeTicketId)) return;
             const messages = Array.isArray(payload) ? payload : (payload.messages || []);
             
             const timeline = document.getElementById('chat-timeline');
@@ -1806,6 +1913,7 @@
                 updateLatestMessageButton();
             }, 50);
         } catch(e) {
+            if (loadToken !== messageHistoryLoadToken) return;
             console.error("Erro ao carregar mensagens:", e);
         }
     }
@@ -1837,6 +1945,13 @@
         row.className = `message-row flex ${m.is_me ? 'justify-end' : 'justify-start'} w-full mb-1 relative z-10`;
         row.dataset.messageId = m.id || '';
         row.dataset.messageText = m.mensagem || '';
+        const mediaInfo = parseTimelineMedia(m.mensagem);
+        if (mediaInfo?.type === 'image') {
+            row.dataset.albumImage = 'true';
+            row.dataset.albumSender = String(m.whatsapp_participant || m.usuario || '');
+            row.dataset.albumSide = m.is_me ? 'sent' : 'received';
+            row.dataset.albumTime = String(parseTimelineTimestamp(m.data_hora));
+        }
         row.addEventListener('click', (event) => {
             if (!messageSelectionMode || event.target.closest('button, a, input, audio, video')) return;
             event.stopPropagation();
@@ -1848,24 +1963,19 @@
         bubble.className = `bubble ${m.is_me ? 'sent' : 'received'} relative`;
         
         const messageText = String(m.mensagem || '[Mensagem]');
-        let media = null;
-        try {
-            const parsed = JSON.parse(messageText);
-            if (parsed && parsed.__wa_media__) media = parsed;
-        } catch (_) {}
+        const media = mediaInfo;
 
         let formattedMsg = messageText.replace(/\n/g, '<br>');
         if (media) {
             let mediaUrl = media.url;
             if (mediaUrl && mediaUrl.startsWith('/')) {
-                const baseUrl = "{{ config.URL_ATENDIMENTO | default('http://192.168.1.230:3001/central-atendimento') }}".replace("/central-atendimento", "");
-                media.url = baseUrl + mediaUrl;
+                media.url = new URL(mediaUrl, window.location.origin).href;
             }
             const caption = media.caption ? `<div class="mt-2 text-sm">${media.caption}</div>` : '';
             const direction = m.is_me ? 'enviado' : 'recebido';
             const directionF = m.is_me ? 'enviada' : 'recebida';
             if (media.type === 'image') {
-                formattedMsg = `<div class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar imagem"><img src="${escapeHtml(media.url)}" class="rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
+                formattedMsg = `<div class="media-type-label mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar imagem"><img src="${escapeHtml(media.url)}" class="rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
             } else if (media.type === 'gif') {
                 const isVideoGif = String(media.mime || '').startsWith('video/');
                 formattedMsg = isVideoGif
@@ -1897,17 +2007,17 @@
         ticks = ticks.replace('text-[#53bdeb]', tickColor);
         const canEdit = m.can_edit ?? m.is_me;
         const canDelete = m.can_delete ?? (m.is_me || is_admin);
-        const replyAction = !isDeleted ? `<button type="button" onclick="replyToMessage(${m.id})" class="text-[10px] font-bold text-slate-400 hover:text-emerald-300" title="Responder">Responder</button>` : '';
+        const replyAction = !isDeleted ? `<button type="button" onclick="replyToMessage(${m.id})" class="reply-action text-[10px] font-bold text-slate-400 hover:text-emerald-300" title="Responder">Responder</button>` : '';
         const messageActions = !isDeleted
-            ? `<div class="absolute right-2 top-2 z-20"><button type="button" onclick="toggleMessageMenu(${m.id}, event)" class="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white" title="Opções">⋮</button><div id="message-menu-${m.id}" class="message-menu hidden absolute right-0 top-7 min-w-40 overflow-hidden rounded-xl border border-white/10 bg-slate-800 shadow-2xl">${canEdit ? `<button type="button" onclick="editarMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-slate-200 hover:bg-white/10">Editar</button>` : ''}${canDelete ? `<button type="button" onclick="excluirMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-rose-300 hover:bg-white/10">Excluir</button>` : ''}</div></div>`
+            ? `<div class="message-actions absolute right-2 top-2 z-20"><button type="button" onclick="toggleMessageMenu(${m.id}, event)" class="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white" title="Opções">⋮</button><div id="message-menu-${m.id}" class="message-menu hidden absolute right-0 top-7 min-w-40 overflow-hidden rounded-xl border border-white/10 bg-slate-800 shadow-2xl">${canEdit ? `<button type="button" onclick="editarMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-slate-200 hover:bg-white/10">Editar</button>` : ''}${canDelete ? `<button type="button" onclick="excluirMensagem(${m.id}); fecharMenusMensagem()" class="block w-full px-3 py-2 text-left text-[10px] text-rose-300 hover:bg-white/10">Excluir</button>` : ''}</div></div>`
             : '';
         if (isDeleted) formattedMsg = '<span class="italic text-slate-500">Mensagem excluída</span>';
 
         bubble.innerHTML = `
             ${m.whatsapp_message_id ? `<button type="button" class="reaction-trigger flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-slate-800 text-sm text-slate-300 shadow-lg" onclick="reactToMessage(${m.id})" title="Reagir">☺</button>` : ''}
-            <div class="mb-1 text-[10px] font-black uppercase tracking-wider ${m.is_me ? 'text-emerald-300' : 'text-slate-400'}">${m.is_me ? 'Atendente · ' + currentUser : (m.usuario || 'Cliente')}</div>
+            <div class="message-sender-label mb-1 text-[10px] font-black uppercase tracking-wider ${m.is_me ? 'text-emerald-300' : 'text-slate-400'}">${m.is_me ? 'Atendente · ' + currentUser : (m.usuario || 'Cliente')}</div>
             ${m.responde_a_id ? `<div class="mb-2 rounded-lg border-l-2 border-emerald-400 bg-black/10 px-2 py-1"><div class="text-[9px] font-black text-emerald-300">${escapeHtml(m.responde_a_usuario || 'Mensagem')}</div><div class="truncate text-[10px] text-slate-400">${escapeHtml(m.responde_a_texto || '')}</div></div>` : ''}
-            <div class="text-[14.2px]">${formattedMsg}</div>
+            <div class="message-content text-[14.2px]">${formattedMsg}</div>
             ${m.reacao ? `<button type="button" class="message-reaction absolute -bottom-2 left-3 inline-flex items-center gap-0.5 rounded-full border border-white/10 bg-slate-800 px-1.5 py-0.5 text-sm leading-none shadow hover:border-emerald-400/60" title="${escapeHtml(reactionPeopleTitle(m))}" onclick="showReactionPeople(${m.id}, event)"><span>${escapeHtml(m.reacao)}</span>${Number(m.reacao_quantidade || 0) > 1 ? `<span class="text-[10px] font-black text-slate-300">${Number(m.reacao_quantidade)}</span>` : ''}</button>` : ''}
             ${m.favorito ? `<span class="favorite-message-indicator" title="Mensagem favoritada" aria-label="Mensagem favoritada">★</span>` : ''}
             ${messageActions}
@@ -1966,6 +2076,7 @@
         }
         row.appendChild(bubble);
         timeline.appendChild(row);
+        agruparFotoConsecutiva(row);
         if (messageSelectionMode) adicionarCheckboxSelecao(row);
         if (m.id) lastTimelineMessageId = Math.max(lastTimelineMessageId, Number(m.id));
 
@@ -1975,6 +2086,79 @@
                 behavior: 'smooth'
             });
             setTimeout(updateLatestMessageButton, 350);
+        }
+    }
+
+    function parseTimelineMedia(message) {
+        try {
+            const parsed = JSON.parse(String(message || ''));
+            return parsed?.__wa_media__ ? parsed : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function parseTimelineTimestamp(value) {
+        const match = String(value || '').match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
+        if (!match) return Number.NaN;
+        return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), Number(match[4]), Number(match[5]), Number(match[6])).getTime();
+    }
+
+    function agruparFotoConsecutiva(row) {
+        if (row.dataset.albumImage !== 'true') return;
+        const previous = row.previousElementSibling;
+        const previousRows = previous?.matches('.media-album') ? Array.from(previous.querySelectorAll(':scope > .message-row')) : [];
+        const previousRow = previousRows.length ? previousRows[previousRows.length - 1] : previous;
+        if (!previousRow?.matches('.message-row[data-album-image="true"]')) return;
+        if (previousRow.dataset.albumSender !== row.dataset.albumSender || previousRow.dataset.albumSide !== row.dataset.albumSide) return;
+
+        const previousTime = Number(previousRow.dataset.albumTime);
+        const currentTime = Number(row.dataset.albumTime);
+        const interval = currentTime - previousTime;
+        if (!Number.isFinite(interval) || interval < 0 || interval > 120000) return;
+
+        let album = previous?.matches('.media-album') ? previous : null;
+        if (!album) {
+            album = document.createElement('div');
+            album.className = 'media-album';
+            album.dataset.albumSide = row.dataset.albumSide;
+            const senderLabel = previousRow.querySelector('.message-sender-label');
+            if (senderLabel) {
+                const header = document.createElement('div');
+                header.className = 'media-album-header';
+                header.dataset.albumSide = row.dataset.albumSide;
+                header.textContent = senderLabel.textContent;
+                album.appendChild(header);
+            }
+            previousRow.before(album);
+            album.appendChild(previousRow);
+            const footer = document.createElement('div');
+            footer.className = 'media-album-footer';
+            album.appendChild(footer);
+        }
+
+        const footer = album.querySelector(':scope > .media-album-footer');
+        album.insertBefore(row, footer);
+        atualizarVisualAlbum(album);
+    }
+
+    function atualizarVisualAlbum(album) {
+        const rows = Array.from(album.querySelectorAll(':scope > .message-row[data-album-image="true"]'));
+        rows.forEach((item, index) => item.classList.toggle('media-album-overflow', index >= 4));
+
+        const footer = album.querySelector(':scope > .media-album-footer');
+        const latestMetadata = rows.at(-1)?.querySelector('.bubble-meta');
+        if (footer && latestMetadata) footer.replaceChildren(latestMetadata);
+
+        album.querySelector('.media-album-more')?.remove();
+        if (rows.length > 4) {
+            const lastVisibleLink = rows[3].querySelector('.media-image-trigger');
+            if (lastVisibleLink) {
+                const overlay = document.createElement('span');
+                overlay.className = 'media-album-more';
+                overlay.textContent = `+${rows.length - 4}`;
+                lastVisibleLink.appendChild(overlay);
+            }
         }
     }
 

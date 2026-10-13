@@ -1870,7 +1870,16 @@ def get_whatsapp_contacts(request: Request, instance: Optional[str] = None):
         with Session(engine) as session:
             local = session.exec(select(ContatoWhatsApp).order_by(ContatoWhatsApp.nome)).all()
         existing = {str(item.get("number")) for item in synced}
-        synced.extend({"id": item.id, "name": item.nome, "number": _real_contact_number({"number": item.numero}), "company": item.empresa or "", "note": item.observacao or "", "instance": item.whatsapp_instance or resolved, "local": True} for item in local if _real_contact_number({"number": item.numero}) and _real_contact_number({"number": item.numero}) not in existing)
+        synced.extend({
+            "id": item.id,
+            "name": item.nome,
+            "number": _real_contact_number({"number": item.numero}),
+            "company": item.empresa or "",
+            "note": item.observacao or "",
+            "instance": item.whatsapp_instance or resolved,
+            "local": True,
+            "is_local": True,
+        } for item in local if _real_contact_number({"number": item.numero}) and _real_contact_number({"number": item.numero}) not in existing)
         return synced
     except HTTPException:
         raise
@@ -2023,6 +2032,18 @@ def update_local_contact(contact_id: int, payload: dict = Body(...), request: Re
         contact.empresa = str(payload.get("company") or "").strip() or None
         contact.observacao = str(payload.get("note") or "").strip() or None
         session.add(contact)
+        session.commit()
+    return {"success": True, "id": contact_id}
+
+
+@router.delete("/contacts/local/{contact_id}")
+def delete_local_contact(contact_id: int, request: Request = None):
+    _require_atendimento_access(request)
+    with Session(engine) as session:
+        contact = session.get(ContatoWhatsApp, contact_id)
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contato não encontrado")
+        session.delete(contact)
         session.commit()
     return {"success": True, "id": contact_id}
 
@@ -2443,6 +2464,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
             msg_text = message_obj["conversation"]
         elif "extendedTextMessage" in message_obj:
             msg_text = message_obj["extendedTextMessage"].get("text", "")
+        elif "albumMessage" in message_obj:
+            album = message_obj.get("albumMessage") or {}
+            caption = album.get("caption", "") if isinstance(album, dict) else ""
+            msg_text = _save_incoming_media(message_obj, key, instance_from_payload, "image", caption)
         elif "imageMessage" in message_obj:
             caption = message_obj["imageMessage"].get("caption", "")
             msg_text = _save_incoming_media(message_obj, key, instance_from_payload, "image", caption)

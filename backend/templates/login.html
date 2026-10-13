@@ -235,6 +235,12 @@
             {% endif %}
 
         </div>
+        <div class="mt-8 flex justify-center">
+            <a href="/static/downloads/Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" download="Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" class="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-5 py-3 text-[10px] font-black uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-400/15 focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Baixar aplicativo da Central de Atendimento para Windows 64 bits, versão 0.1.5">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0 4-4m-4 4-4-4m-3 8h14"></path></svg>
+                Baixar aplicativo para Windows (64 bits)
+            </a>
+        </div>
     </div>
 
     <div id="loginFormContainer" class="login-container w-full max-w-md px-4" style="{% if only_atendimento %}display:block; opacity:1; transform: translateY(0);{% endif %}">
@@ -250,9 +256,8 @@
             </div>
 
             <div class="relative flex bg-white/5 rounded-2xl p-1 mb-6 border border-white/5">
-                <div id="tabIndicator" class="tab-indicator absolute top-1 bottom-1 rounded-xl bg-indigo-600 shadow-lg" style="width:33.33%;left:0"></div>
+                <div id="tabIndicator" class="tab-indicator absolute top-1 bottom-1 rounded-xl bg-indigo-600 shadow-lg" style="width:50%;left:0"></div>
                 <button id="tab_login" onclick="switchTab('login')" class="tab-btn active relative z-10 flex-1 py-2 text-[9px] font-black uppercase tracking-widest text-white">Login</button>
-                <button id="tab_cadastro" onclick="switchTab('cadastro')" class="tab-btn relative z-10 flex-1 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Cadastro</button>
                 <button id="tab_reset" onclick="switchTab('reset')" class="tab-btn relative z-10 flex-1 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400">Esqueci</button>
             </div>
 
@@ -279,33 +284,6 @@
                 </form>
             </div>
 
-            <div id="form_cadastro" class="hidden">
-                <form id="registerForm" class="space-y-4">
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 ml-1">Nome Completo</label>
-                        <input type="text" name="nome" required class="glass-input w-full px-5 py-3.5 rounded-2xl text-white font-bold text-sm" placeholder="Seu nome completo">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 ml-1">E-mail Corporativo</label>
-                        <input type="email" name="email" required class="glass-input w-full px-5 py-3.5 rounded-2xl text-white font-bold text-sm" placeholder="seu@email.com">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 ml-1">Nome de Usuário</label>
-                        <input type="text" name="username" required class="glass-input w-full px-5 py-3.5 rounded-2xl text-white font-bold text-sm" placeholder="Escolha um usuário">
-                    </div>
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 ml-1">Senha (6 a 8 chars)</label>
-                        <input type="password" name="password" required class="glass-input w-full px-5 py-3.5 rounded-2xl text-white font-bold text-sm" placeholder="********">
-                    </div>
-                    <div class="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-                        <p class="text-[9px] text-emerald-400 font-black uppercase tracking-widest">Sua conta será ativada instantaneamente</p>
-                    </div>
-                    <button type="submit" class="w-full bg-emerald-600 text-white font-black text-xs uppercase tracking-[0.2em] py-4 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all active:scale-95 border border-white/10">
-                        Finalizar Cadastro
-                    </button>
-                </form>
-            </div>
-
             <div id="form_reset" class="hidden text-center">
                 <div class="text-center mb-5 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
                     <p class="text-[10px] text-indigo-300 font-bold leading-relaxed">Informe seu login para gerar uma senha temporária.</p>
@@ -317,6 +295,10 @@
                     </button>
                 </form>
             </div>
+            <a href="/static/downloads/Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" download="Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" class="mt-6 flex items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-400/15 focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Baixar aplicativo da Central de Atendimento para Windows 64 bits, versão 0.1.5">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0 4-4m-4 4-4-4m-3 8h14"></path></svg>
+                Baixar aplicativo Windows · v0.1.5
+            </a>
         </div>
     </div>
 
@@ -337,11 +319,11 @@
         setInterval(nextSlide, 6000);
 
         // ===== LÓGICA DE LOGIN =====
-        const tabPositions = { login: '0', cadastro: '33.33%', reset: '66.66%' };
+        const tabPositions = { login: '0', reset: '50%' };
 
         function switchTab(tab) {
             document.getElementById('tabIndicator').style.left = tabPositions[tab];
-            ['login', 'cadastro', 'reset'].forEach(t => {
+            ['login', 'reset'].forEach(t => {
                 document.getElementById(`tab_${t}`).classList.toggle('active', t === tab);
                 document.getElementById(`tab_${t}`).classList.toggle('text-white', t === tab);
                 document.getElementById(`tab_${t}`).classList.toggle('text-slate-400', t !== tab);
@@ -447,13 +429,6 @@
                     alert('Nao foi possivel conectar ao servidor.');
                 }
             }
-        };
-
-        document.getElementById('registerForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const fd = new FormData(e.target);
-            const res = await fetch('/api/auth/register', { method: 'POST', body: fd }).then(r => r.json());
-            if(res.success) { alert(res.message); switchTab('login'); } else alert(res.detail || 'Erro no cadastro');
         };
 
         document.getElementById('resetForm').onsubmit = async (e) => {

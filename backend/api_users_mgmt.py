@@ -77,7 +77,9 @@ async def create_user(
     _ensure_company_columns()
     form_data = await request.form()
     perms = form_data.getlist("perms")
-    if role in (CLIENT_ATTENDANCE_ROLE, "recepcao", "recepção", "recepcionista"):
+    if role == "estudante":
+        perms = []
+    elif role in (CLIENT_ATTENDANCE_ROLE, "recepcao", "recepção", "recepcionista"):
         perms = ["Atendimento"]
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Senha muito curta")
@@ -131,7 +133,9 @@ async def edit_perms(
     _ensure_company_columns()
     form_data = await request.form()
     perms = form_data.getlist("perms")
-    if role in (CLIENT_ATTENDANCE_ROLE, "recepcao", "recepção", "recepcionista"):
+    if role == "estudante":
+        perms = []
+    elif role in (CLIENT_ATTENDANCE_ROLE, "recepcao", "recepção", "recepcionista"):
         perms = ["Atendimento"]
     with Session(engine) as session:
         user = session.get(Usuario, user_id)

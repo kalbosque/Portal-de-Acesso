@@ -1,0 +1,1087 @@
+{% extends "base.html" %}
+
+{% block title %}Estudos | {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<style>
+    .study-schedule-date,
+    .study-schedule-time,
+    .study-history-date {
+        color-scheme: dark;
+        appearance: none;
+    }
+
+    .study-schedule-date::-webkit-calendar-picker-indicator,
+    .study-schedule-time::-webkit-calendar-picker-indicator,
+    .study-history-date::-webkit-calendar-picker-indicator {
+        filter: brightness(0) invert(1);
+        opacity: 1;
+        cursor: pointer;
+        margin-left: 0.2rem;
+    }
+
+    .study-history-date {
+        font-weight: 500;
+    }
+</style>
+
+<script>
+(function(){
+    var aba = localStorage.getItem('estudos_aba_ativa');
+    if (aba && aba !== 'quadro') {
+        // Esconde o quadro antes de renderizar para evitar o flash visual
+        var s = document.createElement('style');
+        s.id = 'estudos-flash-fix';
+        s.textContent = '#quadro { display: none !important; }';
+        document.head.appendChild(s);
+    }
+})();
+</script>
+<div class="max-w-7xl mx-auto px-4 py-8">
+    <div class="mb-5 flex flex-col gap-3">
+        <div>
+            <p class="text-xs font-black uppercase tracking-[0.28em] text-emerald-400">Portal</p>
+            <h1 class="mt-2 text-3xl font-black text-white">Estudos</h1>
+        </div>
+    </div>
+
+    <!-- Safelist de cores para o Tailwind não remover as classes geradas dinamicamente via JS -->
+    <div class="hidden bg-sky-500 text-white shadow-lg shadow-sky-500/25"></div>
+
+    <nav class="mb-6 flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-2 md:flex-row md:items-center md:justify-between" aria-label="Navegação dos estudos">
+        <div class="flex flex-wrap gap-1.5">
+            <button type="button" data-tab="quadro" aria-selected="true" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all bg-sky-500 text-white shadow-lg shadow-sky-500/25">Quadro de horários</button>
+            <button type="button" data-tab="registro" aria-selected="false" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all text-slate-400 hover:bg-white/5 hover:text-slate-200">Registrar estudo</button>
+            <button type="button" data-tab="historico" aria-selected="false" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all text-slate-400 hover:bg-white/5 hover:text-slate-200">Histórico</button>
+            <button type="button" data-tab="desempenho" aria-selected="false" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all text-slate-400 hover:bg-white/5 hover:text-slate-200">Desempenho</button>
+        </div>
+        <div class="grid w-full grid-cols-4 gap-2 md:w-[420px] md:shrink-0" aria-label="Resumo geral de questões">
+            <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
+                <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Questões</div>
+                <div class="mt-0.5 text-lg font-black tabular-nums text-white">{{ total_questoes }}</div>
+            </div>
+            <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
+                <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Acertos</div>
+                <div class="mt-0.5 text-lg font-black tabular-nums text-emerald-400">{{ total_acertos }}</div>
+            </div>
+            <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
+                <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Erros</div>
+                <div class="mt-0.5 text-lg font-black tabular-nums text-rose-400">{{ total_erros }}</div>
+            </div>
+            {% set total_respostas = total_acertos + total_erros %}
+            {% set aproveitamento_geral = (total_acertos / total_respostas * 100) | round(1) if total_respostas > 0 else 0 %}
+            <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
+                <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">% Geral</div>
+                <div class="mt-0.5 text-lg font-black tabular-nums text-amber-400">{{ '{:0.1f}'.format(aproveitamento_geral).replace('.0', '') }}%</div>
+            </div>
+        </div>
+    </nav>
+
+    <section class="sticky top-20 z-40 mb-6 rounded-2xl border border-amber-500/20 bg-slate-900/95 p-4 shadow-xl shadow-slate-950/30 backdrop-blur-md">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Foco de estudo</p>
+                <div class="mt-1 flex flex-wrap items-center gap-3">
+                    <h2 id="timerDisplay" class="text-3xl font-black tabular-nums text-white">00:50:00</h2>
+                    <span id="timerStatus" class="text-xs font-bold text-slate-400">Pronto para iniciar</span>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <select id="timerMateria" class="w-48 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer">
+                    <option value="">Escolha a matéria</option>
+                    {% for materia in materias_grade %}
+                    <option value="{{ materia }}">{{ materia }}</option>
+                    {% endfor %}
+                </select>
+                <select id="timerDuration" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer">
+                    <option value="1500">25 min</option>
+                    <option value="3000" selected>50 min</option>
+                    <option value="5400">90 min</option>
+                    <option value="custom">Personalizado</option>
+                </select>
+                <input id="timerCustom" type="number" min="1" max="600" value="2" aria-label="Quantidade de minutos" class="hidden w-20 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors">
+                <button id="timerStart" type="button" class="rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-950 hover:bg-amber-300 transition-colors">Iniciar</button>
+                <button id="timerPause" type="button" class="timer-action-button rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-300 transition-colors">Pausar</button>
+                <button id="timerFinish" type="button" class="timer-action-button rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-300 transition-colors">Finalizar</button>
+                <button id="timerReset" type="button" class="timer-action-button rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-300 transition-colors">Zerar</button>
+            </div>
+        </div>
+    </section>
+
+    {% if success == 'ok' %}
+    <div class="study-success-message mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        Sessão de estudo salva com sucesso.
+    </div>
+    {% elif success == 'plano' %}
+    <div class="study-success-message mb-6 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+        Matéria adicionada ao plano semanal.
+    </div>
+    {% elif success == 'plano_importado' %}
+    <div class="study-success-message mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+        Plano de estudo importado com sucesso.
+    </div>
+    {% elif success == 'grade' %}
+    <div class="study-success-message mb-6 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+        Quadro de horários salvo com sucesso.
+    </div>
+    {% elif success == 'excluido' %}
+    <div class="study-success-message mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        Registro excluído com sucesso.
+    </div>
+    {% elif success == 'erro' %}
+    <div class="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+        Não foi possível salvar a sessão de estudo.
+    </div>
+    {% endif %}
+
+    <div id="quadro" class="mb-6 scroll-mt-6 rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-2xl shadow-slate-950/30">
+        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <p class="text-xs font-black uppercase tracking-[0.2em] text-sky-300">Quadro de horários</p>
+                <h2 class="mt-2 text-xl font-black text-white">Planejamento da semana</h2>
+            </div>
+            <div class="text-xs text-slate-400">Preencha as matérias e salve tudo de uma vez.</div>
+        </div>
+        {% if materias_quadro %}
+        <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Legenda de cores das matérias">
+            {% for materia in materias_quadro %}
+            <span class="inline-flex max-w-full items-center gap-2 text-xs text-slate-300">
+                <span class="h-2.5 w-2.5 shrink-0 rounded-sm" style="background-color: {{ materia_cores[materia.casefold()][0] }}"></span>
+                <span class="break-words">{{ materia }}</span>
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="/estudos/grade" class="space-y-3">
+            <input type="hidden" name="semana_inicio" value="{{ semana_inicio }}">
+            <div class="overflow-x-auto rounded-2xl border border-white/10">
+                <table class="w-full min-w-[1120px] table-fixed border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-sky-500/20 text-sky-100">
+                            <th class="w-28 border-b border-r border-white/15 px-3 py-3 text-left font-black uppercase tracking-[0.12em]">Hora</th>
+                            {% for dia in dias_grade %}
+                            <th class="border-b border-r border-white/15 px-3 py-3 text-left font-black uppercase tracking-[0.12em] last:border-r-0">{{ dia }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for horario in horarios_grade %}
+                        {% set slot = loop.index0 %}
+                        <tr class="h-24 border-b border-white/5 last:border-b-0">
+                            <th class="w-28 border-r border-white/10 bg-slate-950/70 px-2 py-2 text-left align-top font-black text-slate-300">
+                                <input type="time" name="horario_inicio_{{ slot }}" value="{{ horario[0] }}" class="study-schedule-time w-full rounded border border-white/10 bg-slate-900 px-1 py-1 text-xs text-white outline-none focus:border-sky-400">
+                                <span class="my-1 block text-center text-[10px] font-normal text-slate-500">até</span>
+                                <input type="time" name="horario_fim_{{ slot }}" value="{{ horario[1] }}" class="study-schedule-time w-full rounded border border-white/10 bg-slate-900 px-1 py-1 text-xs text-white outline-none focus:border-sky-400">
+                            </th>
+                            {% for dia in dias_grade %}
+                            {% set dia_index = loop.index0 %}
+                            <td class="border-r border-white/10 bg-slate-950/30 p-1 align-top last:border-r-0">
+                                {% set materia_celula = grade.get(horario[0] ~ '-' ~ horario[1] ~ '-' ~ dia, '') %}
+                                {% set cores_celula = materia_cores.get(materia_celula.casefold()) if materia_celula else none %}
+                                <textarea name="grade_{{ slot }}_{{ dia_index }}" rows="2" placeholder="Matéria" style="{% if cores_celula %}--materia-cor: {{ cores_celula[0] }}; --materia-fundo: {{ cores_celula[1] }};{% endif %}" class="study-materia-cell h-20 w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-2 text-xs font-bold uppercase leading-5 text-white outline-none placeholder:text-slate-600 focus:border-sky-400 focus:bg-slate-900">{{ materia_celula }}</textarea>
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-xs text-slate-500">A semana começa em {{ semana_inicio.strftime('%d/%m/%Y') }}. Para trocar, use o endereço com o parâmetro semana.</p>
+                <div class="flex items-center gap-2">
+                    <label class="flex cursor-pointer items-center justify-center rounded-xl border border-sky-400/30 bg-slate-900/70 px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-sky-200 transition-all hover:bg-slate-800">
+                        <span>Arquivo</span>
+                        <input type="file" id="importarPlanoArquivo" accept=".txt,.md,.csv,.json" class="hidden">
+                    </label>
+                    <button type="submit" class="rounded-xl bg-sky-500 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-lg shadow-sky-500/30 transition-all hover:bg-sky-400">Salvar quadro</button>
+                </div>
+            </div>
+        </form>
+
+        <form id="form-importar-plano" method="post" action="/estudos/importar-plano" enctype="multipart/form-data" class="hidden">
+            <input type="hidden" name="semana_inicio" value="{{ semana_inicio }}">
+            <textarea name="plano_texto" class="hidden"></textarea>
+            <input type="file" name="plano_arquivo" id="importarPlanoArquivoReal" accept=".txt,.md,.csv,.json" class="hidden">
+        </form>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const trigger = document.getElementById('importarPlanoArquivo');
+                const realInput = document.getElementById('importarPlanoArquivoReal');
+                const form = document.getElementById('form-importar-plano');
+                const texto = form.querySelector('textarea[name="plano_texto"]');
+
+                if (trigger && realInput && form && texto) {
+                    trigger.addEventListener('click', function () {
+                        realInput.click();
+                    });
+
+                    realInput.addEventListener('change', async function () {
+                        const file = realInput.files && realInput.files[0];
+                        if (!file) return;
+
+                        try {
+                            const text = await file.text();
+                            texto.value = text;
+                            form.submit();
+                        } catch (error) {
+                            alert('Não foi possível ler o arquivo do plano.');
+                        }
+                    });
+                }
+            });
+        </script>
+    </div>
+
+    <div class="hidden mb-6 grid gap-6 lg:grid-cols-[420px_minmax(0,1fr)]">
+        <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-2xl shadow-slate-950/30">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-xs font-black uppercase tracking-[0.2em] text-sky-300">Planejamento</p>
+                    <h2 class="mt-2 text-xl font-black text-white">Adicionar matéria à semana</h2>
+                </div>
+                <span class="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-sky-300">Meta</span>
+            </div>
+            <form method="post" action="/estudos/plano" class="mt-5 space-y-4">
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Início da semana</label>
+                    <input type="date" name="semana_inicio" value="{{ semana_inicio }}" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Matéria</label>
+                    <input type="text" name="materia" placeholder="Ex: Português" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Dias de estudo</label>
+                    <input type="text" name="dias_semana" placeholder="Segunda, quarta e sexta" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Meta de questões</label>
+                    <input type="number" min="0" name="meta_questoes" value="40" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-sky-500">
+                </div>
+                <button type="submit" class="w-full rounded-xl bg-sky-500 px-4 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 hover:bg-sky-400">
+                    Adicionar ao plano
+                </button>
+            </form>
+        </div>
+
+        <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-2xl shadow-slate-950/30">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p class="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Semana de {{ semana_inicio.strftime('%d/%m/%Y') }} até {{ semana_fim.strftime('%d/%m/%Y') }}</p>
+                    <h2 class="mt-2 text-xl font-black text-white">Plano x realizado</h2>
+                </div>
+                <div class="text-left sm:text-right">
+                    <div class="text-2xl font-black text-white">{{ total_planejado_realizado }}/{{ total_planejado }}</div>
+                    <div class="text-xs font-bold text-sky-300">{{ progresso_plano }}% concluído</div>
+                </div>
+            </div>
+            <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full rounded-full bg-sky-500" style="width: {{ progresso_plano }}%"></div>
+            </div>
+            <div class="mt-5 space-y-3">
+                {% for item in planos %}
+                <div class="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <div class="font-black text-white">{{ item.materia }}</div>
+                            <div class="mt-1 text-xs text-slate-400">{{ item.dias_semana }}</div>
+                        </div>
+                        <div class="text-sm font-black text-white">{{ item.realizadas }}/{{ item.meta_questoes }} questões</div>
+                    </div>
+                    <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                        <div class="h-full rounded-full bg-emerald-500" style="width: {{ item.percentual }}%"></div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="rounded-2xl border border-dashed border-white/10 bg-slate-950/40 p-8 text-center text-sm text-slate-400">
+                    Adicione as matérias e metas da sua semana para acompanhar o progresso.
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div id="desempenho" class="mb-6 scroll-mt-6 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+        <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <div class="text-[10px] uppercase tracking-[0.2em] text-slate-400">Meta diária</div>
+            <div class="mt-2 flex items-end justify-between">
+                <div class="text-2xl font-black text-white">{{ total_hoje }}/{{ meta_diaria }}</div>
+                <div class="text-xs font-bold text-emerald-300">{{ progresso_diario }}%</div>
+            </div>
+            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full rounded-full bg-emerald-500" style="width: {{ progresso_diario }}%"></div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <div class="text-[10px] uppercase tracking-[0.2em] text-slate-400">Meta semanal</div>
+            <div class="mt-2 flex items-end justify-between">
+                <div class="text-2xl font-black text-white">{{ semana_questoes }}/{{ meta_semanal }}</div>
+                <div class="text-xs font-bold text-sky-300">{{ progresso_semanal }}%</div>
+            </div>
+            <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full rounded-full bg-sky-500" style="width: {{ progresso_semanal }}%"></div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <div class="text-[10px] uppercase tracking-[0.2em] text-slate-400">Foco por assunto</div>
+            <div class="mt-3 space-y-2">
+                {% for item in assuntos_ordenados %}
+                <div class="flex items-center justify-between gap-3 text-xs text-slate-300">
+                    <span>{{ item[0] }}</span>
+                    <span class="font-black text-white">{{ item[1] }}</span>
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-500">Sem assunto registrado.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-amber-500/20 bg-slate-900/60 p-4">
+            <div class="text-[10px] uppercase tracking-[0.2em] text-amber-300">Tempo concluído hoje</div>
+            <div class="mt-2 text-2xl font-black text-white">{{ horas_cronometro_hoje }}</div>
+            <div class="mt-2 text-xs text-slate-500">Somente cronômetros finalizados</div>
+        </div>
+
+        <div class="rounded-2xl border border-emerald-500/20 bg-slate-900/60 p-4">
+            <div class="text-[10px] uppercase tracking-[0.2em] text-emerald-300">Tempo total concluído</div>
+            <div class="mt-2 text-2xl font-black text-white">{{ horas_cronometro_total }}</div>
+            <div class="mt-2 text-xs text-slate-500">Acumulado de todas as sessões</div>
+        </div>
+    </div>
+
+    <div id="desempenho-graficos" class="mb-6 grid gap-6 lg:grid-cols-2">
+        <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6 lg:col-span-2">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Orientação de estudo</p>
+                <h3 class="mt-2 text-lg font-black text-white">Onde concentrar sua revisão</h3>
+            </div>
+            <div class="mt-5 grid gap-3 md:grid-cols-3">
+                <div class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                    <div class="text-[10px] font-black uppercase tracking-[0.16em] text-emerald-300">Melhor matéria</div>
+                    {% if melhor_materia %}
+                    <div class="mt-2 text-lg font-black text-white">{{ melhor_materia.materia }}</div>
+                    <div class="mt-1 text-sm text-emerald-200">{{ melhor_materia.percentual }}% de acertos</div>
+                    {% else %}
+                    <div class="mt-2 text-sm text-slate-400">Sem dados ainda</div>
+                    {% endif %}
+                </div>
+                <div class="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
+                    <div class="text-[10px] font-black uppercase tracking-[0.16em] text-rose-300">Pior matéria</div>
+                    {% if pior_materia %}
+                    <div class="mt-2 text-lg font-black text-white">{{ pior_materia.materia }}</div>
+                    <div class="mt-1 text-sm text-rose-200">{{ pior_materia.percentual }}% de acertos</div>
+                    {% else %}
+                    <div class="mt-2 text-sm text-slate-400">Sem dados ainda</div>
+                    {% endif %}
+                </div>
+                <div class="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <div class="text-[10px] font-black uppercase tracking-[0.16em] text-amber-300">Prioridade de melhoria</div>
+                    {% if materia_melhorar %}
+                    <div class="mt-2 text-lg font-black text-white">{{ materia_melhorar.materia }}</div>
+                    <div class="mt-1 text-sm text-amber-200">Faça uma revisão e novas questões</div>
+                    {% else %}
+                    <div class="mt-2 text-sm text-slate-400">Registre questões para receber uma recomendação</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div id="grafico-semanal-card" class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Ritmo semanal</p>
+                    <h3 class="mt-2 text-lg font-black text-white">Questões por dia</h3>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    {% set filtro_semana = '&assunto=' ~ (assunto_filtro|urlencode) if assunto_filtro else '' %}
+                    <button type="button" data-semana-nav="{{ semana_anterior.isoformat() }}" data-filtro="{{ filtro_semana }}" aria-label="Ver semana anterior" title="Semana anterior" class="rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">Anterior</button>
+                    <span id="grafico-semana-label" class="text-xs tabular-nums text-slate-400">{{ semana_inicio.strftime('%d/%m/%Y') }} a {{ semana_fim.strftime('%d/%m/%Y') }}</span>
+                    {% if semana_inicio < semana_atual_inicio %}
+                    <button type="button" data-semana-nav="{{ semana_proxima.isoformat() }}" data-filtro="{{ filtro_semana }}" aria-label="Ver semana seguinte" title="Semana seguinte" class="rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">Próxima</button>
+                    {% else %}
+                    <span id="grafico-proxima-placeholder" aria-disabled="true" class="rounded-lg border border-white/5 px-3 py-2 text-xs font-bold text-slate-600">Próxima</span>
+                    {% endif %}
+                    {% if semana_inicio != semana_atual_inicio %}
+                    <button type="button" data-semana-nav="atual" data-filtro="{{ filtro_semana }}" class="text-xs font-bold text-sky-300 hover:text-sky-200">Semana atual</button>
+                    {% endif %}
+                </div>
+            </div>
+            <div id="grafico-barras" class="mt-6 flex h-44 items-end justify-between gap-2 border-b border-white/10 px-2">
+                {% for item in grafico_dias %}
+                <div class="flex h-full flex-1 flex-col items-center justify-end gap-2">
+                    <span class="text-[10px] font-black text-slate-300">{{ item.questoes }}</span>
+                    <div class="w-full max-w-10 rounded-t-lg bg-sky-500/80" style="height: {{ ((item.questoes / max_questoes_grafico) * 100)|int }}%; min-height: {% if item.questoes %}8px{% else %}2px{% endif %};"></div>
+                    <span class="text-[10px] font-black uppercase text-slate-500">{{ item.dia }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="rounded-3xl border border-white/10 bg-slate-900/60 p-6">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Aproveitamento</p>
+                <h3 class="mt-2 text-lg font-black text-white">Acertos por matéria</h3>
+            </div>
+            <div class="mt-5 space-y-4">
+                {% for item in grafico_materias %}
+                <div>
+                    <div class="mb-1 flex items-center justify-between gap-3 text-xs">
+                        <span class="truncate font-bold text-slate-300">{{ item.materia }}</span>
+                        <span class="font-black text-emerald-300">{{ item.percentual }}% ({{ item.acertos }}/{{ item.questoes }})</span>
+                    </div>
+                    <div class="h-2 overflow-hidden rounded-full bg-slate-800">
+                        <div class="h-full rounded-full bg-emerald-500" style="width: {{ item.percentual }}%"></div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">Registre questões para visualizar seu aproveitamento.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div id="progresso" class="rounded-3xl border border-white/10 bg-slate-900/60 p-6 lg:col-span-2">
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Progresso de {{ label_progresso }}</p>
+                    <h3 class="mt-2 text-lg font-black text-white">Desempenho por Matéria</h3>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="/estudos?data_progresso={{ data_hoje.isoformat() }}#progresso" class="rounded-lg border {% if data_progresso_filtro == data_hoje.isoformat() %}border-emerald-500 bg-emerald-500/20 text-emerald-200{% else %}border-slate-700 bg-slate-800 text-slate-300{% endif %} px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] hover:bg-slate-700">Hoje</a>
+                    <a href="/estudos?data_progresso={{ data_ontem.isoformat() }}#progresso" class="rounded-lg border {% if data_progresso_filtro == data_ontem.isoformat() %}border-emerald-500 bg-emerald-500/20 text-emerald-200{% else %}border-slate-700 bg-slate-800 text-slate-300{% endif %} px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] hover:bg-slate-700">Ontem</a>
+                    <form method="get" action="/estudos#progresso" class="flex items-center gap-2">
+                        <label for="dataProgresso" class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Data</label>
+                        <input id="dataProgresso" type="date" name="data_progresso" value="{{ data_progresso_filtro }}" class="rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500">
+                        <button type="submit" class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-300 hover:bg-slate-700">Ver</button>
+                    </form>
+                </div>
+            </div>
+            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                {% for item in grafico_materias_hoje %}
+                <div class="rounded-2xl border border-white/5 bg-slate-950/40 p-4">
+                    <div class="mb-2 flex items-center justify-between gap-3 text-xs">
+                        <span class="truncate font-bold text-slate-300">{{ item.materia }}</span>
+                        <span class="font-black text-emerald-300">{{ item.percentual }}% ({{ item.acertos }}/{{ item.questoes }})</span>
+                    </div>
+                    <div class="h-2 overflow-hidden rounded-full bg-slate-800">
+                        <div class="h-full rounded-full bg-emerald-500" style="width: {{ item.percentual }}%"></div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500 md:col-span-2">Registre questões em {{ label_progresso.lower() }} para visualizar seu aproveitamento.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div id="historico-filtro" class="mb-4 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+        <form method="get" action="/estudos#historico" class="grid grid-cols-2 items-end gap-2 sm:grid-cols-4 lg:grid-cols-[minmax(200px,1fr)_155px_155px_auto_auto]">
+            <div class="col-span-2 sm:col-span-2 lg:col-span-1">
+                <label for="historicoAssunto" class="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Matéria</label>
+                <select id="historicoAssunto" name="assunto" class="w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500">
+                    <option value="">Todas as matérias</option>
+                    {% for materia in materias_quadro or materias_grade %}
+                    <option value="{{ materia }}" {% if assunto_filtro == materia %}selected{% endif %}>{{ materia }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="historicoDataInicio" class="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">De</label>
+                <input id="historicoDataInicio" type="date" name="data_inicio" value="{{ data_inicio_filtro }}" class="study-history-date w-full min-w-0 rounded-lg border border-white/10 bg-slate-950/80 px-2 py-2 text-sm text-white outline-none focus:border-emerald-500">
+            </div>
+            <div>
+                <label for="historicoDataFim" class="mb-1 block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Até</label>
+                <input id="historicoDataFim" type="date" name="data_fim" value="{{ data_fim_filtro }}" class="study-history-date w-full min-w-0 rounded-lg border border-white/10 bg-slate-950/80 px-2 py-2 text-sm text-white outline-none focus:border-emerald-500">
+            </div>
+            <button type="submit" class="rounded-lg bg-indigo-500 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-indigo-400">
+                Filtrar
+            </button>
+            {% if assunto_filtro or data_inicio_filtro or data_fim_filtro %}
+            <a href="/estudos#historico" class="rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-center text-xs font-black uppercase tracking-[0.12em] text-slate-300 hover:bg-slate-800">
+                Limpar
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <div id="registro-layout" class="grid scroll-mt-6 gap-6 lg:grid-cols-[420px_minmax(0,1fr)]">
+        <div id="registro-form" class="scroll-mt-6 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-2xl shadow-slate-950/30">
+            <h2 id="registro" class="scroll-mt-24 text-xl font-black text-white">{% if editar %}Editar registro{% else %}Novo registro{% endif %}</h2>
+            <form method="post" action="/estudos" class="mt-5 space-y-4">
+                <input type="hidden" name="registro_id" value="{{ editar.id if editar else '' }}">
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Data</label>
+                    <input type="date" name="data_estudo" lang="pt-BR" value="{{ editar.data_estudo if editar else data_hoje }}" required class="study-schedule-date w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Início</label>
+                        <input type="time" id="registroHorarioInicio" name="horario_inicio" value="{{ editar.horario_inicio if editar else '' }}" class="study-schedule-time w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Fim</label>
+                        <input type="time" id="registroHorarioFim" name="horario_fim" value="{{ editar.horario_fim if editar else '' }}" class="study-schedule-time w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Assunto / matéria</label>
+                    <select name="assunto" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                        <option value="">Escolha a matéria do quadro</option>
+                        {% for materia in materias_grade %}
+                        <option value="{{ materia }}" {% if editar and editar.assunto == materia %}selected{% endif %}>{{ materia }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-3">
+                    <div>
+                        <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Questões</label>
+                        <input type="number" min="0" name="quantidade_questoes" value="{{ editar.quantidade_questoes if editar else 25 }}" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Acertos</label>
+                        <input type="number" min="0" name="total_acertos" value="{{ editar.total_acertos if editar else 0 }}" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Erros</label>
+                        <input type="number" min="0" name="total_erros" value="{{ editar.total_erros if editar else 0 }}" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Status</label>
+                    <select name="status" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                        <option value="concluido" {% if not editar or editar.status == 'concluido' %}selected{% endif %}>Concluído</option>
+                        <option value="em_andamento" {% if editar and editar.status == 'em_andamento' %}selected{% endif %}>Em andamento</option>
+                        <option value="pausado" {% if editar and editar.status == 'pausado' %}selected{% endif %}>Pausado</option>
+                        <option value="revisao" {% if editar and editar.status == 'revisao' %}selected{% endif %}>Revisão</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Observação</label>
+                    <textarea name="observacao" rows="4" placeholder="Descreva o que foi revisado ou o que precisa melhorar..." class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">{{ editar.observacao if editar else '' }}</textarea>
+                </div>
+
+                <button type="submit" class="w-full rounded-xl bg-emerald-500 px-4 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 hover:bg-emerald-400">
+                    {% if editar %}Atualizar estudo{% else %}Salvar estudo{% endif %}
+                </button>
+            </form>
+        </div>
+
+        <div id="historico" class="scroll-mt-6 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-xl shadow-slate-950/30">
+            <div class="mb-3 flex items-center justify-between gap-4">
+                <h2 class="text-lg font-black text-white">Histórico</h2>
+                <span class="rounded-full border border-slate-700 bg-slate-950/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                    {{ registros|length }} registros
+                </span>
+            </div>
+
+            {% if registros %}
+            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {% for item in registros %}
+                <div class="min-w-0 rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <div class="min-h-12 break-words text-base font-black text-white">{{ item.assunto }}</div>
+                            <div class="mt-1 text-[10px] uppercase text-slate-400">{{ item.data_estudo.strftime('%d/%m/%Y') }} · {{ item.horario_inicio or '--' }} até {{ item.horario_fim or '--' }}</div>
+                        </div>
+                        <span class="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase text-emerald-300">
+                            {{ item.status }}
+                        </span>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <a href="/estudos?editar_id={{ item.id }}#registro" class="rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-[9px] font-black uppercase text-sky-300 hover:bg-sky-500 hover:text-slate-950">Editar</a>
+                        <form method="post" action="/estudos/excluir">
+                            <input type="hidden" name="registro_id" value="{{ item.id }}">
+                            <details class="study-delete-details">
+                                <summary class="cursor-pointer rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[9px] font-black uppercase text-rose-300 hover:bg-rose-500 hover:text-white">Excluir</summary>
+                                <div class="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 p-2">
+                                    <span class="text-[10px] text-slate-300">Confirmar exclusão?</span>
+                                    <button type="submit" class="rounded-md bg-rose-500 px-2.5 py-1.5 text-[9px] font-black uppercase text-white hover:bg-rose-400">Sim, excluir</button>
+                                </div>
+                            </details>
+                        </form>
+                    </div>
+                    <div class="mt-2 grid grid-cols-3 gap-2 text-slate-300">
+                        <div class="rounded-lg bg-slate-900/70 p-2">
+                            <div class="text-[9px] uppercase text-slate-500">Questões</div>
+                            <div class="mt-0.5 text-base font-black text-white">{{ item.quantidade_questoes }}</div>
+                        </div>
+                        <div class="rounded-lg bg-slate-900/70 p-2">
+                            <div class="text-[9px] uppercase text-slate-500">Acertos</div>
+                            <div class="mt-0.5 text-base font-black text-emerald-400">{{ item.total_acertos }}</div>
+                        </div>
+                        <div class="rounded-lg bg-slate-900/70 p-2">
+                            <div class="text-[9px] uppercase text-slate-500">Erros</div>
+                            <div class="mt-0.5 text-base font-black text-rose-400">{{ item.total_erros }}</div>
+                        </div>
+                    </div>
+                    {% if item.quantidade_questoes and item.quantidade_questoes > 0 %}
+                    {% set pct = ((item.total_acertos / item.quantidade_questoes) * 100) | int %}
+                    <div class="mt-3">
+                        <div class="mb-1 flex items-center justify-between text-[10px]">
+                            <span class="font-bold uppercase tracking-[0.12em] text-slate-500">Aproveitamento</span>
+                            <span class="font-black {% if pct >= 70 %}text-emerald-400{% elif pct >= 50 %}text-amber-400{% else %}text-rose-400{% endif %}">{{ pct }}%</span>
+                        </div>
+                        <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                            <div class="h-full rounded-full {% if pct >= 70 %}bg-emerald-500{% elif pct >= 50 %}bg-amber-400{% else %}bg-rose-500{% endif %}" style="width: {{ pct }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if item.observacao %}
+                    <div class="mt-2 break-words rounded-lg border border-white/5 bg-slate-900/60 p-2 text-xs text-slate-300">
+                        {{ item.observacao }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% elif assunto_filtro or data_inicio_filtro or data_fim_filtro %}
+            <div class="rounded-2xl border border-dashed border-white/10 bg-slate-950/40 p-10 text-center text-sm text-slate-400">
+                Nenhum registro encontrado com esses filtros.
+            </div>
+            {% else %}
+            <div class="rounded-2xl border border-dashed border-white/10 bg-slate-950/40 p-10 text-center text-sm text-slate-400">
+                Nenhum estudo registrado ainda.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<style>
+    html.light-mode #desempenho [class~="text-emerald-200"],
+    html.light-mode #desempenho [class~="text-emerald-300"],
+    html.light-mode #desempenho [class~="text-emerald-400"],
+    html.light-mode #desempenho-graficos [class~="text-emerald-200"],
+    html.light-mode #desempenho-graficos [class~="text-emerald-300"],
+    html.light-mode #desempenho-graficos [class~="text-emerald-400"] { color: #047857 !important; }
+    html.light-mode #desempenho [class~="text-sky-200"],
+    html.light-mode #desempenho [class~="text-sky-300"],
+    html.light-mode #desempenho [class~="text-sky-400"],
+    html.light-mode #desempenho-graficos [class~="text-sky-200"],
+    html.light-mode #desempenho-graficos [class~="text-sky-300"],
+    html.light-mode #desempenho-graficos [class~="text-sky-400"] { color: #0369a1 !important; }
+    html.light-mode #desempenho-graficos [class~="text-rose-200"],
+    html.light-mode #desempenho-graficos [class~="text-rose-300"],
+    html.light-mode #desempenho-graficos [class~="text-rose-400"] { color: #be123c !important; }
+    html.light-mode #desempenho [class~="text-rose-200"],
+    html.light-mode #desempenho [class~="text-rose-300"],
+    html.light-mode #desempenho [class~="text-rose-400"] { color: #be123c !important; }
+    html.light-mode #desempenho [class~="text-amber-200"],
+    html.light-mode #desempenho [class~="text-amber-300"],
+    html.light-mode #desempenho [class~="text-amber-400"],
+    html.light-mode #desempenho-graficos [class~="text-amber-200"],
+    html.light-mode #desempenho-graficos [class~="text-amber-300"],
+    html.light-mode #desempenho-graficos [class~="text-amber-400"] { color: #92400e !important; }
+    html.light-mode #desempenho [class~="bg-emerald-500"],
+    html.light-mode #desempenho-graficos [class~="bg-emerald-500"] { background-color: #059669 !important; }
+    html.light-mode #desempenho [class~="bg-sky-500"],
+    html.light-mode #desempenho-graficos [class~="bg-sky-500"],
+    html.light-mode #desempenho-graficos [class~="bg-sky-500/80"] { background-color: #0284c7 !important; }
+    html.light-mode #desempenho-graficos [class~="bg-emerald-500/10"] { background-color: #ecfdf5 !important; }
+    html.light-mode #desempenho-graficos [class~="bg-rose-500/10"] { background-color: #fff1f2 !important; }
+    html.light-mode #desempenho-graficos [class~="bg-amber-500/10"] { background-color: #fffbeb !important; }
+    .study-materia-cell { border-left: 3px solid transparent; }
+    .study-materia-cell[style*="--materia-cor"] { border-left-color: var(--materia-cor) !important; background-color: var(--materia-fundo) !important; }
+    html.light-mode .study-materia-cell[style*="--materia-cor"] { border-left-color: var(--materia-cor) !important; background-color: var(--materia-fundo) !important; }
+    .study-success-message { transition: opacity .3s ease, transform .3s ease; }
+    .study-success-message.is-dismissing { opacity: 0; transform: translateY(-4px); }
+    .study-delete-details > summary { list-style: none; }
+    .study-delete-details > summary::-webkit-details-marker { display: none; }
+    @keyframes timerAlertPulse {
+        0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(251, 191, 36, .55); }
+        50% { transform: scale(1.12); opacity: .68; box-shadow: 0 0 0 14px rgba(251, 191, 36, 0); }
+    }
+    @keyframes timerAlertBorder {
+        0%, 100% { border-color: rgba(251, 191, 36, .35); }
+        50% { border-color: rgba(251, 191, 36, .95); }
+    }
+    #timerAlert > div { animation: timerAlertBorder 1.2s ease-in-out infinite; }
+    .timer-alert-icon { animation: timerAlertPulse .9s ease-in-out infinite; }
+    .timer-button-active {
+        background: rgba(15, 23, 42, 0.96) !important;
+        border-color: rgba(148, 163, 184, 0.9) !important;
+        color: #e2e8f0 !important;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15), 0 0 0 1px rgba(148, 163, 184, 0.24);
+        transform: translateY(-1px);
+    }
+    .timer-action-button:hover {
+        background-color: #1e293b !important;
+        border-color: rgba(148, 163, 184, 0.9) !important;
+        color: #f8fafc !important;
+    }
+
+    /* Dropdown options - fundo branco com texto escuro para boa leitura */
+    #timerMateria option,
+    #timerDuration option {
+        background-color: #f8fafc;
+        color: #0f172a;
+        padding: 8px 12px;
+    }
+    #timerMateria option:checked,
+    #timerDuration option:checked {
+        background-color: #e2e8f0;
+        color: #0f172a;
+    }
+</style>
+<div id="timerAlert" class="fixed inset-0 z-[100] hidden items-center justify-center bg-transparent p-6" style="display: none;">
+    <div class="w-full max-w-xl rounded-3xl border border-amber-400/40 bg-slate-900 p-8 text-center shadow-2xl shadow-amber-950/40">
+        <div class="timer-alert-icon mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-400 text-4xl font-black text-slate-950">!</div>
+        <p class="mt-6 text-xs font-black uppercase tracking-[0.28em] text-amber-300">Sessão finalizada</p>
+        <h2 class="mt-2 text-4xl font-black text-white">Tempo encerrado</h2>
+        <p id="timerAlertMessage" class="mt-3 text-slate-300">Sua sessão de estudo terminou.</p>
+        <div class="mt-7 flex flex-wrap justify-center gap-3">
+            <button id="timerStartBreak" type="button" class="rounded-xl bg-emerald-400 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-950">Iniciar pausa de 15 min</button>
+            <button id="timerCloseAlert" type="button" class="rounded-xl border border-white/10 bg-slate-950 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-300">Fechar alerta</button>
+        </div>
+    </div>
+</div>
+<script>
+    (() => {
+        const key = 'estudos_cronometro';
+        const display = document.getElementById('timerDisplay');
+        const status = document.getElementById('timerStatus');
+        const materia = document.getElementById('timerMateria');
+        const duration = document.getElementById('timerDuration');
+        const custom = document.getElementById('timerCustom');
+        const alertBox = document.getElementById('timerAlert');
+        const alertMessage = document.getElementById('timerAlertMessage');
+        const finishButton = document.getElementById('timerFinish');
+        const startButton = document.getElementById('timerStart');
+        const pauseButton = document.getElementById('timerPause');
+        const resetButton = document.getElementById('timerReset');
+        const registroInicio = document.getElementById('registroHorarioInicio');
+        const registroFim = document.getElementById('registroHorarioFim');
+        const registroMateria = document.querySelector('select[name="assunto"]');
+        const createSessionId = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        function setActiveTimerButton(activeId) {
+            const buttons = [pauseButton, finishButton, resetButton];
+            buttons.forEach(button => {
+                if (!button) return;
+                const isActive = button.id === activeId;
+                button.classList.toggle('timer-button-active', isActive);
+                button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                if (!isActive) {
+                    button.style.boxShadow = '';
+                    button.style.transform = '';
+                }
+            });
+            if (startButton) {
+                startButton.classList.remove('timer-button-active');
+                startButton.setAttribute('aria-pressed', 'false');
+                startButton.style.boxShadow = '';
+                startButton.style.transform = '';
+            }
+        }
+        let ticker = null;
+        let blink = null;
+        const originalTitle = document.title;
+
+        const getState = () => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; } };
+        const setState = value => localStorage.setItem(key, JSON.stringify(value));
+        const format = seconds => [Math.floor(seconds / 3600), Math.floor((seconds % 3600) / 60), seconds % 60].map(value => String(value).padStart(2, '0')).join(':');
+        const stopBlink = () => { clearInterval(blink); blink = null; document.title = originalTitle; };
+        const clockValue = timestamp => timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : '';
+        function syncRecordFields(state) {
+            if (state.break) return;
+            if (registroInicio) registroInicio.value = clockValue(state.startedAt);
+            if (registroFim) registroFim.value = clockValue(state.finishedAt);
+            if (registroMateria && state.materia && [...registroMateria.options].some(option => option.value === state.materia)) registroMateria.value = state.materia;
+        }
+
+        function registerCompletedStudy(state) {
+            if (!state.sessionId || !Number.isInteger(state.durationSeconds)) return;
+            fetch('/estudos/cronometro/concluir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                keepalive: true,
+                body: JSON.stringify({
+                    session_id: state.sessionId,
+                    duracao_segundos: state.durationSeconds,
+                    materia: state.materia || null
+                })
+            }).catch(() => {});
+        }
+
+        function finish(state) {
+            if (!state.break) { state.finishedAt = Date.now(); syncRecordFields(state); }
+            state.finished = true; state.paused = true; state.remaining = 0; setState(state); clearInterval(ticker);
+            if (!state.break) {
+                registerCompletedStudy(state);
+                const breakState = { endsAt: Date.now() + 15 * 60 * 1000, remaining: 15 * 60, paused: false, finished: false, break: true, materia: '' };
+                setState(breakState);
+                startTicker();
+            }
+            alertMessage.textContent = state.break ? 'Sua pausa de 15 minutos terminou. Está na hora de voltar aos estudos.' : (state.materia ? `Sua sessão de ${state.materia} terminou. A pausa de descanso de 15 minutos começou.` : 'Sua sessão de estudo terminou. A pausa de descanso de 15 minutos começou.');
+            alertBox.classList.remove('hidden'); alertBox.classList.add('flex'); alertBox.style.display = 'flex';
+            document.getElementById('timerStartBreak').classList.add('hidden');
+            if ('Notification' in window && Notification.permission === 'granted') new Notification(state.break ? 'Pausa encerrada' : 'Tempo encerrado', { body: alertMessage.textContent });
+            try { const audio = new (window.AudioContext || window.webkitAudioContext)(); const oscillator = audio.createOscillator(); oscillator.connect(audio.destination); oscillator.frequency.value = 880; oscillator.start(); oscillator.stop(audio.currentTime + .5); } catch {}
+            blink = setInterval(() => { document.title = document.title === 'TEMPO ENCERRADO' ? originalTitle : 'TEMPO ENCERRADO'; }, 700);
+        }
+
+        function update() {
+            const state = getState(); if (!state) return;
+            const remaining = state.paused ? state.remaining : Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000));
+            display.textContent = format(remaining);
+            status.textContent = state.paused ? (state.break ? 'Pausa pausada' : 'Pausado') : (state.break ? 'Pausa de descanso' : `Estudando${state.materia ? ' · ' + state.materia : ''}`);
+            status.className = state.paused ? 'text-xs font-bold text-slate-300' : 'text-xs font-bold text-emerald-300';
+            
+            const btnPause = document.getElementById('timerPause');
+            if (btnPause) {
+                btnPause.textContent = (state.paused && !state.finished) ? 'Retomar' : 'Pausar';
+            }
+
+            if (remaining <= 0 && !state.finished) finish(state);
+        }
+        function startTicker() { clearInterval(ticker); update(); ticker = setInterval(update, 1000); }
+
+        duration.onchange = () => custom.classList.toggle('hidden', duration.value !== 'custom');
+        document.getElementById('timerStart').onclick = async () => {
+            const selectedSeconds = duration.value === 'custom' ? Number(custom.value) * 60 : Number(duration.value);
+            if (!Number.isFinite(selectedSeconds) || selectedSeconds < 60) {
+                status.textContent = 'Informe pelo menos 1 minuto';
+                status.className = 'text-xs font-bold text-rose-300';
+                return;
+            }
+            if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+            const old = getState();
+            const state = old && old.paused && !old.finished ? { ...old, sessionId: old.sessionId || createSessionId(), durationSeconds: old.durationSeconds || old.remaining, paused: false, endsAt: Date.now() + old.remaining * 1000 } : { endsAt: Date.now() + selectedSeconds * 1000, remaining: selectedSeconds, paused: false, finished: false, materia: materia.value.trim(), startedAt: Date.now(), sessionId: createSessionId(), durationSeconds: selectedSeconds };
+            syncRecordFields(state); setState(state); setActiveTimerButton('timerStart'); status.textContent = `Iniciando${state.materia ? ' · ' + state.materia : ''}`; status.className = 'text-xs font-bold text-amber-300'; startTicker();
+            // Muda para aba "Registrar estudo" para mostrar o pré-cadastro com horário de início
+            document.dispatchEvent(new CustomEvent('estudos:ir-para-registro'));
+        };
+        document.getElementById('timerPause').onclick = () => { 
+            const state = getState(); 
+            if (!state || state.finished) return; 
+            if (state.paused) {
+                state.endsAt = Date.now() + state.remaining * 1000;
+                state.paused = false;
+                setState(state);
+                setActiveTimerButton('timerPause');
+                status.textContent = 'Retomando estudo';
+                status.className = 'text-xs font-bold text-amber-300';
+                startTicker();
+            } else {
+                state.remaining = Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000)); 
+                state.paused = true; 
+                setState(state); 
+                setActiveTimerButton('timerPause');
+                status.textContent = 'Cronômetro pausado';
+                status.className = 'text-xs font-bold text-slate-300';
+                update(); 
+            }
+        };
+        if (finishButton) {
+            finishButton.onclick = () => {
+                const state = getState();
+                if (!state || state.finished) return;
+                setActiveTimerButton('timerFinish');
+                status.textContent = 'Finalizando sessão';
+                status.className = 'text-xs font-bold text-amber-300';
+                finish(state);
+            };
+        }
+        document.getElementById('timerStartBreak').onclick = () => { const state = { endsAt: Date.now() + 15 * 60 * 1000, remaining: 15 * 60, paused: false, finished: false, break: true, materia: '' }; alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); setState(state); setActiveTimerButton('timerStart'); startTicker(); };
+        document.getElementById('timerReset').onclick = () => { localStorage.removeItem(key); clearInterval(ticker); stopBlink(); setActiveTimerButton('timerReset'); if (registroInicio) registroInicio.value = ''; if (registroFim) registroFim.value = ''; display.textContent = '00:50:00'; status.textContent = 'Pronto para iniciar'; status.className = 'text-xs font-bold text-slate-400'; const btnPause = document.getElementById('timerPause'); if(btnPause) btnPause.textContent = 'Pausar'; };
+        document.getElementById('timerCloseAlert').onclick = () => { alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); document.dispatchEvent(new CustomEvent('estudos:ir-para-registro')); };
+        if (getState()) startTicker();
+    })();
+</script>
+<script>
+    (() => {
+        // Auto-preenche horario_inicio e horario_fim com hora atual ao salvar,
+        // caso os campos estejam vazios e o cronômetro não tenha preenchido.
+        const form = document.querySelector('form[action="/estudos"]');
+        if (form) {
+            form.addEventListener('submit', () => {
+                const inicio = document.getElementById('registroHorarioInicio');
+                const fim = document.getElementById('registroHorarioFim');
+                const now = new Date().toTimeString().slice(0, 5);
+                if (fim && !fim.value) fim.value = now;
+                if (inicio && !inicio.value) {
+                    const duration = document.getElementById('timerDuration');
+                    let secs = duration ? parseInt(duration.value) : 0;
+                    if (isNaN(secs) || secs <= 0) secs = 3000;
+                    const startMs = Date.now() - secs * 1000;
+                    inicio.value = new Date(startMs).toTimeString().slice(0, 5);
+                }
+            });
+        }
+    })();
+</script>
+<script>
+    (() => {
+        document.querySelectorAll('.study-success-message').forEach((message) => {
+
+            window.setTimeout(() => {
+                message.classList.add('is-dismissing');
+                window.setTimeout(() => message.remove(), 300);
+            }, 4000);
+        });
+
+        const tabs = document.querySelectorAll('.study-tab');
+        const registroLayout = document.getElementById('registro-layout');
+        const sections = ['quadro', 'desempenho', 'desempenho-graficos', 'registro-layout', 'registro-form', 'historico', 'historico-filtro'];
+        const views = {
+            quadro: ['quadro'],
+            desempenho: ['desempenho', 'desempenho-graficos'],
+            registro: ['registro-layout', 'registro-form'],
+            historico: ['registro-layout', 'historico', 'historico-filtro']
+        };
+
+        function showView(viewName) {
+            const visible = views[viewName] || views.quadro;
+            sections.forEach((id) => {
+                const section = document.getElementById(id);
+                if (section) section.classList.toggle('hidden', !visible.includes(id));
+            });
+            const history = document.getElementById('historico');
+            const form = document.getElementById('registro-form');
+            if (registroLayout) registroLayout.style.gridTemplateColumns = viewName === 'historico' ? 'minmax(0, 1fr)' : '';
+            if (history) history.classList.toggle('hidden', viewName !== 'historico');
+            if (form) form.classList.toggle('hidden', viewName !== 'registro');
+            tabs.forEach((tab) => {
+                const active = tab.dataset.tab === viewName;
+                tab.setAttribute('aria-selected', active ? 'true' : 'false');
+                
+                // Limpa classes de estado
+                tab.classList.remove('bg-sky-500', 'text-white', 'shadow-lg', 'shadow-sky-500/25', 'text-slate-400');
+                tab.className = tab.className.replace(/\bhover:bg-white\/5\b/g, '').replace(/\bhover:text-slate-200\b/g, '').replace(/\s+/g, ' ').trim();
+
+                if (active) {
+                    tab.classList.add('bg-sky-500', 'text-white', 'shadow-lg', 'shadow-sky-500/25');
+                } else {
+                    tab.classList.add('text-slate-400');
+                    tab.className += ' hover:bg-white/5 hover:text-slate-200';
+                }
+            });
+        }
+
+        tabs.forEach((tab) => tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tab;
+            localStorage.setItem('estudos_aba_ativa', tabName);
+            showView(tabName);
+        }));
+
+        // Lê o hash apenas se veio de uma navegação intencional (link interno)
+        // O hash #desempenho fica preso na URL pelos links do gráfico semanal,
+        // então localStorage tem prioridade sobre o hash.
+        const hash = window.location.hash;
+        const savedView = localStorage.getItem('estudos_aba_ativa');
+        let initialView = savedView || 'quadro';
+
+        // Hash só tem prioridade se NÃO tiver uma aba salva, ou se for #registro
+        if (hash === '#registro') initialView = 'registro';
+        else if (hash === '#historico' && !savedView) initialView = 'historico';
+
+        showView(initialView);
+
+        // Remove o estilo de flash-fix após aplicar a aba correta
+        var flashFix = document.getElementById('estudos-flash-fix');
+        if (flashFix) flashFix.remove();
+
+        // Limpa o hash da URL para não interferir em futuros reloads
+        if (hash) {
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+        }
+
+        // Quando o cronômetro inicia ou termina, muda automaticamente para "Registrar estudo"
+        document.addEventListener('estudos:ir-para-registro', () => {
+            localStorage.setItem('estudos_aba_ativa', 'registro');
+            showView('registro');
+        });
+    })();
+</script>
+<script>
+    // Delegação de eventos no document para funcionar mesmo após substituição do card via AJAX
+    document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-semana-nav]');
+        if (!btn) return;
+
+        const semana = btn.dataset.semanaNav;
+        const filtro = btn.dataset.filtro || '';
+        const url = semana === 'atual'
+            ? `/estudos${filtro}`
+            : `/estudos?semana=${semana}${filtro}`;
+
+        const card = document.getElementById('grafico-semanal-card');
+        if (!card) return;
+
+        // Feedback visual
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+
+        try {
+            const res = await fetch(url, { credentials: 'same-origin' });
+            const html = await res.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            // Substitui o card pelo novo — o listener no document continua ativo
+            const novoCard = doc.getElementById('grafico-semanal-card');
+            if (novoCard) {
+                card.replaceWith(novoCard);
+            }
+        } catch (err) {
+            // Fallback: navega normalmente se o fetch falhar
+            window.location.href = url;
+        }
+    });
+</script>
+<script>
+    (() => {
+        async function atualizarProgresso(url, atualizarHistorico = true) {
+            const card = document.getElementById('progresso');
+            if (!card) return;
+
+            card.setAttribute('aria-busy', 'true');
+            card.style.opacity = '0.55';
+            card.style.pointerEvents = 'none';
+
+            try {
+                const response = await fetch(url, { credentials: 'same-origin' });
+                if (!response.ok) throw new Error('Falha ao carregar o progresso');
+
+                const html = await response.text();
+                const documento = new DOMParser().parseFromString(html, 'text/html');
+                const novoCard = documento.getElementById('progresso');
+                if (!novoCard) throw new Error('Card de progresso não encontrado');
+
+                card.replaceWith(novoCard);
+                if (atualizarHistorico) {
+                    const destino = new URL(url, window.location.href);
+                    destino.hash = 'progresso';
+                    window.history.pushState(null, '', `${destino.pathname}${destino.search}${destino.hash}`);
+                }
+            } catch (error) {
+                window.location.href = url;
+            }
+        }
+
+        document.addEventListener('click', (event) => {
+            const link = event.target.closest('#progresso a[href*="data_progresso"]');
+            if (!link) return;
+            event.preventDefault();
+            atualizarProgresso(link.href);
+        });
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target.closest('#progresso form');
+            if (!form) return;
+            event.preventDefault();
+            const destino = new URL(form.action, window.location.href);
+            new FormData(form).forEach((valor, chave) => destino.searchParams.set(chave, valor));
+            atualizarProgresso(destino.href);
+        });
+
+        window.addEventListener('popstate', () => atualizarProgresso(window.location.href, false));
+    })();
+</script>
+{% endblock %}

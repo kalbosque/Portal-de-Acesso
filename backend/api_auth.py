@@ -1,4 +1,5 @@
 import json
+import os
 import secrets
 from datetime import datetime
 from typing import Optional
@@ -9,11 +10,17 @@ from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 from sqlalchemy import text
 
-from auth_utils import get_signed_cookie, normalize_permissions
+from auth_utils import create_study_access_token, get_signed_cookie, normalize_permissions
 from database import engine
 from models import Usuario
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
+STUDY_ALLOWED_EMAIL = os.environ.get("STUDY_ALLOWED_EMAIL", "").strip().casefold()
+
+
+def _is_study_account_allowed(user: Usuario) -> bool:
+    email_allowed = bool(STUDY_ALLOWED_EMAIL) and (user.email or "").strip().casefold() == STUDY_ALLOWED_EMAIL
+    return user.role == "estudante" or email_allowed
 
 
 def hash_password(password: str) -> str:
@@ -52,6 +59,7 @@ def _set_session_cookies(response: JSONResponse, user: Usuario) -> None:
 
 @router.post("/login")
 async def login(
+    request: Request,
     login_id: str = Form(...),
     password: str = Form(...),
     intent: str = Form("suporte"),
@@ -82,6 +90,14 @@ async def login(
             if not verify_password(password, user.password_hash) and not temp_valid:
                 return JSONResponse({"success": False, "detail": "E-mail/usuario ou senha incorretos."}, status_code=401)
 
+            study_token = None
+            if intent == "estudos":
+                if not _is_study_account_allowed(user):
+                    return JSONResponse({"success": False, "detail": "Acesso à Área de Estudos não autorizado."}, status_code=403)
+                study_token = create_study_access_token(str(user.id))
+                if not study_token:
+                    return JSONResponse({"success": False, "detail": "A Área de Estudos não está configurada com segurança."}, status_code=503)
+
             if temp_valid:
                 user.senha_temp = None
                 session.add(user)
@@ -99,7 +115,9 @@ async def login(
                 user_perms = []
 
             desktop_mode = desktop == "1"
-            if intent == "atendimento":
+            if intent == "estudos":
+                redirect = "/estudos"
+            elif intent == "atendimento":
                 if user.role != "admin" and "Atendimento" not in user_perms and "Suporte" not in user_perms:
                     return JSONResponse({"success": False, "detail": "Este usuário não possui permissão para Atendimento."}, status_code=403)
                 if desktop_mode:
@@ -121,6 +139,17 @@ async def login(
             if desktop_mode:
                 response.set_cookie("central_atendimento_tauri", "1", path="/", httponly=False, samesite="Lax")
             _set_session_cookies(response, user)
+            if study_token:
+                forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip()
+                response.set_cookie(
+                    "study_access",
+                    study_token,
+                    path="/estudos",
+                    max_age=86400,
+                    httponly=True,
+                    secure=forwarded_proto == "https",
+                    samesite="lax",
+                )
             return response
     except Exception as exc:
         print(f"[LOGIN_ERROR] Falha ao processar login: {exc}")
@@ -131,46 +160,11 @@ async def login(
 
 
 @router.post("/register")
-async def register(
-    nome: str = Form(...),
-    email: str = Form(...),
-    username: str = Form(...),
-    password: str = Form(...),
-):
-    nome = nome.strip()
-    email = email.strip()
-    username = username.strip()
-
-    if not nome or not email or not username or not password:
-        return JSONResponse({"success": False, "detail": "Preencha todos os campos."}, status_code=400)
-    if "@" not in email:
-        return JSONResponse({"success": False, "detail": "Informe um e-mail valido."}, status_code=400)
-    if len(password) < 6 or len(password) > 8:
-        return JSONResponse({"success": False, "detail": "A senha precisa ter entre 6 e 8 caracteres."}, status_code=400)
-
-    with Session(engine) as session:
-        existing = session.exec(
-            select(Usuario).where((Usuario.email.ilike(email)) | (Usuario.username.ilike(username)))
-        ).first()
-        if existing:
-            return JSONResponse(
-                {"success": False, "detail": "Este nome de usuario ou e-mail ja esta em uso."},
-                status_code=400,
-            )
-
-        user = Usuario(
-            nome=nome,
-            email=email,
-            username=username,
-            password_hash=hash_password(password),
-            role="operator",
-            status_conta="ativo",
-            permissoes=json.dumps(["Dashboard", "Suporte"], ensure_ascii=False),
-        )
-        session.add(user)
-        session.commit()
-
-    return JSONResponse({"success": True, "message": "Cadastro realizado com sucesso! Voce ja pode fazer login."})
+async def register():
+    return JSONResponse(
+        {"success": False, "detail": "O cadastro público está desativado. Solicite acesso ao administrador."},
+        status_code=403,
+    )
 
 
 @router.post("/reset_senha")
@@ -189,6 +183,12 @@ async def reset_senha(login_id: str = Form(...)):
         if not user:
             return JSONResponse(
                 {"success": True, "message": "Se o usuario existir, uma senha temporaria foi gerada. Verifique com o suporte."}
+            )
+
+        if STUDY_ALLOWED_EMAIL and (user.email or "").strip().casefold() == STUDY_ALLOWED_EMAIL:
+            return JSONResponse(
+                {"success": False, "detail": "A recuperação automática está desativada para esta conta. Solicite a redefinição ao administrador."},
+                status_code=403,
             )
 
         temp = secrets.token_hex(4).upper()

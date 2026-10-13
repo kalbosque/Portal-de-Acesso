@@ -372,7 +372,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
                 ChamadoInteracao.chamado_id == chamado_id,
                 ChamadoInteracao.id > since_id,
             )
-            .order_by(ChamadoInteracao.data_hora)
+            .order_by(ChamadoInteracao.id)
         ).all()
         _sync_group_history_name(session, chamado, msgs)
 
@@ -407,6 +407,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
                     "responde_a_texto": m.responde_a_texto,
                     "whatsapp_message_id": m.whatsapp_message_id,
                     "whatsapp_remote_jid": m.whatsapp_remote_jid,
+                    "whatsapp_participant": m.whatsapp_participant,
                     "reacao": m.reacao,
                     "reacao_quantidade": int(getattr(m, "reacao_quantidade", 0) or (1 if m.reacao else 0)),
                     "reacao_detalhes": m.reacao_detalhes or "[]",

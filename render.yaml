@@ -6,6 +6,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     plan: free
+    healthCheckPath: /login
     envVars:
       - key: DB_HOST
         fromDatabase:
@@ -27,7 +28,13 @@ services:
         value: America/Porto_Velho
       - key: AGENT_API_KEY
         generateValue: true
-      - key: SECRET_KEY
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COFRE_SECRET_KEY
+        generateValue: true
+      - key: STUDY_ALLOWED_EMAIL
+        value: jkalbosque@gmail.com
+      - key: STUDY_ACCESS_SECRET
         generateValue: true
 
   # ─── Banco de Dados PostgreSQL ───────────────────────────────────────────────

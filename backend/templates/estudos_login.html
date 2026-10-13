@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Área de Estudos | {{ config.APP_NAME }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #09111f; color: #f8fafc; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+        .panel { background: rgba(15, 23, 42, .88); border: 1px solid rgba(56, 189, 248, .18); box-shadow: 0 30px 80px rgba(2, 8, 23, .45); }
+        .field { background: #020617; border: 1px solid rgba(148, 163, 184, .2); }
+        .field:focus { border-color: #38bdf8; outline: none; box-shadow: 0 0 0 3px rgba(56, 189, 248, .12); }
+    </style>
+</head>
+<body class="min-h-screen px-4 py-10">
+    <main class="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center justify-center">
+        <section class="panel w-full rounded-3xl p-7 sm:p-9">
+            <div class="mb-8 text-center">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-500 text-3xl font-black text-slate-950">E</div>
+                <p class="mt-5 text-xs font-black uppercase tracking-[.28em] text-sky-300">Área independente</p>
+                <h1 class="mt-2 text-3xl font-black">Estudos</h1>
+                <p class="mt-2 text-sm text-slate-400">Acesse seu quadro, histórico e desempenho.</p>
+            </div>
+
+            <form id="formEntrar" class="space-y-4">
+                <input type="hidden" name="intent" value="estudos">
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-widest text-slate-400">Usuário ou e-mail autorizado</label>
+                    <input name="login_id" required class="field w-full rounded-xl px-4 py-3 text-sm text-white" placeholder="Digite seu usuário ou e-mail">
+                </div>
+                <div>
+                    <label class="mb-2 block text-xs font-black uppercase tracking-widest text-slate-400">Senha</label>
+                    <input type="password" name="password" required class="field w-full rounded-xl px-4 py-3 text-sm text-white" placeholder="Sua senha">
+                </div>
+                <button class="w-full rounded-xl bg-sky-500 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-950 hover:bg-sky-400">Entrar nos estudos</button>
+            </form>
+
+            <div id="mensagem" class="mt-4 hidden rounded-xl border px-4 py-3 text-sm"></div>
+        </section>
+    </main>
+    <script>
+        const formEntrar = document.getElementById('formEntrar');
+        const mensagem = document.getElementById('mensagem');
+        formEntrar.onsubmit = async (event) => {
+            event.preventDefault();
+            mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
+            try {
+                const resposta = await fetch('/api/auth/login', { method: 'POST', body: new FormData(formEntrar) });
+                const dados = await resposta.json();
+                if (!resposta.ok || !dados.success) {
+                    mensagem.className = 'mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300';
+                    mensagem.textContent = dados.detail || 'Não foi possível entrar.';
+                    return;
+                }
+                if (dados.redirect) window.location.href = dados.redirect;
+            } catch {
+                mensagem.className = 'mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300';
+                mensagem.textContent = 'Não foi possível conectar ao servidor.';
+            }
+        };
+    </script>
+</body>
+</html>

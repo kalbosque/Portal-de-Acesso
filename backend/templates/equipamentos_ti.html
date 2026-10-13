@@ -3,9 +3,7 @@
 {% block title %}Inventário de TI | {{ config.APP_NAME }}{% endblock %}
 
 {% block content %}
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-<div class="px-4 py-8 animate-scale-in">
+<div id="equipamentos-page" data-equipamentos="{{ equipamentos|tojson|forceescape }}" class="px-4 py-8 animate-scale-in">
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 relative z-10">
         <div>
             <h2 class="text-4xl font-black text-white tracking-tighter uppercase italic html-light:text-slate-900 drop-shadow-lg">
@@ -16,11 +14,11 @@
             </p>
             <div class="mt-4 flex flex-wrap gap-3 items-center">
                 <div class="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-widest">
-                    <span>{{ equipamentos_sem_nome }}</span>
+                    <span id="equipamentos-sem-nome">{{ equipamentos_sem_nome }}</span>
                     <span>equipamento(s) sem nome do computador</span>
                 </div>
                 <div class="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-black uppercase tracking-widest">
-                    <span>{{ total_equipamentos_ti - equipamentos_sem_nome }}</span>
+                    <span id="equipamentos-com-nome">{{ total_equipamentos_ti - equipamentos_sem_nome }}</span>
                     <span>equipamento(s) com nome cadastrado</span>
                 </div>
             </div>
@@ -323,10 +321,35 @@
 </div>
 
 <script>
-    const equipamentosDados = {{ equipamentos|tojson|safe }};
+    let equipamentosDados = JSON.parse(document.getElementById('equipamentos-page').dataset.equipamentos || '[]');
+    let xlsxLoadPromise = null;
 
-    function exportarExcel() {
+    function carregarBibliotecaExcel() {
+        if (window.XLSX) return Promise.resolve();
+        if (!xlsxLoadPromise) {
+            xlsxLoadPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+                script.onload = resolve;
+                script.onerror = () => {
+                    xlsxLoadPromise = null;
+                    script.remove();
+                    reject(new Error('Falha ao carregar a biblioteca Excel.'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+        return xlsxLoadPromise;
+    }
+
+    async function exportarExcel() {
         if (equipamentosDados.length === 0) return alert('Nenhum dado para exportar.');
+        try {
+            await carregarBibliotecaExcel();
+        } catch (error) {
+            alert('Não foi possível carregar a biblioteca de exportação. Verifique sua conexão e tente novamente.');
+            return;
+        }
 
         const wb = XLSX.utils.book_new();
 
@@ -497,6 +520,12 @@
 
         const method = id ? 'PUT' : 'POST';
         const url = id ? `/api/equipamentos_ti/${id}` : `/api/equipamentos_ti/`;
+        const saveButton = document.querySelector('#formEquipamento button[type="submit"]');
+        const originalButtonText = saveButton?.textContent;
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.textContent = 'Salvando...';
+        }
 
         try {
             const res = await fetch(url, {
@@ -506,13 +535,64 @@
             });
 
             if (res.ok) {
-                location.reload();
+                const result = await res.json();
+                atualizarEquipamentoNaMemoria(result.equipamento);
+                document.getElementById('formEquipamento').reset();
+                document.getElementById('equip_id').value = '';
+                document.getElementById('modal-equip-title').textContent = 'Registrar Equipamento';
+                syncFormByType();
+                closeModal('modal-add-equipamento');
+                try {
+                    await atualizarListaEquipamentos();
+                } catch (refreshError) {
+                    console.error('Equipamento salvo, mas a lista não foi atualizada:', refreshError);
+                    alert('Equipamento salvo. Atualize a página para visualizar os dados atualizados.');
+                }
             } else {
                 alert("Erro ao salvar o equipamento.");
             }
         } catch (err) {
             console.error(err);
+            alert('Não foi possível salvar o equipamento. Verifique a conexão e tente novamente.');
+        } finally {
+            if (saveButton) {
+                saveButton.disabled = false;
+                saveButton.textContent = originalButtonText || 'Salvar Dados';
+            }
         }
+    }
+
+    function atualizarEquipamentoNaMemoria(equipamento) {
+        if (!equipamento) return;
+        const nomeComputador = String(equipamento.nome_computador || '').trim();
+        const atualizado = {
+            ...equipamento,
+            nome_computador_bruto: nomeComputador,
+            nome_computador_display: nomeComputador || 'Não informado'
+        };
+        const index = equipamentosDados.findIndex(item => String(item.id) === String(atualizado.id));
+        if (index === -1) equipamentosDados.push(atualizado);
+        else equipamentosDados[index] = atualizado;
+    }
+
+    async function atualizarListaEquipamentos() {
+        const response = await fetch(window.location.pathname, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Falha ao atualizar a lista (${response.status})`);
+
+        const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const updatedGrid = page.getElementById('area-relatorio');
+        const updatedPage = page.getElementById('equipamentos-page');
+        if (!updatedGrid || !updatedPage?.dataset.equipamentos) throw new Error('Resposta sem a lista de equipamentos');
+
+        equipamentosDados = JSON.parse(updatedPage.dataset.equipamentos);
+        document.getElementById('area-relatorio').innerHTML = updatedGrid.innerHTML;
+
+        const semNome = equipamentosDados.filter(item => !String(item.nome_computador || '').trim()).length;
+        document.getElementById('equipamentos-sem-nome').textContent = semNome;
+        document.getElementById('equipamentos-com-nome').textContent = equipamentosDados.length - semNome;
+
+        atualizarFiltrosEquipamentos();
+        filtrarEquipamentos();
     }
 
     function editEquipamento(e) {
@@ -538,14 +618,19 @@
 
     async function deleteEquipamento(id) {
         if (confirm('Tem certeza que deseja excluir este equipamento? Esta ação não pode ser desfeita.')) {
-            const res = await fetch(`/api/equipamentos_ti/${id}`, { method: 'DELETE' });
-            if (res.ok) location.reload();
+            try {
+                const res = await fetch(`/api/equipamentos_ti/${id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(`Falha ao excluir (${res.status})`);
+                equipamentosDados = equipamentosDados.filter(item => String(item.id) !== String(id));
+                await atualizarListaEquipamentos();
+            } catch (error) {
+                console.error(error);
+                alert('Não foi possível excluir o equipamento ou atualizar a lista.');
+            }
         }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        const tipoSelect = document.getElementById('equip_tipo');
-
         const backdrop = document.getElementById('modal-add-equipamento-backdrop');
         if (backdrop) {
             backdrop.addEventListener('click', () => {
@@ -556,48 +641,40 @@
             });
         }
 
-        // Popular dropdown de setores
+        atualizarFiltrosEquipamentos();
+        syncFormByType();
+        filtrarEquipamentos();
+    });
+
+    function atualizarFiltrosEquipamentos() {
         const setores = [...new Set(equipamentosDados.map(e => e.setor).filter(Boolean))].sort();
         const selectSetor = document.getElementById('filtroSetor');
         if (selectSetor) {
+            const selectedSetor = selectSetor.value || localStorage.getItem('filtroSetorEquipamentos') || '';
+            selectSetor.replaceChildren(new Option('Todos os setores', ''));
             setores.forEach(setor => {
-                const opt = document.createElement('option');
-                opt.value = setor;
-                opt.textContent = setor;
-                selectSetor.appendChild(opt);
+                selectSetor.add(new Option(setor, setor));
             });
-
-            // Recuperar do localStorage
-            const savedSetor = localStorage.getItem('filtroSetorEquipamentos');
-            if (savedSetor && (setores.includes(savedSetor) || savedSetor === '')) {
-                selectSetor.value = savedSetor;
-            }
+            selectSetor.value = setores.includes(selectedSetor) ? selectedSetor : '';
         }
 
-        // Popular dropdown e datalist de tipos
         const tiposFixos = ['Desktop', 'Notebook', 'Monitor', 'Celular', 'Impressora', 'Outros', 'Ar Condicionado'];
         const tiposUsados = equipamentosDados.map(e => e.tipo_equipamento).filter(Boolean);
         const tiposUnicos = [...new Set([...tiposFixos, ...tiposUsados])].sort((a,b) => a.localeCompare(b, 'pt-BR'));
 
         const selectTipo = document.getElementById('filtroTipo');
         if (selectTipo) {
-            selectTipo.innerHTML = '<option value="">Todos os tipos</option>' + 
-                tiposUnicos.map(t => `<option value="${t}">${t}</option>`).join('');
-            
-            const savedTipo = localStorage.getItem('filtroTipoEquipamentos');
-            if (savedTipo && (tiposUnicos.includes(savedTipo) || savedTipo === '')) {
-                selectTipo.value = savedTipo;
-            }
+            const selectedTipo = selectTipo.value || localStorage.getItem('filtroTipoEquipamentos') || '';
+            selectTipo.replaceChildren(new Option('Todos os tipos', ''));
+            tiposUnicos.forEach(tipo => selectTipo.add(new Option(tipo, tipo)));
+            selectTipo.value = tiposUnicos.includes(selectedTipo) ? selectedTipo : '';
         }
 
         const tipoList = document.getElementById('tipoList');
         if (tipoList) {
-            tipoList.innerHTML = tiposUnicos.map(t => `<option value="${t}"></option>`).join('');
+            tipoList.replaceChildren(...tiposUnicos.map(tipo => new Option(tipo, tipo)));
         }
-
-        syncFormByType();
-        filtrarEquipamentos();
-    });
+    }
 
     function filtrarEquipamentos() {
         const termo = (document.getElementById('buscaEquipamento')?.value || '').trim().toLowerCase();
@@ -666,13 +743,13 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        const cards = document.querySelectorAll('.glass-card-magnetic');
-        cards.forEach(card => {
-            card.addEventListener('mousemove', e => {
-                const rect = card.getBoundingClientRect();
-                card.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-                card.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-            });
+        const grid = document.getElementById('area-relatorio');
+        grid?.addEventListener('mousemove', event => {
+            const card = event.target.closest?.('.glass-card-magnetic');
+            if (!card) return;
+            const rect = card.getBoundingClientRect();
+            card.style.setProperty('--mouse-x', `${event.clientX - rect.left}px`);
+            card.style.setProperty('--mouse-y', `${event.clientY - rect.top}px`);
         });
     });
 </script>

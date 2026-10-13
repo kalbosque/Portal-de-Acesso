@@ -151,8 +151,13 @@
                 <div>
                     <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 italic">Senha Privada</label>
                     <div class="relative">
-                        <input type="password" name="password" id="field-pass" placeholder="••••••••" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
-                        <button type="button" onclick="generatePass()" class="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-indigo-400 uppercase hover:text-white transition-colors">Gerar</button>
+                        <input type="password" name="password" id="field-pass" placeholder="••••••••" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 pr-24 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all">
+                        <div class="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-3">
+                            <button type="button" id="copy-pass-button" onclick="copyGeneratedPass()" class="text-[9px] font-black text-slate-400 transition-colors hover:text-white" title="Copiar senha" aria-label="Copiar senha">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2" stroke-width="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" stroke-width="2"></path></svg>
+                            </button>
+                            <button type="button" onclick="generatePass()" class="text-[9px] font-black text-indigo-400 uppercase transition-colors hover:text-white">Gerar</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -163,13 +168,14 @@
                     <select name="role" id="field-role" style="color-scheme: dark" class="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none [&>option]:bg-slate-900 [&>option]:text-white">
                         <option value="operator">Operador</option>
                         <option value="recepcao">Recepção / Triagem</option>
+                        <option value="estudante">Estudante (Área de Estudos)</option>
                         <option value="cliente_atendimento">Cliente Atendimento</option>
                         <option value="admin">Administrador</option>
                     </select>
                 </div>
                 <div class="md:col-span-2">
                     <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 italic">Módulos do Sistema (Regras)</label>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div id="perms-controls" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {% for mod in ['Dashboard', 'Equipamentos', 'Relatórios', 'Suporte', 'Atendimento', 'Usuários', 'Ajustes'] %}
                         <div class="relative">
                             <input type="checkbox" name="perms" value="{{ mod }}" id="cb-{{ mod }}" class="hidden peer">
@@ -179,6 +185,7 @@
                         </div>
                         {% endfor %}
                     </div>
+                    <p id="student-role-note" class="hidden mt-3 text-xs leading-relaxed text-sky-300">Este perfil acessa somente a Área de Estudos; as permissões gerais não se aplicam.</p>
                 </div>
             </div>
 
@@ -282,6 +289,51 @@
         setTimeout(() => { document.getElementById('field-pass').type = 'password'; }, 3000);
     }
 
+    async function copyGeneratedPass() {
+        const input = document.getElementById('field-pass');
+        const button = document.getElementById('copy-pass-button');
+        if (!input?.value || !button) {
+            alert('Gere ou digite uma senha antes de copiar.');
+            return;
+        }
+
+        try {
+            let copied = false;
+            if (navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(input.value);
+                    copied = true;
+                } catch (_) {}
+            }
+
+            if (!copied) {
+                const temporaryField = document.createElement('textarea');
+                temporaryField.value = input.value;
+                temporaryField.setAttribute('readonly', '');
+                temporaryField.style.position = 'fixed';
+                temporaryField.style.opacity = '0';
+                document.body.appendChild(temporaryField);
+                temporaryField.select();
+                copied = document.execCommand('copy');
+                temporaryField.remove();
+                if (!copied) throw new Error('Cópia não autorizada pelo navegador.');
+            }
+
+            const originalTitle = button.title;
+            button.title = 'Senha copiada';
+            button.setAttribute('aria-label', 'Senha copiada');
+            button.innerHTML = '<svg class="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+            setTimeout(() => {
+                button.title = originalTitle;
+                button.setAttribute('aria-label', originalTitle);
+                button.innerHTML = '<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2" stroke-width="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" stroke-width="2"></path></svg>';
+            }, 1600);
+        } catch (error) {
+            console.error('Erro ao copiar senha:', error);
+            alert('Não foi possível copiar a senha. Selecione o campo e copie manualmente.');
+        }
+    }
+
     document.getElementById('form-user').onsubmit = async (e) => {
         e.preventDefault();
         const uid = document.getElementById('field-uid').value;
@@ -327,11 +379,15 @@
     function toggleClientAttendanceProfile() {
         const role = document.getElementById('field-role');
         const isClient = role?.value === 'cliente_atendimento';
+        const isStudent = role?.value === 'estudante';
+        document.getElementById('perms-controls')?.classList.toggle('hidden', isStudent);
+        document.getElementById('student-role-note')?.classList.toggle('hidden', !isStudent);
         document.querySelectorAll('input[name="perms"]').forEach(input => {
             if (isClient) {
                 input.checked = input.value === 'Atendimento';
                 input.disabled = input.value !== 'Atendimento';
             } else {
+                if (isStudent) input.checked = false;
                 input.disabled = false;
             }
         });

@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import base64
 import os
+import time
 from fastapi import Request, HTTPException, Response
 from fastapi import Depends
 
@@ -32,6 +33,32 @@ def get_signed_cookie(request: Request, key: str, default: str = None) -> str:
     cookie = request.cookies.get(key)
     val = verify_value(cookie) if cookie else None
     return val if val is not None else default
+
+
+def create_study_access_token(user_id: str, max_age: int = 86400) -> str | None:
+    secret = os.environ.get("STUDY_ACCESS_SECRET") or os.environ.get("JWT_SECRET") or os.environ.get("DB_PASS")
+    if not secret:
+        return None
+    payload = f"{user_id}:{int(time.time()) + max_age}"
+    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{signature}"
+
+
+def verify_study_access_token(token: str) -> str | None:
+    secret = os.environ.get("STUDY_ACCESS_SECRET") or os.environ.get("JWT_SECRET") or os.environ.get("DB_PASS")
+    if not secret or not token or "." not in token:
+        return None
+    payload, signature = token.rsplit(".", 1)
+    expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return None
+    try:
+        user_id, expires_at = payload.rsplit(":", 1)
+        if int(expires_at) <= int(time.time()):
+            return None
+    except (ValueError, TypeError):
+        return None
+    return user_id
 
 def _get_user_perms(request: Request) -> list:
     """Extrai a lista de permissões do cookie da sessão."""

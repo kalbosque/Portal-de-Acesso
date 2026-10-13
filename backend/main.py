@@ -1,5 +1,7 @@
 import os
 import json
+import re
+import unicodedata
 from datetime import datetime, timedelta
 from typing import Optional, List
 from fastapi import FastAPI, Header, HTTPException, Request, BackgroundTasks, Form, UploadFile, File
@@ -11,7 +13,7 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, create_engine, select, func, SQLModel, desc
-from models import Usuario, Impressora, Impressao, Licenca, Chamado, ChamadoInteracao, TipoProblema, EquipamentoTI, MarmitaCardapio, MarmitaPedido
+from models import Usuario, Impressora, Impressao, Licenca, Chamado, ChamadoInteracao, TipoProblema, EquipamentoTI, MarmitaCardapio, MarmitaPedido, EstudoSessao, EstudoPlano, EstudoCronometro
 import license_service
 import api_printers
 import api_reports
@@ -30,7 +32,7 @@ import api_whatsapp
 from database import engine
 from dotenv import load_dotenv
 from websocket_manager import manager
-from auth_utils import get_signed_cookie, normalize_permissions
+from auth_utils import get_signed_cookie, normalize_permissions, verify_study_access_token
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -59,6 +61,26 @@ APP_CONFIG = load_app_config()
 
 # engine agora vem do database.py
 app = FastAPI(title=APP_CONFIG.get("APP_NAME", "PrintDash"))
+
+@app.middleware("http")
+async def restrict_study_accounts(request: Request, call_next):
+    """Keep study-only accounts inside the independent study area."""
+    path = request.url.path
+    if path.startswith("/estudos") and path != "/estudos/login":
+        study_user_id = verify_study_access_token(request.cookies.get("study_access"))
+        if not study_user_id or request.cookies.get("user_id") != study_user_id:
+            return RedirectResponse(url="/estudos/login", status_code=303)
+
+    if request.cookies.get("user_role") == "estudante":
+        allowed = (
+            path.startswith("/estudos")
+            or path.startswith("/api/auth")
+            or path.startswith("/static")
+            or path.startswith("/uploads")
+        )
+        if not allowed:
+            return RedirectResponse(url="/estudos", status_code=303)
+    return await call_next(request)
 
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
@@ -118,7 +140,7 @@ def ensure_schema_compatibility():
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url VARCHAR(500)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP NULL",
         "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_role_check",
-        "ALTER TABLE usuarios ADD CONSTRAINT usuarios_role_check CHECK (role IN ('admin', 'operator', 'gestor', 'gerente', 'supervisor', 'recepcao', 'recepcionista', 'cliente_atendimento'))",
+        "ALTER TABLE usuarios ADD CONSTRAINT usuarios_role_check CHECK (role IN ('admin', 'operator', 'estudante', 'gestor', 'gerente', 'supervisor', 'recepcao', 'recepcionista', 'cliente_atendimento'))",
         "ALTER TABLE impressoras ADD COLUMN IF NOT EXISTS localizacao VARCHAR(120)",
         "ALTER TABLE tipos_problemas ADD COLUMN IF NOT EXISTS sla_horas INTEGER DEFAULT 24",
         "ALTER TABLE equipamentos_ti ADD COLUMN IF NOT EXISTS modelo_monitor VARCHAR(120)",
@@ -137,6 +159,10 @@ def ensure_schema_compatibility():
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS whatsapp_instance VARCHAR(120)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS origem VARCHAR(50) DEFAULT 'Web'",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS assigned_user VARCHAR(120)",
+        "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS dia_semana VARCHAR(20)",
+        "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS slot INTEGER",
+        "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS horario_inicio VARCHAR(10)",
+        "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS horario_fim VARCHAR(10)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS visivel_suporte BOOLEAN DEFAULT TRUE",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_status VARCHAR(20) DEFAULT 'sent'",
         "ALTER TABLE impressoes DROP CONSTRAINT IF EXISTS impressoes_tipo_impressao_check",
@@ -577,6 +603,8 @@ async def agent_compat_endpoint(
 async def dashboard(request: Request):
     user_id = request.cookies.get("user_id")
     if not user_id: return RedirectResponse(url="/login")
+    if request.cookies.get("user_role") == "estudante":
+        return RedirectResponse(url="/estudos")
     
     with Session(engine) as session:
         # Busca o usuÃ¡rio no banco para ter as permissÃµes REAIS e ATUAIS
@@ -1117,6 +1145,635 @@ async def view_usuarios(request: Request):
             }
         )
 
+@app.get("/estudos", response_class=HTMLResponse)
+async def view_estudos(request: Request, success: str = None, assunto: str = None, data_inicio: str = None, data_fim: str = None, semana: str = None, editar_id: int = None, data_progresso: str = None):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+
+    try:
+        usuario_id = int(user_id)
+    except ValueError:
+        return RedirectResponse(url="/login")
+
+    hoje = datetime.now().date()
+    ontem = hoje - timedelta(days=1)
+    inicio_semana = hoje - timedelta(days=hoje.weekday())
+    try:
+        data_semana = datetime.strptime(semana, "%Y-%m-%d").date() if semana else inicio_semana
+        semana_inicio = data_semana - timedelta(days=data_semana.weekday())
+    except ValueError:
+        semana_inicio = inicio_semana
+    fim_semana = semana_inicio + timedelta(days=6)
+    inicio_dia = datetime.combine(hoje, datetime.min.time())
+    inicio_proximo_dia = inicio_dia + timedelta(days=1)
+
+    with Session(engine) as session:
+        registros = session.exec(
+            select(EstudoSessao).where(EstudoSessao.usuario_id == usuario_id).order_by(desc(EstudoSessao.data_estudo), desc(EstudoSessao.criado_em))
+        ).all()
+
+        planos = session.exec(
+            select(EstudoPlano).where(
+                EstudoPlano.usuario_id == usuario_id,
+                EstudoPlano.semana_inicio == semana_inicio,
+            ).order_by(EstudoPlano.materia)
+        ).all()
+        has_grid = any(p.slot is not None for p in planos)
+        if not has_grid:
+            todas = session.exec(
+                select(EstudoPlano.semana_inicio)
+                .where(
+                    EstudoPlano.usuario_id == usuario_id,
+                    EstudoPlano.semana_inicio < semana_inicio,
+                    EstudoPlano.slot.isnot(None)
+                )
+                .order_by(desc(EstudoPlano.semana_inicio))
+            ).all()
+            if todas:
+                ultima_semana = todas[0]
+                planos_antigos = session.exec(
+                    select(EstudoPlano).where(
+                        EstudoPlano.usuario_id == usuario_id,
+                        EstudoPlano.semana_inicio == ultima_semana,
+                        EstudoPlano.slot.isnot(None)
+                    ).order_by(EstudoPlano.materia)
+                ).all()
+                planos.extend(planos_antigos)
+        
+        if not planos:
+            todas_simples = session.exec(
+                select(EstudoPlano.semana_inicio)
+                .where(EstudoPlano.usuario_id == usuario_id, EstudoPlano.semana_inicio < semana_inicio)
+                .order_by(desc(EstudoPlano.semana_inicio))
+            ).all()
+            if todas_simples:
+                planos = session.exec(
+                    select(EstudoPlano).where(
+                        EstudoPlano.usuario_id == usuario_id,
+                        EstudoPlano.semana_inicio == todas_simples[0]
+                    ).order_by(EstudoPlano.materia)
+                ).all()
+        editar = session.get(EstudoSessao, editar_id) if editar_id else None
+        if editar and editar.usuario_id != usuario_id:
+            editar = None
+
+    filtro = (assunto or "").strip().lower()
+    try:
+        data_progresso_selecionada = datetime.strptime(data_progresso, "%Y-%m-%d").date() if data_progresso else hoje
+    except ValueError:
+        data_progresso_selecionada = hoje
+    try:
+        filtro_data_inicio = datetime.strptime(data_inicio, "%Y-%m-%d").date() if data_inicio else None
+    except ValueError:
+        filtro_data_inicio = None
+    try:
+        filtro_data_fim = datetime.strptime(data_fim, "%Y-%m-%d").date() if data_fim else None
+    except ValueError:
+        filtro_data_fim = None
+    registros_historico = [
+        registro for registro in registros
+        if (not filtro or filtro in (registro.assunto or "").lower())
+        and (not filtro_data_inicio or registro.data_estudo >= filtro_data_inicio)
+        and (not filtro_data_fim or registro.data_estudo <= filtro_data_fim)
+    ]
+
+    total_questoes = sum((r.quantidade_questoes or 0) for r in registros)
+    total_acertos = sum((r.total_acertos or 0) for r in registros)
+    total_erros = sum((r.total_erros or 0) for r in registros)
+    def calc_segundos(r):
+        if r.horario_inicio and r.horario_fim:
+            try:
+                hi = datetime.strptime(r.horario_inicio, "%H:%M")
+                hf = datetime.strptime(r.horario_fim, "%H:%M")
+                diff = (hf - hi).total_seconds()
+                if diff < 0: diff += 24 * 3600 # cruzou meia noite
+                return int(diff)
+            except ValueError:
+                pass
+        return 0
+
+    total_cronometro_segundos = sum(calc_segundos(r) for r in registros)
+    cronometro_hoje_segundos = sum(calc_segundos(r) for r in registros if r.data_estudo == hoje)
+    horas_cronometro_total = f"{total_cronometro_segundos // 3600}h {(total_cronometro_segundos % 3600) // 60:02d}min"
+    horas_cronometro_hoje = f"{cronometro_hoje_segundos // 3600}h {(cronometro_hoje_segundos % 3600) // 60:02d}min"
+
+    semana_questoes = sum(
+        (r.quantidade_questoes or 0)
+        for r in registros
+        if r.data_estudo and semana_inicio <= r.data_estudo <= fim_semana
+    )
+    meta_diaria = 40
+    meta_semanal = 200
+    total_hoje = sum(
+        (r.quantidade_questoes or 0)
+        for r in registros
+        if r.data_estudo == hoje
+    )
+    progresso_diario = min(100, int((total_hoje / meta_diaria) * 100)) if meta_diaria else 0
+    progresso_semanal = min(100, int((semana_questoes / meta_semanal) * 100)) if meta_semanal else 0
+
+    assuntos = {}
+    for r in registros:
+        assunto_key = r.assunto or "Geral"
+        assuntos[assunto_key] = assuntos.get(assunto_key, 0) + (r.quantidade_questoes or 0)
+    assuntos_ordenados = sorted(assuntos.items(), key=lambda item: item[1], reverse=True)[:5]
+
+    grafico_dias = []
+    nomes_dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    for indice, nome_dia in enumerate(nomes_dias):
+        data_grafico = semana_inicio + timedelta(days=indice)
+        quantidade = sum(
+            (registro.quantidade_questoes or 0)
+            for registro in registros
+            if registro.data_estudo == data_grafico
+        )
+        grafico_dias.append({"dia": nome_dia, "data": data_grafico, "questoes": quantidade})
+
+    desempenho_materias = {}
+    for registro in registros:
+        materia = (registro.assunto or "Geral").strip()
+        item = desempenho_materias.setdefault(materia, {"questoes": 0, "acertos": 0})
+        item["questoes"] += registro.quantidade_questoes or 0
+        item["acertos"] += registro.total_acertos or 0
+    grafico_materias = [
+        {
+            "materia": materia,
+            "questoes": valores["questoes"],
+            "acertos": valores["acertos"],
+            "percentual": min(100, int((valores["acertos"] / valores["questoes"]) * 100)) if valores["questoes"] else 0,
+        }
+        for materia, valores in sorted(desempenho_materias.items(), key=lambda item: item[1]["questoes"], reverse=True)
+    ][:8]
+    
+    desempenho_materias_hoje = {}
+    for registro in registros:
+        if registro.data_estudo == data_progresso_selecionada:
+            materia = (registro.assunto or "Geral").strip()
+            item = desempenho_materias_hoje.setdefault(materia, {"questoes": 0, "acertos": 0})
+            item["questoes"] += registro.quantidade_questoes or 0
+            item["acertos"] += registro.total_acertos or 0
+    grafico_materias_hoje = [
+        {
+            "materia": materia,
+            "questoes": valores["questoes"],
+            "acertos": valores["acertos"],
+            "percentual": min(100, int((valores["acertos"] / valores["questoes"]) * 100)) if valores["questoes"] else 0,
+        }
+        for materia, valores in sorted(desempenho_materias_hoje.items(), key=lambda item: item[1]["questoes"], reverse=True)
+    ]
+    if data_progresso_selecionada == hoje:
+        label_progresso = "Hoje"
+    elif data_progresso_selecionada == ontem:
+        label_progresso = "Ontem"
+    else:
+        label_progresso = data_progresso_selecionada.strftime("%d/%m/%Y")
+    max_questoes_grafico = max((item["questoes"] for item in grafico_dias), default=1) or 1
+    materias_com_dados = [item for item in grafico_materias if item["questoes"] > 0]
+    melhor_materia = max(materias_com_dados, key=lambda item: item["percentual"]) if materias_com_dados else None
+    pior_materia = min(materias_com_dados, key=lambda item: item["percentual"]) if materias_com_dados else None
+    materia_melhorar = pior_materia
+
+    realizados_por_materia = {}
+    for registro in registros:
+        if registro.data_estudo and semana_inicio <= registro.data_estudo <= fim_semana:
+            chave = (registro.assunto or "Estudo").strip().lower()
+            realizados_por_materia[chave] = realizados_por_materia.get(chave, 0) + (registro.quantidade_questoes or 0)
+    plano_comparativo = [
+        {
+            "materia": plano.materia,
+            "dias_semana": plano.dias_semana,
+            "meta_questoes": plano.meta_questoes,
+            "realizadas": realizados_por_materia.get(plano.materia.strip().lower(), 0),
+            "percentual": min(100, int((realizados_por_materia.get(plano.materia.strip().lower(), 0) / plano.meta_questoes) * 100)) if plano.meta_questoes else 0,
+            "dia_semana": plano.dia_semana,
+            "horario_inicio": plano.horario_inicio,
+            "horario_fim": plano.horario_fim,
+        }
+        for plano in planos
+    ]
+    total_planejado = sum(item["meta_questoes"] for item in plano_comparativo)
+    total_planejado_realizado = sum(item["realizadas"] for item in plano_comparativo)
+    progresso_plano = min(100, int((total_planejado_realizado / total_planejado) * 100)) if total_planejado else 0
+    dias_grade = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    horarios_grade = [("21:00", "22:00"), ("22:15", "00:15"), ("00:31", "01:15")]
+    for plano in planos:
+        if plano.slot is not None and 0 <= plano.slot < len(horarios_grade) and plano.horario_inicio and plano.horario_fim:
+            horarios_grade[plano.slot] = (plano.horario_inicio, plano.horario_fim)
+    grade = {
+        f"{item['horario_inicio']}-{item['horario_fim']}-{item['dia_semana']}": item["materia"]
+        for item in plano_comparativo
+        if item["dia_semana"] and item["horario_inicio"] and item["horario_fim"]
+    }
+    materias_unicas = {}
+    for materia in grade.values():
+        if not materia:
+            continue
+        chave = unicodedata.normalize("NFKD", materia).encode("ascii", "ignore").decode("ascii").casefold()
+        chave = re.sub(r"[^a-z0-9]+", " ", chave).strip()
+        chave = re.sub(r"\bconh\.?\b|\bconhec\.?\b", "conhecimentos", chave)
+        materias_unicas.setdefault(chave, materia.strip())
+    for plano in planos:
+        if not plano.materia:
+            continue
+        chave = unicodedata.normalize("NFKD", plano.materia).encode("ascii", "ignore").decode("ascii").casefold()
+        chave = re.sub(r"[^a-z0-9]+", " ", chave).strip()
+        chave = re.sub(r"\bconh\.?\b|\bconhec\.?\b", "conhecimentos", chave)
+        materias_unicas.setdefault(chave, plano.materia.strip())
+    for registro in registros:
+        if not registro.assunto:
+            continue
+        chave = unicodedata.normalize("NFKD", registro.assunto).encode("ascii", "ignore").decode("ascii").casefold()
+        chave = re.sub(r"[^a-z0-9]+", " ", chave).strip()
+        chave = re.sub(r"\bconh\.?\b|\bconhec\.?\b", "conhecimentos", chave)
+        materias_unicas.setdefault(chave, registro.assunto.strip())
+    materias_grade = sorted(materias_unicas.values(), key=str.casefold)
+    paleta_materias = [
+        ("#38bdf8", "rgba(56, 189, 248, 0.12)"),
+        ("#fbbf24", "rgba(251, 191, 36, 0.12)"),
+        ("#a3e635", "rgba(163, 230, 53, 0.12)"),
+        ("#fb7185", "rgba(251, 113, 133, 0.12)"),
+        ("#c084fc", "rgba(192, 132, 252, 0.12)"),
+        ("#2dd4bf", "rgba(45, 212, 191, 0.12)"),
+        ("#fb923c", "rgba(251, 146, 60, 0.12)"),
+        ("#818cf8", "rgba(129, 140, 248, 0.12)"),
+    ]
+    def normalizar_chave_materia(materia):
+        chave = unicodedata.normalize("NFKD", materia).encode("ascii", "ignore").decode("ascii").casefold()
+        chave = re.sub(r"[^a-z0-9]+", " ", chave).strip()
+        return re.sub(r"\bconh\.?\b|\bconhec\.?\b", "conhecimentos", chave)
+
+    chaves_materias_quadro = sorted({normalizar_chave_materia(materia) for materia in grade.values() if materia and materia.strip()})
+    materias_quadro = [materias_unicas[chave] for chave in chaves_materias_quadro]
+    cores_por_chave = {
+        chave: paleta_materias[indice % len(paleta_materias)]
+        for indice, chave in enumerate(chaves_materias_quadro)
+    }
+    materia_cores = {
+        materia.casefold(): cores_por_chave[normalizar_chave_materia(materia)]
+        for materia in grade.values()
+        if materia and materia.strip()
+    }
+
+    return templates.TemplateResponse(
+        request=request,
+        name="estudos.html",
+        context={
+            "config": APP_CONFIG,
+            "registros": registros_historico,
+            "total_questoes": total_questoes,
+            "total_acertos": total_acertos,
+            "total_erros": total_erros,
+            "horas_cronometro_total": horas_cronometro_total,
+            "horas_cronometro_hoje": horas_cronometro_hoje,
+            "success": success,
+            "meta_diaria": meta_diaria,
+            "meta_semanal": meta_semanal,
+            "total_hoje": total_hoje,
+            "semana_questoes": semana_questoes,
+            "progresso_diario": progresso_diario,
+            "progresso_semanal": progresso_semanal,
+            "assuntos_ordenados": assuntos_ordenados,
+            "assunto_filtro": filtro,
+            "data_inicio_filtro": data_inicio or "",
+            "data_fim_filtro": data_fim or "",
+            "planos": plano_comparativo,
+            "semana_inicio": semana_inicio,
+            "semana_fim": fim_semana,
+            "semana_atual_inicio": inicio_semana,
+            "semana_anterior": semana_inicio - timedelta(days=7),
+            "semana_proxima": semana_inicio + timedelta(days=7),
+            "data_hoje": hoje,
+            "data_ontem": ontem,
+            "total_planejado": total_planejado,
+            "total_planejado_realizado": total_planejado_realizado,
+            "progresso_plano": progresso_plano,
+            "dias_grade": dias_grade,
+            "horarios_grade": horarios_grade,
+            "grade": grade,
+            "materias_grade": materias_grade,
+            "materias_quadro": materias_quadro,
+            "materia_cores": materia_cores,
+            "editar": editar,
+            "grafico_dias": grafico_dias,
+            "grafico_materias": grafico_materias,
+            "grafico_materias_hoje": grafico_materias_hoje,
+            "data_progresso_filtro": data_progresso_selecionada.isoformat() if data_progresso_selecionada else hoje.isoformat(),
+            "label_progresso": label_progresso,
+            "max_questoes_grafico": max_questoes_grafico,
+            "melhor_materia": melhor_materia,
+            "pior_materia": pior_materia,
+            "materia_melhorar": materia_melhorar,
+        }
+    )
+
+@app.post("/estudos/cronometro/concluir")
+async def concluir_cronometro(request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Autenticação necessária")
+    try:
+        usuario_id = int(user_id)
+        payload = await request.json()
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Dados inválidos")
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Dados inválidos")
+    session_id = payload.get("session_id")
+    duracao_segundos = payload.get("duracao_segundos")
+    materia = payload.get("materia")
+    if not isinstance(session_id, str) or not session_id.strip() or len(session_id) > 64:
+        raise HTTPException(status_code=400, detail="Identificador de sessão inválido")
+    if isinstance(duracao_segundos, bool) or not isinstance(duracao_segundos, int) or not 60 <= duracao_segundos <= 36000:
+        raise HTTPException(status_code=400, detail="Duração de sessão inválida")
+    if materia is not None and not isinstance(materia, str):
+        raise HTTPException(status_code=400, detail="Matéria inválida")
+
+    with Session(engine) as session:
+        existente = session.exec(
+            select(EstudoCronometro).where(EstudoCronometro.session_id == session_id)
+        ).first()
+        if existente:
+            return {"ok": True, "registrada": False}
+        session.add(EstudoCronometro(
+            usuario_id=usuario_id,
+            session_id=session_id,
+            materia=materia.strip()[:200] if materia else None,
+            duracao_segundos=duracao_segundos,
+        ))
+        session.commit()
+    return {"ok": True, "registrada": True}
+
+@app.post("/estudos/importar-plano", response_class=HTMLResponse)
+async def importar_plano_estudo(request: Request, semana_inicio: str = Form(...)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+
+    try:
+        usuario_id = int(user_id)
+        data_inicio = datetime.strptime(semana_inicio, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/estudos?success=erro", status_code=303)
+
+    form = await request.form()
+    texto_plano = str(form.get("plano_texto") or "").strip()
+    arquivo = form.get("plano_arquivo")
+
+    if arquivo is not None and getattr(arquivo, "filename", None):
+        try:
+            conteudo = await arquivo.read()
+            if conteudo:
+                texto_plano = (texto_plano + "\n" + conteudo.decode("utf-8", errors="ignore")).strip()
+        except Exception:
+            texto_plano = texto_plano
+
+    if not texto_plano:
+        return RedirectResponse(url=f"/estudos?success=erro&semana={semana_inicio}", status_code=303)
+
+    dias_semana = [
+        ("segunda", "Segunda"),
+        ("terca", "Terça"),
+        ("quarta", "Quarta"),
+        ("quinta", "Quinta"),
+        ("sexta", "Sexta"),
+        ("sabado", "Sábado"),
+        ("domingo", "Domingo"),
+    ]
+    default_slots = [("21:00", "22:00"), ("22:15", "00:15"), ("00:31", "01:15")]
+
+    def normalizar_materia(valor: str) -> str:
+        texto = re.sub(r"\s+", " ", valor or "").strip(" -:;|/\n")
+        return texto.strip()
+
+    def encontrar_slot(hora_inicio: str | None, hora_fim: str | None):
+        if hora_inicio and hora_fim:
+            try:
+                inicio = datetime.strptime(hora_inicio, "%H:%M")
+                fim = datetime.strptime(hora_fim, "%H:%M")
+                for idx, (slot_inicio, slot_fim) in enumerate(default_slots):
+                    try:
+                        slot_i = datetime.strptime(slot_inicio, "%H:%M")
+                        slot_f = datetime.strptime(slot_fim, "%H:%M")
+                        if inicio >= slot_i and fim <= slot_f:
+                            return idx
+                    except ValueError:
+                        continue
+            except ValueError:
+                pass
+        return 0
+
+    linhas = [linha.strip() for linha in texto_plano.splitlines() if linha.strip()]
+    importacoes = []
+
+    for linha in linhas:
+        linha_limpa = re.sub(r"\s+", " ", linha).strip()
+        if not linha_limpa:
+            continue
+
+        dia_encontrado = None
+        for chave, nome in dias_semana:
+            if re.search(rf"\b{chave}\b", linha_limpa, flags=re.IGNORECASE):
+                dia_encontrado = nome
+                break
+
+        if not dia_encontrado:
+            continue
+
+        hora_match = re.search(r"(\d{1,2}:\d{2})\s*(?:-|–|a|ate|até)\s*(\d{1,2}:\d{2})", linha_limpa, flags=re.IGNORECASE)
+        hora_inicio = hora_match.group(1) if hora_match else None
+        hora_fim = hora_match.group(2) if hora_match else None
+
+        materia = linha_limpa
+        for chave, _ in dias_semana:
+            materia = re.sub(rf"\b{chave}\b", "", materia, flags=re.IGNORECASE)
+        if hora_match:
+            materia = materia.replace(hora_match.group(0), "")
+        materia = re.sub(r"[|;:,-]+", " ", materia)
+        materia = re.sub(r"\s+", " ", materia).strip(" -")
+        materia = normalizar_materia(materia)
+        if not materia:
+            continue
+
+        dia_index = [nome for _, nome in dias_semana].index(dia_encontrado)
+        slot = encontrar_slot(hora_inicio, hora_fim)
+        importacoes.append({"dia": dia_encontrado, "slot": slot, "materia": materia, "horario_inicio": hora_inicio or default_slots[slot][0], "horario_fim": hora_fim or default_slots[slot][1]})
+
+    if not importacoes:
+        return RedirectResponse(url=f"/estudos?success=erro&semana={semana_inicio}", status_code=303)
+
+    with Session(engine) as session:
+        existentes = session.exec(select(EstudoPlano).where(
+            EstudoPlano.usuario_id == usuario_id,
+            EstudoPlano.semana_inicio == data_inicio,
+        )).all()
+        for plano in existentes:
+            session.delete(plano)
+
+        for item in importacoes:
+            session.add(EstudoPlano(
+                usuario_id=usuario_id,
+                semana_inicio=data_inicio,
+                materia=item["materia"],
+                dias_semana=item["dia"],
+                dia_semana=item["dia"],
+                slot=item["slot"],
+                horario_inicio=item["horario_inicio"],
+                horario_fim=item["horario_fim"],
+                meta_questoes=0,
+            ))
+
+        session.commit()
+
+    return RedirectResponse(url=f"/estudos?success=plano_importado&semana={semana_inicio}", status_code=303)
+
+
+@app.post("/estudos/grade", response_class=HTMLResponse)
+async def save_estudo_grade(request: Request, semana_inicio: str = Form(...)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+    try:
+        usuario_id = int(user_id)
+        data_inicio = datetime.strptime(semana_inicio, "%Y-%m-%d").date()
+        dias_grade = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        horarios_grade = [("21:00", "22:00"), ("22:15", "00:15"), ("00:31", "01:15")]
+        form = await request.form()
+        for slot in range(len(horarios_grade)):
+            inicio = str(form.get(f"horario_inicio_{slot}") or "").strip()
+            fim = str(form.get(f"horario_fim_{slot}") or "").strip()
+            if inicio and fim:
+                horarios_grade[slot] = (inicio, fim)
+        with Session(engine) as session:
+            existentes = session.exec(select(EstudoPlano).where(
+                EstudoPlano.usuario_id == usuario_id,
+                EstudoPlano.semana_inicio == data_inicio,
+            )).all()
+            por_celula = {}
+            for plano in existentes:
+                if plano.slot is not None and plano.dia_semana:
+                    por_celula.setdefault((plano.slot, plano.dia_semana), []).append(plano)
+
+            for slot, (hora_inicio, hora_fim) in enumerate(horarios_grade):
+                for dia_index, dia in enumerate(dias_grade):
+                    campo = f"grade_{slot}_{dia_index}"
+                    if campo not in form:
+                        continue
+                    materia = str(form.get(campo) or "").strip()
+                    celula = por_celula.get((slot, dia), [])
+                    if materia:
+                        if celula:
+                            for plano in celula:
+                                plano.materia = materia
+                                plano.dias_semana = dia
+                                plano.horario_inicio = hora_inicio
+                                plano.horario_fim = hora_fim
+                        else:
+                            session.add(EstudoPlano(
+                                usuario_id=usuario_id,
+                                semana_inicio=data_inicio,
+                                materia=materia,
+                                dias_semana=dia,
+                                dia_semana=dia,
+                                slot=slot,
+                                horario_inicio=hora_inicio,
+                                horario_fim=hora_fim,
+                                meta_questoes=0,
+                            ))
+                    elif celula:
+                        for plano in celula:
+                            session.delete(plano)
+            session.commit()
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/estudos?success=erro", status_code=303)
+    return RedirectResponse(url=f"/estudos?success=grade&semana={semana_inicio}", status_code=303)
+
+@app.post("/estudos/plano", response_class=HTMLResponse)
+async def save_estudo_plano(
+    request: Request,
+    semana_inicio: str = Form(...),
+    materia: str = Form(...),
+    dias_semana: str = Form(...),
+    meta_questoes: int = Form(0),
+):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+    try:
+        data_inicio = datetime.strptime(semana_inicio, "%Y-%m-%d").date()
+        nome_materia = materia.strip()
+        if not nome_materia:
+            raise ValueError("matéria vazia")
+        with Session(engine) as session:
+            session.add(EstudoPlano(
+                usuario_id=int(user_id),
+                semana_inicio=data_inicio,
+                materia=nome_materia,
+                dias_semana=dias_semana.strip() or "Segunda",
+                meta_questoes=max(0, meta_questoes),
+            ))
+            session.commit()
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/estudos?success=erro", status_code=303)
+    return RedirectResponse(url=f"/estudos?success=plano&semana={semana_inicio}", status_code=303)
+
+@app.post("/estudos", response_class=HTMLResponse)
+async def save_estudos(
+    request: Request,
+    registro_id: Optional[int] = Form(None),
+    data_estudo: str = Form(...),
+    horario_inicio: str = Form(""),
+    horario_fim: str = Form(""),
+    assunto: str = Form(...),
+    quantidade_questoes: int = Form(0),
+    total_acertos: int = Form(0),
+    total_erros: int = Form(0),
+    observacao: str = Form(""),
+    status: str = Form("concluido")
+):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+
+    try:
+        with Session(engine) as session:
+            sessao = session.get(EstudoSessao, registro_id) if registro_id else None
+            if sessao and sessao.usuario_id != int(user_id):
+                sessao = None
+            if not sessao:
+                sessao = EstudoSessao(usuario_id=int(user_id))
+            sessao.data_estudo = datetime.strptime(data_estudo, "%Y-%m-%d").date()
+            sessao.horario_inicio = horario_inicio or None
+            sessao.horario_fim = horario_fim or None
+            sessao.assunto = assunto.strip() or "Estudo"
+            sessao.quantidade_questoes = max(0, quantidade_questoes)
+            sessao.total_acertos = max(0, total_acertos)
+            sessao.total_erros = max(0, total_erros)
+            sessao.observacao = observacao.strip() or None
+            sessao.status = status or "concluido"
+            session.add(sessao)
+            session.commit()
+    except Exception as exc:
+        return RedirectResponse(url="/estudos?success=erro#registro", status_code=303)
+
+    return RedirectResponse(url="/estudos?success=ok#registro", status_code=303)
+
+@app.post("/estudos/excluir")
+async def delete_estudo(request: Request, registro_id: int = Form(...)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+    try:
+        with Session(engine) as session:
+            sessao = session.get(EstudoSessao, registro_id)
+            if sessao and sessao.usuario_id == int(user_id):
+                session.delete(sessao)
+                session.commit()
+    except (ValueError, TypeError):
+        pass
+    return RedirectResponse(url="/estudos?success=excluido", status_code=303)
+
 @app.get("/cofre", response_class=HTMLResponse)
 async def view_cofre(request: Request):
     user_id = request.cookies.get("user_id")
@@ -1520,6 +2177,14 @@ async def view_login(request: Request, intent: str = "suporte"):
         request=request,
         name="login.html",
         context={"config": APP_CONFIG, "intent": intent, "only_atendimento": False}
+    )
+
+@app.get("/estudos/login", response_class=HTMLResponse)
+async def view_estudos_login(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="estudos_login.html",
+        context={"config": APP_CONFIG},
     )
 
 @app.get("/atendimento/login", response_class=HTMLResponse)

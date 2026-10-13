@@ -21,13 +21,19 @@
         .gradient-text { background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
         /* === High Contrast & Modern Premium Light/Dark Mode Customizations === */
-        html.light-mode body { background-color: #f8fafc; color: #0f172a; }
-        html.light-mode .glass-panel { background: #ffffff !important; border: 1px solid #e2e8f0 !important; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -4px rgba(0,0,0,0.05); }
+        html.light-mode { --light-page: #e8edf4; --light-panel: #f8fafc; --light-inset: #edf2f7; --light-border: #cbd5e1; }
+        html.light-mode body { background-color: var(--light-page); color: #0f172a; }
+        html.light-mode .glass-panel { background: var(--light-panel) !important; border: 1px solid #e2e8f0 !important; box-shadow: 0 10px 15px -3px rgba(15,23,42,0.07), 0 4px 6px -4px rgba(15,23,42,0.04); }
         html.light-mode .text-white, html.light-mode .font-bold, html.light-mode .font-black, html.light-mode h1 { color: #0f172a !important; }
         html.light-mode .text-slate-400, html.light-mode .text-slate-300, html.light-mode .text-slate-500 { color: #475569 !important; font-weight: 500 !important; }
         html.light-mode .text-slate-600 { color: #334155 !important; font-weight: 600 !important; }
-        html.light-mode .glass-input { background: #ffffff !important; border: 1.5px solid #cbd5e1 !important; color: #0f172a !important; }
+        html.light-mode .glass-input { background: var(--light-inset) !important; border: 1.5px solid var(--light-border) !important; color: #0f172a !important; }
         html.light-mode .html-light\:text-slate-900 { color: #0f172a !important; }
+        html.light-mode [class*="bg-slate-950"] { background-color: var(--light-inset) !important; }
+        html.light-mode [class*="bg-slate-900"] { background-color: var(--light-panel) !important; }
+        html.light-mode [class*="bg-slate-800"] { background-color: #e2e8f0 !important; }
+        html.light-mode [class*="bg-slate-700"] { background-color: #cbd5e1 !important; }
+        html.light-mode [class*="border-white/"], html.light-mode [class*="border-slate-700"] { border-color: var(--light-border) !important; }
         
         /* Modern Premium Navigation Styles */
         .nav-shell {
@@ -154,9 +160,12 @@
             color: #0f172a;
             background: rgba(15, 23, 42, 0.05);
         }
+        body.student-mode #guardiao-assistant {
+            display: none !important;
+        }
     </style>
 </head>
-<body class="min-h-screen flex flex-col relative overflow-x-hidden">
+<body class="min-h-screen flex flex-col relative overflow-x-hidden{% if request.cookies.get('user_role') == 'estudante' %} student-mode{% endif %}">
     <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
         <div class="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px]"></div>
         <div class="absolute bottom-[10%] -right-[10%] w-[40%] h-[40%] rounded-full bg-fuchsia-600/10 blur-[120px]"></div>
@@ -168,7 +177,7 @@
             <div class="h-16 flex items-center justify-between gap-4">
 
                 <!-- Logo + Nome -->
-                <a href="/" class="flex items-center gap-3 group flex-shrink-0">
+                <a href="{% if request.cookies.get('user_role') == 'estudante' %}/estudos{% else %}/{% endif %}" class="flex items-center gap-3 group flex-shrink-0">
                     <div class="relative">
                         <div class="absolute -inset-1.5 bg-indigo-600/30 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500"></div>
                         {% if config.APP_LOGO_URL %}
@@ -180,8 +189,13 @@
                         {% endif %}
                     </div>
                     <div class="hidden sm:flex flex-col leading-none">
+                        {% if request.cookies.get('user_role') == 'estudante' %}
+                        <h1 class="text-base font-black tracking-tighter text-white html-light:text-slate-900 uppercase">Área de Estudos</h1>
+                        <span class="text-[8px] text-sky-300 font-black uppercase tracking-[0.35em] mt-0.5">Estudante</span>
+                        {% else %}
                         <h1 class="text-base font-black tracking-tighter text-white html-light:text-slate-900 uppercase">{{ config.APP_NAME }}</h1>
                         <span class="text-[8px] text-slate-500 font-black uppercase tracking-[0.35em] mt-0.5">{{ config.APP_TAGLINE or 'Sistema de Gestão' }}</span>
+                        {% endif %}
                     </div>
                 </a>
 
@@ -218,6 +232,13 @@
                     </a>
                     {% endif %}
 
+                    {% if false %}
+                    <a href="/estudos" title="Estudos" class="nav-link-custom {% if request.url.path == '/estudos' %}is-active{% endif %}">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253zm0 0C13.168 18.477 14.754 18 16.5 18s3.332.477 4.5 1.253v-13C19.832 5.477 18.246 5 16.5 5s-3.332.477-4.5 1.253z"></path></svg>
+                            Estudos
+                        </a>
+
+                        {% endif %}
                     {% if config.MODULO_ATENDIMENTO and (role == 'admin' or 'Atendimento' in perms or 'Suporte' in perms) %}
                     <a href="/central-atendimento" title="Central de Atendimento" class="nav-link-custom {% if request.url.path == '/central-atendimento' %}is-active{% endif %}">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
@@ -551,8 +572,9 @@
         }
 
         async function handleLogout() {
+            const isStudent = document.cookie.split('; ').includes('user_role=estudante');
             await fetch('/api/auth/logout', { method: 'POST' });
-            window.location.href = '/login';
+            window.location.href = isStudent ? '/estudos/login' : '/login';
         }
 
         function updateClock() {
@@ -578,6 +600,7 @@
         });
 
         async function handleLogout() {
+            const isStudent = document.cookie.split('; ').includes('user_role=estudante');
             try {
                 await fetch('/api/auth/logout', { method: 'POST' });
             } catch(e) {}
@@ -585,7 +608,7 @@
             document.cookie = 'user_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             document.cookie = 'user_role=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             document.cookie = 'user_name=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-            window.location.href = '/login';
+            window.location.href = isStudent ? '/estudos/login' : '/login';
         }
 
         // ── REAL-TIME WebSocket (substitui polling) ──────────────────────

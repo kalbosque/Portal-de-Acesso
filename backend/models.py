@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Optional, List
 from sqlmodel import Field, SQLModel, create_engine, Session, select, Relationship
 
@@ -203,6 +203,44 @@ class MarmitaPedido(SQLModel, table=True):
     data_pedido: datetime = Field(default_factory=datetime.now, index=True)
     criado_por: str = Field(default="admin")
     entregue_em: Optional[datetime] = None
+
+class EstudoSessao(SQLModel, table=True):
+    __tablename__ = "estudos_sessoes"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    usuario_id: Optional[int] = Field(default=None, foreign_key="usuarios.id", index=True)
+    data_estudo: date = Field(default_factory=date.today, index=True)
+    horario_inicio: Optional[str] = None
+    horario_fim: Optional[str] = None
+    assunto: str = Field(index=True)
+    quantidade_questoes: int = Field(default=0)
+    total_acertos: int = Field(default=0)
+    total_erros: int = Field(default=0)
+    observacao: Optional[str] = None
+    status: str = Field(default="concluido", index=True)
+    criado_em: datetime = Field(default_factory=datetime.now, index=True)
+
+class EstudoPlano(SQLModel, table=True):
+    __tablename__ = "estudos_planos"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    usuario_id: Optional[int] = Field(default=None, foreign_key="usuarios.id", index=True)
+    semana_inicio: date = Field(default_factory=date.today, index=True)
+    materia: str = Field(index=True)
+    dias_semana: str = Field(default="Segunda")
+    dia_semana: Optional[str] = Field(default=None, index=True)
+    slot: Optional[int] = Field(default=None)
+    horario_inicio: Optional[str] = None
+    horario_fim: Optional[str] = None
+    meta_questoes: int = Field(default=0)
+    criado_em: datetime = Field(default_factory=datetime.now, index=True)
+
+class EstudoCronometro(SQLModel, table=True):
+    __tablename__ = "estudos_cronometros"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    usuario_id: int = Field(foreign_key="usuarios.id", index=True)
+    session_id: str = Field(unique=True, max_length=64)
+    materia: Optional[str] = None
+    duracao_segundos: int
+    concluido_em: datetime = Field(default_factory=datetime.now, index=True)
 
 class CofreSenha(SQLModel, table=True):
     __tablename__ = "cofre_senhas"
