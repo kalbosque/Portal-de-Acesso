@@ -7,13 +7,16 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; background: #0b0214; color: white; overflow-x: hidden; }
         .font-premium { font-family: 'Outfit', sans-serif; }
-        .glass-panel { background: rgba(30, 41, 59, 0.75); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .bg-custom-grid { background-color: #0b0214; background-image: radial-gradient(circle at 50% 50%, rgba(99,102,241,.15) 0%, transparent 50%), radial-gradient(circle at 20% 30%, rgba(139,92,246,.1) 0%, transparent 40%), linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 100% 100%, 100% 100%, 40px 40px; }
+        .glass-panel { background: rgba(23,20,31,.65); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 20px 50px rgba(0,0,0,.4), inset 0 1px 1px rgba(255,255,255,.1); }
         .glass-input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }
         .glass-input:focus { border-color: #6366f1; box-shadow: 0 0 20px rgba(99, 102, 241, 0.2); outline: none; }
         .portal-card { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-        .portal-card:hover { transform: translateY(-10px) scale(1.02); box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.5); }
+        .portal-card { position: relative; overflow: hidden; }
+        .portal-card::before, .login-panel::before { content: ''; position: absolute; top: 0; left: 25%; right: 25%; height: 1px; background: linear-gradient(90deg, transparent, rgba(99,102,241,.8), transparent); opacity: .6; }
+        .portal-card:hover { transform: translateY(-10px) scale(1.02); box-shadow: 0 30px 60px -12px rgba(0,0,0,.5), 0 0 30px rgba(79,70,229,.12); }
         .login-container { display: none; opacity: 0; transform: translateY(20px); transition: all 0.5s ease-out; }
         .login-container.show { display: block; opacity: 1; transform: translateY(0); }
         .tab-btn { transition: all 0.3s ease; }
@@ -107,7 +110,7 @@
         #portalSelection, #loginFormContainer { position: relative; z-index: 10; }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center overflow-x-hidden" style="background:#0f172a">
+<body class="bg-custom-grid min-h-screen flex items-center justify-center overflow-x-hidden px-4 py-10">
 
     <!-- ===== FUNDO CARROSSEL ===== -->
     <div class="bg-carousel">
@@ -138,7 +141,7 @@
         <div class="c-dot" id="dot-4"></div>
     </div>
 
-    <div id="portalSelection" class="w-full max-w-7xl px-4 transition-all duration-700" style="{% if only_atendimento %}display:none;{% endif %}">
+    <div id="portalSelection" class="w-full max-w-7xl transition-all duration-700" style="{% if only_atendimento %}display:none;{% endif %}">
         <div class="text-center mb-16 animate-[slideIn_0.8s_ease-out] flex flex-col items-center">
             {% if config.APP_LOGO_URL %}
                 <div class="mb-8 p-3 bg-white rounded-3xl shadow-2xl border border-white/20">
@@ -236,7 +239,7 @@
 
         </div>
         <div class="mt-8 flex justify-center">
-            <a href="/static/downloads/Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" download="Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" class="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-5 py-3 text-[10px] font-black uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-400/15 focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Baixar aplicativo da Central de Atendimento para Windows 64 bits, versão 0.1.5">
+            <a href="/static/downloads/Central-de-Atendimento-Operador-latest.exe" download="Central-de-Atendimento-Operador_0.1.6_x64-setup.exe" class="inline-flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-5 py-3 text-[10px] font-black uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-400/15 focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Baixar versão atual do aplicativo da Central de Atendimento para Windows 64 bits">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0 4-4m-4 4-4-4m-3 8h14"></path></svg>
                 Baixar aplicativo para Windows (64 bits)
             </a>
@@ -244,7 +247,7 @@
     </div>
 
     <div id="loginFormContainer" class="login-container w-full max-w-md px-4" style="{% if only_atendimento %}display:block; opacity:1; transform: translateY(0);{% endif %}">
-        <div class="glass-panel p-10 rounded-[3rem] border border-white/10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden">
+        <div class="glass-panel login-panel p-8 sm:p-10 rounded-3xl border border-white/10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden">
             <button onclick="backToPortal()" class="absolute left-8 top-8 text-slate-500 hover:text-white transition-colors flex items-center gap-2 group">
                 <svg class="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             </button>
@@ -295,9 +298,9 @@
                     </button>
                 </form>
             </div>
-            <a href="/static/downloads/Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" download="Central-de-Atendimento-Operador_0.1.5_x64-setup.exe" class="mt-6 flex items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-400/15 focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Baixar aplicativo da Central de Atendimento para Windows 64 bits, versão 0.1.5">
+            <a href="/static/downloads/Central-de-Atendimento-Operador-latest.exe" download="Central-de-Atendimento-Operador_0.1.6_x64-setup.exe" class="mt-6 flex items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-emerald-200 transition hover:bg-emerald-400/15 focus:outline-none focus:ring-2 focus:ring-emerald-400" aria-label="Baixar versão atual do aplicativo da Central de Atendimento para Windows 64 bits">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0 4-4m-4 4-4-4m-3 8h14"></path></svg>
-                Baixar aplicativo Windows · v0.1.5
+                Baixar aplicativo Windows · v0.1.7
             </a>
         </div>
     </div>
@@ -437,6 +440,11 @@
             const res = await fetch('/api/auth/reset_senha', { method: 'POST', body: fd }).then(r => r.json());
             if(res.success) alert(res.message); else alert('Erro ao processar');
         };
+    </script>
+    <script>
+      document.querySelectorAll('a[download]').forEach(link => {
+        link.download = 'Central-de-Atendimento-Operador_0.1.7_x64-setup.exe';
+      });
     </script>
 </body>
 </html>

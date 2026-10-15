@@ -11,11 +11,11 @@ def send_email_async(to_email: str, subject: str, body: str):
     smtp_port = int(os.getenv("SMTP_PORT", 587))
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
-    smtp_from = os.getenv("SMTP_FROM")
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user
 
     if not all([smtp_server, smtp_user, smtp_pass]):
         print("Configuração de e-mail incompleta no .env")
-        return
+        return False
 
     try:
         msg = MIMEMultipart()
@@ -25,13 +25,17 @@ def send_email_async(to_email: str, subject: str, body: str):
 
         msg.attach(MIMEText(body, 'html'))
 
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
+        smtp_client = smtplib.SMTP_SSL if smtp_port == 465 else smtplib.SMTP
+        with smtp_client(smtp_server, smtp_port) as server:
+            if smtp_port != 465:
+                server.starttls()
             server.login(smtp_user, smtp_pass)
             server.send_message(msg)
         print(f"E-mail enviado para {to_email}")
+        return True
     except Exception as e:
         print(f"Erro ao enviar e-mail: {e}")
+        return False
 
 def notify_new_ticket(ticket_id: int, user: str, title: str, priority: str, description: str):
     admin_email = os.getenv("ADMIN_EMAIL")

@@ -15,7 +15,7 @@
     .study-schedule-time::-webkit-calendar-picker-indicator,
     .study-history-date::-webkit-calendar-picker-indicator {
         filter: brightness(0) invert(1);
-        opacity: 1;
+        opacity: 0.9;
         cursor: pointer;
         margin-left: 0.2rem;
     }
@@ -23,27 +23,98 @@
     .study-history-date {
         font-weight: 500;
     }
+
+    /* === Suporte para Ícones no Modo Claro (Light Mode) === */
+    html.light-mode .study-schedule-date,
+    html.light-mode .study-schedule-time,
+    html.light-mode .study-history-date,
+    html.light-mode input[type="date"],
+    html.light-mode input[type="time"],
+    html.light-mode input[type="number"] {
+        color-scheme: light !important;
+        color: #0f172a !important;
+    }
+
+    html.light-mode .study-schedule-date::-webkit-calendar-picker-indicator,
+    html.light-mode .study-schedule-time::-webkit-calendar-picker-indicator,
+    html.light-mode .study-history-date::-webkit-calendar-picker-indicator,
+    html.light-mode input[type="date"]::-webkit-calendar-picker-indicator,
+    html.light-mode input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: none !important;
+        opacity: 0.75 !important;
+        cursor: pointer;
+    }
+
+    html.light-mode input[type="date"]:hover::-webkit-calendar-picker-indicator,
+    html.light-mode input[type="time"]:hover::-webkit-calendar-picker-indicator {
+        opacity: 1 !important;
+    }
+
+    html.light-mode input[type="number"]::-webkit-inner-spin-button,
+    html.light-mode input[type="number"]::-webkit-outer-spin-button {
+        filter: none !important;
+        opacity: 0.75 !important;
+        cursor: pointer;
+    }
+
+    html.light-mode input[type="number"]:hover::-webkit-inner-spin-button,
+    html.light-mode input[type="number"]:hover::-webkit-outer-spin-button {
+        opacity: 1 !important;
+    }
+
+    .study-drop-target.drag-over-swap {
+        outline: 2px dashed #fbbf24 !important;
+        background-color: rgba(251, 191, 36, 0.15) !important;
+    }
+
+    .study-drop-target.drag-over-move {
+        outline: 2px dashed #38bdf8 !important;
+        background-color: rgba(56, 189, 248, 0.15) !important;
+    }
+
+    #gavetaTrocaDropzone.drag-over-gaveta {
+        border-color: #fbbf24 !important;
+        background-color: rgba(251, 191, 36, 0.25) !important;
+    }
+
+    .study-drag-card.is-dragging {
+        opacity: 0.35;
+        transform: scale(0.95);
+    }
+
+    .flash-troca {
+        animation: flashTrocaAnim 0.7s ease-out;
+    }
+
+    @keyframes flashTrocaAnim {
+        0% { outline: 3px solid #38bdf8; background-color: rgba(56, 189, 248, 0.25); }
+        100% { outline: 0px solid transparent; }
+    }
+
+    html.light-mode #gavetaTrocaArea {
+        background-color: #fffbeb !important;
+        border-color: #f59e0b !important;
+    }
+
+    html.light-mode #gavetaTrocaDropzone {
+        background-color: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+    }
 </style>
 
 <script>
 (function(){
-    var aba = localStorage.getItem('estudos_aba_ativa');
-    if (aba && aba !== 'quadro') {
-        // Esconde o quadro antes de renderizar para evitar o flash visual
-        var s = document.createElement('style');
-        s.id = 'estudos-flash-fix';
-        s.textContent = '#quadro { display: none !important; }';
-        document.head.appendChild(s);
-    }
+    // Garante que o armazenamento antigo não prenda o usuário na aba de desempenho
+    try { localStorage.removeItem('estudos_aba_ativa'); } catch(e) {}
 })();
 </script>
-<div class="max-w-7xl mx-auto px-4 py-8">
-    <div class="mb-5 flex flex-col gap-3">
-        <div>
-            <p class="text-xs font-black uppercase tracking-[0.28em] text-emerald-400">Portal</p>
-            <h1 class="mt-2 text-3xl font-black text-white">Estudos</h1>
-        </div>
-    </div>
+<!-- Ambient glowing aurora background -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+    <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-sky-500/10 blur-[100px] animate-pulse" style="animation-duration: 9s;"></div>
+    <div class="absolute top-1/3 -right-32 w-[420px] h-[420px] rounded-full bg-indigo-500/10 blur-[120px] animate-pulse" style="animation-duration: 14s;"></div>
+    <div class="absolute -bottom-32 left-1/4 w-[460px] h-[460px] rounded-full bg-amber-500/5 blur-[120px] animate-pulse" style="animation-duration: 11s;"></div>
+</div>
+<div class="max-w-7xl mx-auto px-4 py-8 relative z-10">
 
     <!-- Safelist de cores para o Tailwind não remover as classes geradas dinamicamente via JS -->
     <div class="hidden bg-sky-500 text-white shadow-lg shadow-sky-500/25"></div>
@@ -77,33 +148,37 @@
         </div>
     </nav>
 
-    <section class="sticky top-20 z-40 mb-6 rounded-2xl border border-amber-500/20 bg-slate-900/95 p-4 shadow-xl shadow-slate-950/30 backdrop-blur-md">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-                <p class="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Foco de estudo</p>
-                <div class="mt-1 flex flex-wrap items-center gap-3">
-                    <h2 id="timerDisplay" class="text-3xl font-black tabular-nums text-white">00:50:00</h2>
-                    <span id="timerStatus" class="text-xs font-bold text-slate-400">Pronto para iniciar</span>
+    <section class="sticky top-20 z-40 mb-6 rounded-2xl border border-amber-500/20 bg-slate-900/95 p-3 sm:p-4 shadow-xl shadow-slate-950/30 backdrop-blur-md overflow-x-auto">
+        <div class="flex items-center justify-between gap-3 sm:gap-4 w-full min-w-max md:min-w-0">
+            <div class="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                <div class="shrink-0">
+                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Foco de estudo</p>
+                    <h2 id="timerDisplay" class="text-2xl sm:text-3xl font-black tabular-nums text-white leading-tight">01:00:00</h2>
+                </div>
+                <div class="min-w-0 flex-1 border-l border-white/10 pl-3 sm:pl-4">
+                    <span class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 block">Status</span>
+                    <span id="timerStatus" title="Pronto para iniciar" class="block truncate text-xs sm:text-sm font-bold text-slate-400">Pronto para iniciar</span>
                 </div>
             </div>
-            <div class="flex flex-wrap items-center gap-2">
-                <select id="timerMateria" class="w-48 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer">
+            <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <select id="timerMateria" title="Escolha a matéria" class="w-36 sm:w-44 lg:w-48 max-w-[180px] rounded-xl border border-slate-700 bg-slate-800 px-2.5 sm:px-3 py-2 text-xs sm:text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer truncate shrink-0">
                     <option value="">Escolha a matéria</option>
                     {% for materia in materias_grade %}
-                    <option value="{{ materia }}">{{ materia }}</option>
+                    <option value="{{ materia }}" title="{{ materia }}">{{ materia }}</option>
                     {% endfor %}
                 </select>
-                <select id="timerDuration" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer">
+                <select id="timerDuration" class="w-20 sm:w-24 rounded-xl border border-slate-700 bg-slate-800 px-2 sm:px-3 py-2 text-xs sm:text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer shrink-0">
                     <option value="1500">25 min</option>
-                    <option value="3000" selected>50 min</option>
+                    <option value="3000">50 min</option>
+                    <option value="3600" selected>60 min</option>
                     <option value="5400">90 min</option>
                     <option value="custom">Personalizado</option>
                 </select>
-                <input id="timerCustom" type="number" min="1" max="600" value="2" aria-label="Quantidade de minutos" class="hidden w-20 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors">
-                <button id="timerStart" type="button" class="rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-950 hover:bg-amber-300 transition-colors">Iniciar</button>
-                <button id="timerPause" type="button" class="timer-action-button rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-300 transition-colors">Pausar</button>
-                <button id="timerFinish" type="button" class="timer-action-button rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-300 transition-colors">Finalizar</button>
-                <button id="timerReset" type="button" class="timer-action-button rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-300 transition-colors">Zerar</button>
+                <input id="timerCustom" type="number" min="1" max="600" value="2" aria-label="Quantidade de minutos" class="hidden w-16 rounded-xl border border-slate-700 bg-slate-800 px-2 py-2 text-xs sm:text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors shrink-0">
+                <button id="timerStart" type="button" class="shrink-0 rounded-xl bg-amber-400 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-950 hover:bg-amber-300 transition-colors shadow-sm shadow-amber-400/20">Iniciar</button>
+                <button id="timerPause" type="button" class="timer-action-button shrink-0 rounded-xl border border-slate-700 bg-slate-800 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">Pausar</button>
+                <button id="timerFinish" type="button" class="timer-action-button shrink-0 rounded-xl border border-slate-700 bg-slate-800 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">Finalizar</button>
+                <button id="timerReset" type="button" class="timer-action-button shrink-0 rounded-xl border border-slate-700 bg-slate-800/80 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-400 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/30 transition-colors">Zerar</button>
             </div>
         </div>
     </section>
@@ -118,7 +193,7 @@
     </div>
     {% elif success == 'plano_importado' %}
     <div class="study-success-message mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-        Plano de estudo importado com sucesso.
+        Matérias importadas com sucesso! Seu quadro de horários e seu ciclo de estudos foram atualizados com as matérias do arquivo.
     </div>
     {% elif success == 'grade' %}
     <div class="study-success-message mb-6 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
@@ -132,78 +207,207 @@
     <div class="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
         Não foi possível salvar a sessão de estudo.
     </div>
+    {% elif success == 'erro_importar' %}
+    <div class="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+        Não foi possível identificar matérias no arquivo enviado. Verifique se a planilha ou arquivo contém os nomes das matérias.
+    </div>
     {% endif %}
 
     <div id="quadro" class="mb-6 scroll-mt-6 rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-2xl shadow-slate-950/30">
-        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <p class="text-xs font-black uppercase tracking-[0.2em] text-sky-300">Quadro de horários</p>
-                <h2 class="mt-2 text-xl font-black text-white">Planejamento da semana</h2>
+                <h2 id="quadroTitulo" class="mt-1 text-xl font-black text-white">Planejamento dos estudos</h2>
             </div>
-            <div class="text-xs text-slate-400">Preencha as matérias e salve tudo de uma vez.</div>
+            <!-- Alternador de Modo: Grade Semanal vs Ciclo de Estudos -->
+            <div class="inline-flex rounded-2xl border border-white/10 bg-slate-950/80 p-1 shadow-inner">
+                <button type="button" id="btnModoSemanal" class="rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all bg-sky-500 text-slate-950 shadow-md">
+                    📅 Grade Semanal
+                </button>
+                <button type="button" id="btnModoCiclo" class="rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all text-slate-400 hover:text-white">
+                    🔄 Ciclo de Estudos (Fila)
+                </button>
+            </div>
         </div>
-        {% if materias_quadro %}
-        <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Legenda de cores das matérias">
-            {% for materia in materias_quadro %}
-            <span class="inline-flex max-w-full items-center gap-2 text-xs text-slate-300">
-                <span class="h-2.5 w-2.5 shrink-0 rounded-sm" style="background-color: {{ materia_cores[materia.casefold()][0] }}"></span>
-                <span class="break-words">{{ materia }}</span>
-            </span>
-            {% endfor %}
-        </div>
-        {% endif %}
 
-        <form method="post" action="/estudos/grade" class="space-y-3">
-            <input type="hidden" name="semana_inicio" value="{{ semana_inicio }}">
-            <div class="overflow-x-auto rounded-2xl border border-white/10">
-                <table class="w-full min-w-[1120px] table-fixed border-collapse text-xs">
-                    <thead>
-                        <tr class="bg-sky-500/20 text-sky-100">
-                            <th class="w-28 border-b border-r border-white/15 px-3 py-3 text-left font-black uppercase tracking-[0.12em]">Hora</th>
-                            {% for dia in dias_grade %}
-                            <th class="border-b border-r border-white/15 px-3 py-3 text-left font-black uppercase tracking-[0.12em] last:border-r-0">{{ dia }}</th>
-                            {% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for horario in horarios_grade %}
-                        {% set slot = loop.index0 %}
-                        <tr class="h-24 border-b border-white/5 last:border-b-0">
-                            <th class="w-28 border-r border-white/10 bg-slate-950/70 px-2 py-2 text-left align-top font-black text-slate-300">
-                                <input type="time" name="horario_inicio_{{ slot }}" value="{{ horario[0] }}" class="study-schedule-time w-full rounded border border-white/10 bg-slate-900 px-1 py-1 text-xs text-white outline-none focus:border-sky-400">
-                                <span class="my-1 block text-center text-[10px] font-normal text-slate-500">até</span>
-                                <input type="time" name="horario_fim_{{ slot }}" value="{{ horario[1] }}" class="study-schedule-time w-full rounded border border-white/10 bg-slate-900 px-1 py-1 text-xs text-white outline-none focus:border-sky-400">
-                            </th>
-                            {% for dia in dias_grade %}
-                            {% set dia_index = loop.index0 %}
-                            <td class="border-r border-white/10 bg-slate-950/30 p-1 align-top last:border-r-0">
-                                {% set materia_celula = grade.get(horario[0] ~ '-' ~ horario[1] ~ '-' ~ dia, '') %}
-                                {% set cores_celula = materia_cores.get(materia_celula.casefold()) if materia_celula else none %}
-                                <textarea name="grade_{{ slot }}_{{ dia_index }}" rows="2" placeholder="Matéria" style="{% if cores_celula %}--materia-cor: {{ cores_celula[0] }}; --materia-fundo: {{ cores_celula[1] }};{% endif %}" class="study-materia-cell h-20 w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-2 text-xs font-bold uppercase leading-5 text-white outline-none placeholder:text-slate-600 focus:border-sky-400 focus:bg-slate-900">{{ materia_celula }}</textarea>
-                            </td>
-                            {% endfor %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p class="text-xs text-slate-500">A semana começa em {{ semana_inicio.strftime('%d/%m/%Y') }}. Para trocar, use o endereço com o parâmetro semana.</p>
-                <div class="flex items-center gap-2">
-                    <label class="flex cursor-pointer items-center justify-center rounded-xl border border-sky-400/30 bg-slate-900/70 px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-sky-200 transition-all hover:bg-slate-800">
-                        <span>Arquivo</span>
-                        <input type="file" id="importarPlanoArquivo" accept=".txt,.md,.csv,.json" class="hidden">
-                    </label>
-                    <button type="submit" class="rounded-xl bg-sky-500 px-5 py-3 text-xs font-black uppercase tracking-[0.2em] text-slate-950 shadow-lg shadow-sky-500/30 transition-all hover:bg-sky-400">Salvar quadro</button>
+        <!-- MODO 1: GRADE SEMANAL (Totalmente preservado) -->
+        <div id="quadroGradeSemanal">
+
+            <div class="mb-3 text-xs text-slate-400">Edite as matérias e horários diretamente nas caixas abaixo ou importe um arquivo. Depois clique em <strong>Salvar quadro</strong>.</div>
+
+            <!-- Gaveta de Troca / Área de Espera Temporária -->
+            <div id="gavetaTrocaArea" class="mb-3 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/5 p-3">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-sm">📦</span>
+                        <div>
+                            <span class="text-xs font-black uppercase tracking-wider text-amber-300">Gaveta de Troca (Sem espaço sobrando?)</span>
+                            <span class="block text-[10px] text-slate-400">Arraste uma matéria para cá para liberar o dia, ou arraste uma <strong>direto em cima da outra</strong> para trocar de lugar!</span>
+                        </div>
+                    </div>
+                    <div id="gavetaTrocaDropzone" class="flex flex-wrap items-center gap-2 min-h-[38px] min-w-[200px] rounded-xl border border-dashed border-white/10 bg-slate-950/60 p-1.5 transition-all" title="Solte uma matéria aqui para guardar temporariamente">
+                        <span id="gavetaEmptyHint" class="text-[10px] font-bold text-slate-500 px-2 select-none">Solte uma matéria aqui</span>
+                    </div>
                 </div>
             </div>
-        </form>
+            <div id="avisoTrocaSalvar" class="hidden mb-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300 flex items-center justify-between animate-pulse">
+                <span>⚡ Matérias trocadas! Clique no botão azul <strong>Salvar quadro</strong> para gravar as novas posições.</span>
+                <button type="button" onclick="this.parentElement.classList.add('hidden')" class="text-emerald-400 hover:text-white ml-2">✕</button>
+            </div>
 
-        <form id="form-importar-plano" method="post" action="/estudos/importar-plano" enctype="multipart/form-data" class="hidden">
-            <input type="hidden" name="semana_inicio" value="{{ semana_inicio }}">
-            <textarea name="plano_texto" class="hidden"></textarea>
-            <input type="file" name="plano_arquivo" id="importarPlanoArquivoReal" accept=".txt,.md,.csv,.json" class="hidden">
-        </form>
+            <form method="post" action="/estudos/grade" class="space-y-3">
+                <input type="hidden" name="semana_inicio" value="{{ semana_inicio }}">
+                <div class="overflow-x-auto rounded-2xl border border-white/10">
+                    <table class="w-full min-w-[1120px] table-fixed border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-sky-500/20 text-sky-100">
+                                <th class="w-28 border-b border-r border-white/15 px-3 py-3 text-left font-black uppercase tracking-[0.12em]">Hora</th>
+                                {% for dia in dias_grade %}
+                                <th class="border-b border-r border-white/15 px-3 py-3 text-left font-black uppercase tracking-[0.12em] last:border-r-0">{{ dia }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for horario in horarios_grade %}
+                            {% set slot = loop.index0 %}
+                            <tr class="h-24 border-b border-white/5 last:border-b-0">
+                                <th class="w-28 border-r border-white/10 bg-slate-950/70 px-2 py-2 text-left align-top font-black text-slate-300">
+                                    <input type="time" name="horario_inicio_{{ slot }}" value="{{ horario[0] }}" class="study-schedule-time w-full rounded border border-white/10 bg-slate-900 px-1 py-1 text-xs text-white outline-none focus:border-sky-400">
+                                    <span class="my-1 block text-center text-[10px] font-normal text-slate-500">até</span>
+                                    <input type="time" name="horario_fim_{{ slot }}" value="{{ horario[1] }}" class="study-schedule-time w-full rounded border border-white/10 bg-slate-900 px-1 py-1 text-xs text-white outline-none focus:border-sky-400">
+                                </th>
+                                {% for dia in dias_grade %}
+                                {% set dia_index = loop.index0 %}
+                                <td class="study-drop-target border-r border-white/10 bg-slate-950/30 p-1 align-top last:border-r-0 relative group transition-all" data-slot="{{ slot }}" data-dia="{{ dia_index }}">
+                                    {% set materia_celula = grade.get(horario[0] ~ '-' ~ horario[1] ~ '-' ~ dia, '') %}
+                                    {% set cores_celula = materia_cores.get(materia_celula.casefold()) if materia_celula else none %}
+                                    <div class="study-drag-card relative h-20 w-full rounded-lg transition-all" draggable="{% if materia_celula %}true{% else %}false{% endif %}">
+                                        <textarea name="grade_{{ slot }}_{{ dia_index }}" rows="2" placeholder="Matéria" style="{% if cores_celula %}--materia-cor: {{ cores_celula[0] }}; --materia-fundo: {{ cores_celula[1] }};{% endif %}" class="study-materia-cell h-full w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-2 pr-6 text-xs font-bold uppercase leading-5 text-white outline-none placeholder:text-slate-600 focus:border-sky-400 focus:bg-slate-900">{{ materia_celula }}</textarea>
+                                        <span class="study-drag-handle absolute bottom-1 right-1.5 flex items-center text-[10px] font-black text-slate-500 opacity-50 group-hover:opacity-100 hover:text-sky-300 transition-all cursor-grab active:cursor-grabbing select-none" title="Segure e arraste para trocar com outra matéria">
+                                            ⋮⋮
+                                        </span>
+                                        {% if materia_celula %}
+                                        <button type="button" title="Limpar esta matéria" class="btn-limpar-materia absolute top-2 right-2 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-md bg-rose-500/80 hover:bg-rose-600 text-[10px] font-bold text-white shadow transition-all cursor-pointer">✕</button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-4 flex flex-col gap-4 border-t border-white/10 pt-4 lg:flex-row lg:items-center lg:justify-between">
+                    <p class="text-xs text-slate-400 flex items-center gap-2">
+                        <span class="text-amber-400 text-sm">💡</span>
+                        <span>Arraste matérias para trocar de lugar, use a gaveta ou edite as caixas.</span>
+                    </p>
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <label class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-sky-400/30 bg-slate-900/80 px-3.5 py-2.5 text-xs font-bold text-sky-200 transition-all hover:bg-slate-800 hover:border-sky-400/50 hover:text-white shadow-sm" title="Importar qualquer planilha Excel (.xlsx, .xls) ou arquivo com suas matérias">
+                            <span>📁 Importar Planilha</span>
+                            <input type="file" id="importarPlanoArquivo" accept=".xlsx,.xls,.csv,.txt,.md,.json" class="hidden">
+                        </label>
+                        <a href="/estudos/modelo-excel" download="modelo_quadro_estudos.xlsx" class="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2.5 text-xs font-bold text-slate-400 transition-all hover:text-emerald-300 hover:border-emerald-500/30 hover:bg-slate-800" title="Baixar exemplo opcional de planilha">
+                            <span>📥 Modelo</span>
+                        </a>
+                        <button type="button" id="btnLimparQuadro" class="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-2.5 text-xs font-bold text-rose-300 transition-all hover:bg-rose-500/20 hover:border-rose-500/40 cursor-pointer" title="Apagar todas as matérias do quadro desta semana">
+                            <span>🗑️ Limpar</span>
+                        </button>
+                        <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-sky-500 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-slate-950 shadow-lg shadow-sky-500/25 transition-all hover:bg-sky-400 hover:scale-[1.01] active:scale-95 cursor-pointer">
+                            <span>💾 Salvar quadro</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <form id="form-importar-plano" method="post" action="/estudos/importar-plano" enctype="multipart/form-data" class="hidden">
+                <input type="hidden" name="semana_inicio" value="{{ semana_inicio }}">
+                <textarea name="plano_texto" class="hidden"></textarea>
+                <input type="file" name="plano_arquivo" id="importarPlanoArquivoReal" accept=".xlsx,.xls,.csv,.txt,.md,.json" class="hidden">
+            </form>
+        </div>
+
+        <!-- MODO 2: CICLO DE ESTUDOS (Fila contínua e dinâmica) -->
+        <div id="quadroCicloEstudos" class="hidden space-y-5">
+            <!-- Card da Matéria Atual do Ciclo -->
+            <div class="ciclo-hero-card relative overflow-hidden rounded-2xl border border-sky-500/30 bg-slate-950/80 p-6 shadow-xl">
+                <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <div class="ciclo-badge-vez inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-sky-300">
+                            <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            Matéria da Vez no Ciclo
+                        </div>
+                        <h3 id="cicloMateriaAtual" class="mt-2 text-2xl sm:text-3xl font-black text-white">Carregando...</h3>
+                        <p id="cicloSubtitulo" class="mt-1 text-xs text-slate-400">Estude no seu ritmo, sem depender do dia da semana. Ao terminar, avance para a próxima.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" id="cicloBtnIniciar" class="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-950 shadow-lg shadow-emerald-500/25 transition-all hover:bg-emerald-400 hover:scale-[1.02] active:scale-95 cursor-pointer">
+                            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
+                            Iniciar Estudo Agora
+                        </button>
+                        <button type="button" id="cicloBtnAvancar" class="ciclo-btn-nav rounded-xl border border-white/10 bg-slate-800/80 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-200 transition-all hover:bg-slate-700 cursor-pointer">
+                            Próxima Matéria ❯
+                        </button>
+                        <button type="button" id="cicloBtnVoltar" class="ciclo-btn-nav rounded-xl border border-white/10 bg-slate-800/80 px-3.5 py-3 text-xs font-black text-slate-400 transition-all hover:bg-slate-700 hover:text-white cursor-pointer" title="Voltar para a matéria anterior">
+                            ❮
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fila Visual do Ciclo -->
+            <div class="ciclo-section-box rounded-2xl border border-white/10 bg-slate-950/50 p-5">
+                <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h4 class="text-sm font-black uppercase tracking-wider text-white">Sequência do Ciclo (Fila Rotativa)</h4>
+                        <p class="text-xs text-slate-400">Clique em qualquer matéria para torná-la a atual ou use as setas para navegar.</p>
+                    </div>
+                    <div class="text-xs text-slate-400 font-bold">
+                        <span id="cicloContador" class="text-sky-300 font-black">0</span> matérias no ciclo
+                    </div>
+                </div>
+
+                <!-- Lista de Cards do Ciclo -->
+                <div id="cicloLista" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <!-- Renderizado dinamicamente via JS -->
+                </div>
+            </div>
+
+            <!-- Adicionar Matéria ao Ciclo -->
+            <div class="ciclo-section-box rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <form id="cicloFormAdd" class="space-y-3">
+                    <div class="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+                        <div class="flex-1">
+                            <select id="cicloSelectGrade" class="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-xs text-white outline-none focus:border-sky-500 cursor-pointer">
+                                <option value="">-- Escolha uma matéria da grade --</option>
+                                {% for m in materias_grade %}
+                                <option value="{{ m }}">{{ m }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="button" id="cicloBtnAddGrade" class="rounded-xl bg-sky-500 px-5 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-sky-400 transition-all shrink-0 cursor-pointer">
+                            + Adicionar ao Ciclo
+                        </button>
+                        <button type="button" id="cicloBtnToggleNova" class="rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-xs font-bold text-slate-300 hover:text-white hover:border-sky-500/30 transition-all shrink-0 cursor-pointer" title="Cadastrar uma matéria que não está na grade">
+                            + Nova Matéria
+                        </button>
+                    </div>
+
+                    <!-- Caixa para cadastrar nova matéria avulsa -->
+                    <div id="cicloBoxNovaMateria" class="hidden rounded-xl border border-sky-500/20 bg-slate-900/80 p-3">
+                        <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+                            <input id="cicloInputNova" type="text" placeholder="Digite o nome da nova matéria para o ciclo..." class="flex-1 rounded-xl border border-white/10 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-sky-400">
+                            <button type="button" id="cicloBtnSalvarNova" class="rounded-xl bg-emerald-500 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-emerald-400 transition-all shrink-0 cursor-pointer">
+                                Salvar no Ciclo
+                            </button>
+                            <button type="button" id="cicloBtnCancelarNova" class="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-xs font-bold text-slate-400 hover:text-white transition-all shrink-0 cursor-pointer">
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <script>
             document.addEventListener('DOMContentLoaded', function () {
@@ -221,15 +425,325 @@
                         const file = realInput.files && realInput.files[0];
                         if (!file) return;
 
+                        const fileName = (file.name || '').toLowerCase();
+                        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                            texto.value = '';
+                            form.submit();
+                            return;
+                        }
+
                         try {
                             const text = await file.text();
                             texto.value = text;
                             form.submit();
                         } catch (error) {
-                            alert('Não foi possível ler o arquivo do plano.');
+                            texto.value = '';
+                            form.submit();
                         }
                     });
                 }
+
+                const btnLimpar = document.getElementById('btnLimparQuadro');
+                if (btnLimpar) {
+                    btnLimpar.addEventListener('click', function () {
+                        if (confirm('Deseja realmente apagar todas as matérias do quadro de horários desta semana?')) {
+                            // Limpa também o ciclo para que fique zerado!
+                            localStorage.setItem('estudos_ciclo_materias', JSON.stringify([]));
+                            localStorage.removeItem('estudos_ciclo_custom');
+                            localStorage.setItem('estudos_ciclo_index', '0');
+                            const gradeForm = this.closest('form');
+                            if (gradeForm) {
+                                gradeForm.querySelectorAll('.study-materia-cell').forEach(el => {
+                                    el.value = '';
+                                    el.style.removeProperty('--materia-cor');
+                                    el.style.removeProperty('--materia-fundo');
+                                });
+                                gradeForm.submit();
+                            }
+                        }
+                    });
+                }
+
+                // ==========================================
+                // DRAG AND DROP SWAP & GAVETA DE ESPERA
+                // ==========================================
+                const dropTargets = document.querySelectorAll('.study-drop-target');
+                const gavetaDropzone = document.getElementById('gavetaTrocaDropzone');
+                const gavetaEmptyHint = document.getElementById('gavetaEmptyHint');
+                const avisoTroca = document.getElementById('avisoTrocaSalvar');
+
+                let dragSource = null;
+
+                function mostrarAvisoTroca() {
+                    if (avisoTroca) {
+                        avisoTroca.classList.remove('hidden');
+                    }
+                }
+
+                function animarPiscar(el) {
+                    if (!el) return;
+                    el.classList.add('flash-troca');
+                    setTimeout(() => el.classList.remove('flash-troca'), 700);
+                }
+
+                function atualizarCard(card) {
+                    if (!card) return;
+                    const ta = card.querySelector('textarea');
+                    const handle = card.querySelector('.study-drag-handle');
+                    let btnLimpar = card.querySelector('.btn-limpar-materia');
+                    const hasText = ta && ta.value.trim().length > 0;
+
+                    card.setAttribute('draggable', hasText ? 'true' : 'false');
+
+                    if (hasText) {
+                        if (!btnLimpar) {
+                            btnLimpar = document.createElement('button');
+                            btnLimpar.type = 'button';
+                            btnLimpar.title = 'Limpar esta matéria';
+                            btnLimpar.className = 'btn-limpar-materia absolute top-2 right-2 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-md bg-rose-500/80 hover:bg-rose-600 text-[10px] font-bold text-white shadow transition-all cursor-pointer';
+                            btnLimpar.textContent = '✕';
+                            card.appendChild(btnLimpar);
+                        }
+                    } else {
+                        if (btnLimpar) btnLimpar.remove();
+                        ta.style.removeProperty('--materia-cor');
+                        ta.style.removeProperty('--materia-fundo');
+                    }
+                }
+
+                function configurarCard(card) {
+                    const ta = card.querySelector('textarea');
+                    const handle = card.querySelector('.study-drag-handle');
+
+                    if (ta) {
+                        ta.addEventListener('mousedown', () => card.setAttribute('draggable', 'false'));
+                        ta.addEventListener('blur', () => {
+                            if (ta.value.trim()) card.setAttribute('draggable', 'true');
+                        });
+                        ta.addEventListener('input', () => atualizarCard(card));
+                    }
+
+                    if (handle) {
+                        handle.addEventListener('mousedown', () => {
+                            if (ta && ta.value.trim()) card.setAttribute('draggable', 'true');
+                        });
+                    }
+
+                    card.addEventListener('dragstart', (e) => {
+                        const val = ta ? ta.value.trim() : '';
+                        if (!val) {
+                            e.preventDefault();
+                            return;
+                        }
+                        dragSource = {
+                            type: 'cell',
+                            card: card,
+                            ta: ta,
+                            val: val,
+                            cor: ta.style.getPropertyValue('--materia-cor'),
+                            fundo: ta.style.getPropertyValue('--materia-fundo'),
+                        };
+                        card.classList.add('is-dragging');
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', val);
+                    });
+
+                    card.addEventListener('dragend', () => {
+                        card.classList.remove('is-dragging');
+                        limparHighlights();
+                    });
+                }
+
+                function limparHighlights() {
+                    dropTargets.forEach(t => t.classList.remove('drag-over-swap', 'drag-over-move'));
+                    if (gavetaDropzone) gavetaDropzone.classList.remove('drag-over-gaveta');
+                }
+
+                dropTargets.forEach(target => {
+                    const card = target.querySelector('.study-drag-card');
+                    if (card) configurarCard(card);
+
+                    target.addEventListener('dragover', (e) => {
+                        if (!dragSource) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        const ta = target.querySelector('textarea');
+                        const isOccupied = ta && ta.value.trim().length > 0;
+                        target.classList.remove('drag-over-swap', 'drag-over-move');
+                        target.classList.add(isOccupied ? 'drag-over-swap' : 'drag-over-move');
+                    });
+
+                    target.addEventListener('dragleave', (e) => {
+                        if (!target.contains(e.relatedTarget)) {
+                            target.classList.remove('drag-over-swap', 'drag-over-move');
+                        }
+                    });
+
+                    target.addEventListener('drop', (e) => {
+                        if (!dragSource) return;
+                        e.preventDefault();
+                        limparHighlights();
+
+                        const targetTa = target.querySelector('textarea');
+                        const targetCard = target.querySelector('.study-drag-card');
+                        if (!targetTa || !targetCard) return;
+
+                        const targetVal = targetTa.value.trim();
+                        const targetCor = targetTa.style.getPropertyValue('--materia-cor');
+                        const targetFundo = targetTa.style.getPropertyValue('--materia-fundo');
+
+                        if (dragSource.type === 'cell') {
+                            if (dragSource.card === targetCard) return;
+
+                            // Troca de lugares (SWAP)
+                            targetTa.value = dragSource.val;
+                            if (dragSource.cor) {
+                                targetTa.style.setProperty('--materia-cor', dragSource.cor);
+                                targetTa.style.setProperty('--materia-fundo', dragSource.fundo);
+                            } else {
+                                targetTa.style.removeProperty('--materia-cor');
+                                targetTa.style.removeProperty('--materia-fundo');
+                            }
+
+                            dragSource.ta.value = targetVal;
+                            if (targetCor) {
+                                dragSource.ta.style.setProperty('--materia-cor', targetCor);
+                                dragSource.ta.style.setProperty('--materia-fundo', targetFundo);
+                            } else {
+                                dragSource.ta.style.removeProperty('--materia-cor');
+                                dragSource.ta.style.removeProperty('--materia-fundo');
+                            }
+
+                            atualizarCard(dragSource.card);
+                            atualizarCard(targetCard);
+                            animarPiscar(dragSource.card);
+                            animarPiscar(targetCard);
+                            mostrarAvisoTroca();
+                        } else if (dragSource.type === 'gaveta') {
+                            targetTa.value = dragSource.val;
+                            if (dragSource.cor) {
+                                targetTa.style.setProperty('--materia-cor', dragSource.cor);
+                                targetTa.style.setProperty('--materia-fundo', dragSource.fundo);
+                            }
+
+                            if (targetVal) {
+                                dragSource.chip.dataset.materia = targetVal;
+                                dragSource.chip.dataset.cor = targetCor || '';
+                                dragSource.chip.dataset.fundo = targetFundo || '';
+                                const txtEl = dragSource.chip.querySelector('.gaveta-text');
+                                if (txtEl) txtEl.textContent = targetVal;
+                            } else {
+                                dragSource.chip.remove();
+                                if (gavetaDropzone && gavetaDropzone.querySelectorAll('.gaveta-item').length === 0 && gavetaEmptyHint) {
+                                    gavetaEmptyHint.classList.remove('hidden');
+                                }
+                            }
+
+                            atualizarCard(targetCard);
+                            animarPiscar(targetCard);
+                            mostrarAvisoTroca();
+                        }
+
+                        dragSource = null;
+                    });
+                });
+
+                if (gavetaDropzone) {
+                    gavetaDropzone.addEventListener('dragover', (e) => {
+                        if (!dragSource || dragSource.type === 'gaveta') return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        gavetaDropzone.classList.add('drag-over-gaveta');
+                    });
+
+                    gavetaDropzone.addEventListener('dragleave', (e) => {
+                        if (!gavetaDropzone.contains(e.relatedTarget)) {
+                            gavetaDropzone.classList.remove('drag-over-gaveta');
+                        }
+                    });
+
+                    gavetaDropzone.addEventListener('drop', (e) => {
+                        if (!dragSource || dragSource.type !== 'cell') return;
+                        e.preventDefault();
+                        limparHighlights();
+
+                        const val = dragSource.val;
+                        const cor = dragSource.cor;
+                        const fundo = dragSource.fundo;
+
+                        dragSource.ta.value = '';
+                        atualizarCard(dragSource.card);
+                        animarPiscar(dragSource.card);
+
+                        criarItemGaveta(val, cor, fundo);
+                        mostrarAvisoTroca();
+                        dragSource = null;
+                    });
+                }
+
+                function criarItemGaveta(materia, cor, fundo) {
+                    if (!gavetaDropzone) return;
+                    if (gavetaEmptyHint) gavetaEmptyHint.classList.add('hidden');
+
+                    const chip = document.createElement('div');
+                    chip.className = 'gaveta-item inline-flex items-center gap-1.5 rounded-xl border border-amber-400/40 bg-amber-500/20 px-3 py-1.5 text-xs font-black uppercase text-amber-200 cursor-grab active:cursor-grabbing shadow-sm transition-all hover:scale-105';
+                    chip.draggable = true;
+                    chip.dataset.materia = materia;
+                    chip.dataset.cor = cor || '';
+                    chip.dataset.fundo = fundo || '';
+
+                    chip.innerHTML = `
+                        <span class="opacity-60 select-none">⠿</span>
+                        <span class="gaveta-text">${materia}</span>
+                        <button type="button" class="ml-1 text-amber-400/70 hover:text-rose-400 font-black cursor-pointer text-xs" title="Excluir">✕</button>
+                    `;
+
+                    chip.querySelector('button').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        chip.remove();
+                        if (gavetaDropzone.querySelectorAll('.gaveta-item').length === 0 && gavetaEmptyHint) {
+                            gavetaEmptyHint.classList.remove('hidden');
+                        }
+                        mostrarAvisoTroca();
+                    });
+
+                    chip.addEventListener('dragstart', (e) => {
+                        dragSource = {
+                            type: 'gaveta',
+                            chip: chip,
+                            val: chip.dataset.materia,
+                            cor: chip.dataset.cor,
+                            fundo: chip.dataset.fundo,
+                        };
+                        chip.classList.add('opacity-40');
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', chip.dataset.materia);
+                    });
+
+                    chip.addEventListener('dragend', () => {
+                        chip.classList.remove('opacity-40');
+                        limparHighlights();
+                    });
+
+                    gavetaDropzone.appendChild(chip);
+                }
+
+                document.addEventListener('click', function(e) {
+                    const btn = e.target.closest('.btn-limpar-materia');
+                    if (btn) {
+                        const card = btn.closest('.study-drag-card');
+                        if (card) {
+                            const ta = card.querySelector('textarea');
+                            if (ta) {
+                                ta.value = '';
+                                ta.style.removeProperty('--materia-cor');
+                                ta.style.removeProperty('--materia-fundo');
+                            }
+                            atualizarCard(card);
+                            mostrarAvisoTroca();
+                        }
+                    }
+                });
             });
         </script>
     </div>
@@ -509,7 +1023,12 @@
 
     <div id="registro-layout" class="grid scroll-mt-6 gap-6 lg:grid-cols-[420px_minmax(0,1fr)]">
         <div id="registro-form" class="scroll-mt-6 rounded-3xl border border-white/10 bg-slate-900/60 p-6 shadow-2xl shadow-slate-950/30">
-            <h2 id="registro" class="scroll-mt-24 text-xl font-black text-white">{% if editar %}Editar registro{% else %}Novo registro{% endif %}</h2>
+            <div class="flex items-center justify-between">
+                <h2 id="registro" class="scroll-mt-24 text-xl font-black text-white">{% if editar %}Editar registro{% else %}Novo registro{% endif %}</h2>
+                {% if editar %}
+                <a href="/estudos#registro" class="text-xs font-bold text-slate-400 hover:text-white transition-colors">Cancelar edição</a>
+                {% endif %}
+            </div>
             <form method="post" action="/estudos" class="mt-5 space-y-4">
                 <input type="hidden" name="registro_id" value="{{ editar.id if editar else '' }}">
                 <div>
@@ -529,7 +1048,7 @@
                 </div>
                 <div>
                     <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Assunto / matéria</label>
-                    <select name="assunto" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    <select id="registroAssunto" name="assunto" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
                         <option value="">Escolha a matéria do quadro</option>
                         {% for materia in materias_grade %}
                         <option value="{{ materia }}" {% if editar and editar.assunto == materia %}selected{% endif %}>{{ materia }}</option>
@@ -689,6 +1208,91 @@
     .study-materia-cell { border-left: 3px solid transparent; }
     .study-materia-cell[style*="--materia-cor"] { border-left-color: var(--materia-cor) !important; background-color: var(--materia-fundo) !important; }
     html.light-mode .study-materia-cell[style*="--materia-cor"] { border-left-color: var(--materia-cor) !important; background-color: var(--materia-fundo) !important; }
+    /* Ajustes específicos do Ciclo de Estudos para Light Mode */
+    html.light-mode #quadroCicloEstudos .ciclo-hero-card {
+        background-color: #f1f5f9 !important;
+        background-image: none !important;
+        border-color: #cbd5e1 !important;
+        box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.05) !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-hero-card h3 {
+        color: #0f172a !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-hero-card p {
+        color: #475569 !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-badge-vez {
+        background-color: #e0f2fe !important;
+        border-color: #bae6fd !important;
+        color: #0284c7 !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-btn-nav {
+        background-color: #ffffff !important;
+        border-color: #cbd5e1 !important;
+        color: #1e293b !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-btn-nav:hover {
+        background-color: #e2e8f0 !important;
+        color: #0f172a !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-section-box {
+        background-color: #f8fafc !important;
+        border-color: #e2e8f0 !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-section-box h4 {
+        color: #0f172a !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-section-box p {
+        color: #64748b !important;
+    }
+    html.light-mode #quadroCicloEstudos #cicloContador {
+        color: #0284c7 !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-item-card {
+        background-color: #ffffff !important;
+        border-color: #e2e8f0 !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-item-card:hover {
+        background-color: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-item-card.is-active {
+        background-color: #f0f9ff !important;
+        border-color: #38bdf8 !important;
+        box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15) !important;
+    }
+    html.light-mode #quadroCicloEstudos .ciclo-item-card span[title] {
+        color: #0f172a !important;
+    }
+    html.light-mode #quadroCicloEstudos #cicloSelectGrade,
+    html.light-mode #quadroCicloEstudos #cicloInputNova {
+        background-color: #ffffff !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
+    }
+    html.light-mode #quadroCicloEstudos #cicloBoxNovaMateria {
+        background-color: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+    }
+    #cicloSelectGrade option {
+        background-color: #0f172a;
+        color: #f8fafc;
+        padding: 8px 12px;
+    }
+    html.light-mode #cicloSelectGrade option {
+        background-color: #ffffff;
+        color: #0f172a;
+    }
+    html.light-mode #quadroCicloEstudos #cicloBtnResetar {
+        background-color: #ffffff !important;
+        border-color: #cbd5e1 !important;
+        color: #64748b !important;
+    }
+    html.light-mode #quadroCicloEstudos #cicloBtnResetar:hover {
+        background-color: #fff1f2 !important;
+        border-color: #fca5a5 !important;
+        color: #e11d48 !important;
+    }
     .study-success-message { transition: opacity .3s ease, transform .3s ease; }
     .study-success-message.is-dismissing { opacity: 0; transform: translateY(-4px); }
     .study-delete-details > summary { list-style: none; }
@@ -717,6 +1321,11 @@
     }
 
     /* Dropdown options - fundo branco com texto escuro para boa leitura */
+    #timerMateria {
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+    }
     #timerMateria option,
     #timerDuration option {
         background-color: #f8fafc;
@@ -736,7 +1345,7 @@
         <h2 class="mt-2 text-4xl font-black text-white">Tempo encerrado</h2>
         <p id="timerAlertMessage" class="mt-3 text-slate-300">Sua sessão de estudo terminou.</p>
         <div class="mt-7 flex flex-wrap justify-center gap-3">
-            <button id="timerStartBreak" type="button" class="rounded-xl bg-emerald-400 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-950">Iniciar pausa de 15 min</button>
+            <button id="timerStartBreak" type="button" class="rounded-xl bg-emerald-400 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-950">Iniciar pausa de 10 min</button>
             <button id="timerCloseAlert" type="button" class="rounded-xl border border-white/10 bg-slate-950 px-5 py-3 text-xs font-black uppercase tracking-[0.16em] text-slate-300">Fechar alerta</button>
         </div>
     </div>
@@ -757,7 +1366,7 @@
         const resetButton = document.getElementById('timerReset');
         const registroInicio = document.getElementById('registroHorarioInicio');
         const registroFim = document.getElementById('registroHorarioFim');
-        const registroMateria = document.querySelector('select[name="assunto"]');
+        const registroMateria = document.getElementById('registroAssunto');
         const createSessionId = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         function setActiveTimerButton(activeId) {
             const buttons = [pauseButton, finishButton, resetButton];
@@ -787,6 +1396,19 @@
         const format = seconds => [Math.floor(seconds / 3600), Math.floor((seconds % 3600) / 60), seconds % 60].map(value => String(value).padStart(2, '0')).join(':');
         const stopBlink = () => { clearInterval(blink); blink = null; document.title = originalTitle; };
         const clockValue = timestamp => timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : '';
+
+        function setTimerStatus(text, colorClass = 'text-slate-400') {
+            if (!status) return;
+            status.textContent = text;
+            status.title = text;
+            status.className = `block truncate text-xs sm:text-sm font-bold ${colorClass}`;
+        }
+        if (materia) {
+            materia.addEventListener('change', () => {
+                materia.title = materia.value || 'Escolha a matéria';
+            });
+        }
+
         function syncRecordFields(state) {
             if (state.break) return;
             if (registroInicio) registroInicio.value = clockValue(state.startedAt);
@@ -824,11 +1446,11 @@
             state.finished = true; state.paused = true; state.remaining = 0; setState(state); clearInterval(ticker);
             if (!state.break) {
                 registerCompletedStudy(state);
-                const breakState = { endsAt: Date.now() + 15 * 60 * 1000, remaining: 15 * 60, paused: false, finished: false, break: true, materia: '' };
+                const breakState = { endsAt: Date.now() + 10 * 60 * 1000, remaining: 10 * 60, paused: false, finished: false, break: true, materia: '' };
                 setState(breakState);
                 startTicker();
             }
-            alertMessage.textContent = state.break ? 'Sua pausa de 15 minutos terminou. Está na hora de voltar aos estudos.' : (state.materia ? `Sua sessão de ${state.materia} terminou. A pausa de descanso de 15 minutos começou.` : 'Sua sessão de estudo terminou. A pausa de descanso de 15 minutos começou.');
+            alertMessage.textContent = state.break ? 'Sua pausa de 10 minutos terminou. Está na hora de voltar aos estudos.' : (state.materia ? `Sua sessão de ${state.materia} terminou. A pausa de descanso de 10 minutos começou.` : 'Sua sessão de estudo terminou. A pausa de descanso de 10 minutos começou.');
             alertBox.classList.remove('hidden'); alertBox.classList.add('flex'); alertBox.style.display = 'flex';
             document.getElementById('timerStartBreak').classList.add('hidden');
             if ('Notification' in window && Notification.permission === 'granted') new Notification(state.break ? 'Pausa encerrada' : 'Tempo encerrado', { body: alertMessage.textContent });
@@ -840,8 +1462,8 @@
             const state = getState(); if (!state) return;
             const remaining = state.paused ? state.remaining : Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000));
             display.textContent = format(remaining);
-            status.textContent = state.paused ? (state.break ? 'Pausa pausada' : 'Pausado') : (state.break ? 'Pausa de descanso' : `Estudando${state.materia ? ' · ' + state.materia : ''}`);
-            status.className = state.paused ? 'text-xs font-bold text-slate-300' : 'text-xs font-bold text-emerald-300';
+            const statusTxt = state.paused ? (state.break ? 'Pausa pausada' : 'Pausado') : (state.break ? 'Pausa de descanso' : `Estudando${state.materia ? ' · ' + state.materia : ''}`);
+            setTimerStatus(statusTxt, state.paused ? 'text-slate-300' : 'text-emerald-300');
             
             const btnPause = document.getElementById('timerPause');
             if (btnPause) {
@@ -856,14 +1478,13 @@
         document.getElementById('timerStart').onclick = async () => {
             const selectedSeconds = duration.value === 'custom' ? Number(custom.value) * 60 : Number(duration.value);
             if (!Number.isFinite(selectedSeconds) || selectedSeconds < 60) {
-                status.textContent = 'Informe pelo menos 1 minuto';
-                status.className = 'text-xs font-bold text-rose-300';
+                setTimerStatus('Informe pelo menos 1 minuto', 'text-rose-300');
                 return;
             }
             if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
             const old = getState();
             const state = old && old.paused && !old.finished ? { ...old, sessionId: old.sessionId || createSessionId(), durationSeconds: old.durationSeconds || old.remaining, paused: false, endsAt: Date.now() + old.remaining * 1000 } : { endsAt: Date.now() + selectedSeconds * 1000, remaining: selectedSeconds, paused: false, finished: false, materia: materia.value.trim(), startedAt: Date.now(), sessionId: createSessionId(), durationSeconds: selectedSeconds };
-            syncRecordFields(state); setState(state); setActiveTimerButton('timerStart'); status.textContent = `Iniciando${state.materia ? ' · ' + state.materia : ''}`; status.className = 'text-xs font-bold text-amber-300'; startTicker();
+            syncRecordFields(state); setState(state); setActiveTimerButton('timerStart'); setTimerStatus(`Iniciando${state.materia ? ' · ' + state.materia : ''}`, 'text-amber-300'); startTicker();
             // Muda para aba "Registrar estudo" para mostrar o pré-cadastro com horário de início
             document.dispatchEvent(new CustomEvent('estudos:ir-para-registro'));
         };
@@ -875,16 +1496,14 @@
                 state.paused = false;
                 setState(state);
                 setActiveTimerButton('timerPause');
-                status.textContent = 'Retomando estudo';
-                status.className = 'text-xs font-bold text-amber-300';
+                setTimerStatus('Retomando estudo', 'text-amber-300');
                 startTicker();
             } else {
                 state.remaining = Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000)); 
                 state.paused = true; 
                 setState(state); 
                 setActiveTimerButton('timerPause');
-                status.textContent = 'Cronômetro pausado';
-                status.className = 'text-xs font-bold text-slate-300';
+                setTimerStatus('Cronômetro pausado', 'text-slate-300');
                 update(); 
             }
         };
@@ -893,13 +1512,12 @@
                 const state = getState();
                 if (!state || state.finished) return;
                 setActiveTimerButton('timerFinish');
-                status.textContent = 'Finalizando sessão';
-                status.className = 'text-xs font-bold text-amber-300';
+                setTimerStatus('Finalizando sessão', 'text-amber-300');
                 finish(state);
             };
         }
-        document.getElementById('timerStartBreak').onclick = () => { const state = { endsAt: Date.now() + 15 * 60 * 1000, remaining: 15 * 60, paused: false, finished: false, break: true, materia: '' }; alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); setState(state); setActiveTimerButton('timerStart'); startTicker(); };
-        document.getElementById('timerReset').onclick = () => { localStorage.removeItem(key); clearInterval(ticker); stopBlink(); setActiveTimerButton('timerReset'); if (registroInicio) registroInicio.value = ''; if (registroFim) registroFim.value = ''; display.textContent = '00:50:00'; status.textContent = 'Pronto para iniciar'; status.className = 'text-xs font-bold text-slate-400'; const btnPause = document.getElementById('timerPause'); if(btnPause) btnPause.textContent = 'Pausar'; };
+        document.getElementById('timerStartBreak').onclick = () => { const state = { endsAt: Date.now() + 10 * 60 * 1000, remaining: 10 * 60, paused: false, finished: false, break: true, materia: '' }; alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); setState(state); setActiveTimerButton('timerStart'); startTicker(); };
+        document.getElementById('timerReset').onclick = () => { localStorage.removeItem(key); clearInterval(ticker); stopBlink(); setActiveTimerButton('timerReset'); if (registroInicio) registroInicio.value = ''; if (registroFim) registroFim.value = ''; display.textContent = '01:00:00'; setTimerStatus('Pronto para iniciar', 'text-slate-400'); const btnPause = document.getElementById('timerPause'); if(btnPause) btnPause.textContent = 'Pausar'; };
         document.getElementById('timerCloseAlert').onclick = () => { alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); document.dispatchEvent(new CustomEvent('estudos:ir-para-registro')); };
         const _initialTimerState = getState();
         if (_initialTimerState) { syncRecordFields(_initialTimerState); startTicker(); }
@@ -919,7 +1537,7 @@
                 if (inicio && !inicio.value) {
                     const duration = document.getElementById('timerDuration');
                     let secs = duration ? parseInt(duration.value) : 0;
-                    if (isNaN(secs) || secs <= 0) secs = 3000;
+                    if (isNaN(secs) || secs <= 0) secs = 3600;
                     const startMs = Date.now() - secs * 1000;
                     inicio.value = new Date(startMs).toTimeString().slice(0, 5);
                 }
@@ -977,42 +1595,49 @@
 
         tabs.forEach((tab) => tab.addEventListener('click', () => {
             const tabName = tab.dataset.tab;
-            localStorage.setItem('estudos_aba_ativa', tabName);
             showView(tabName);
             // Ao abrir "Registrar estudo" manualmente, sincroniza com o cronômetro ativo
             if (tabName === 'registro') sincronizarFormularioComCronometro();
         }));
 
-        // Lê o hash apenas se veio de uma navegação intencional (link interno)
-        // O hash #desempenho fica preso na URL pelos links do gráfico semanal,
-        // então localStorage tem prioridade sobre o hash.
+        // Lê o hash e a URL para determinar a aba ativa (Padrão: SEMPRE 'quadro')
         const hash = window.location.hash;
-        const savedView = localStorage.getItem('estudos_aba_ativa');
-        let initialView = savedView || 'quadro';
+        const searchParams = new URLSearchParams(window.location.search);
+        const hasEditarId = searchParams.has('editar_id');
+        let initialView = 'quadro';
 
-        // Hash só tem prioridade se NÃO tiver uma aba salva, ou se for #registro
-        if (hash === '#registro') initialView = 'registro';
-        else if (hash === '#historico' && !savedView) initialView = 'historico';
+        // Se tem editar_id ou hash #registro, prioriza a aba registro
+        if (hasEditarId || hash === '#registro') {
+            initialView = 'registro';
+        } else if (hash === '#historico') {
+            initialView = 'historico';
+        } else if (hash === '#desempenho') {
+            initialView = 'desempenho';
+        }
 
         showView(initialView);
-        // Se abriu direto na aba de registro (ex: reload), sincroniza a matéria do cronômetro
+        // Se abriu direto na aba de registro (ex: reload ao editar), sincroniza com cronômetro
         if (initialView === 'registro') sincronizarFormularioComCronometro();
 
-        // Remove o estilo de flash-fix após aplicar a aba correta
+        // Remove o estilo de flash-fix caso exista
         var flashFix = document.getElementById('estudos-flash-fix');
         if (flashFix) flashFix.remove();
 
-        // Limpa o hash da URL para não interferir em futuros reloads
-        if (hash) {
+        // Limpa o hash da URL para não interferir em futuros reloads (mantendo parâmetros de busca)
+        if (hash && !hasEditarId) {
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
         }
 
         // Sincroniza os campos do formulário com o estado atual do cronômetro
         function sincronizarFormularioComCronometro() {
             try {
+                // Se estiver editando um registro existente, não sobrescrever com o cronômetro
+                const registroIdInput = document.querySelector('input[name="registro_id"]');
+                if (registroIdInput && registroIdInput.value) return;
+
                 const cronState = JSON.parse(localStorage.getItem('estudos_cronometro') || 'null');
                 if (!cronState || cronState.break) return;
-                const selectAssunto = document.querySelector('select[name="assunto"]');
+                const selectAssunto = document.getElementById('registroAssunto');
                 const inputInicio = document.getElementById('registroHorarioInicio');
                 const inputFim = document.getElementById('registroHorarioFim');
                 if (selectAssunto && cronState.materia) {
@@ -1034,7 +1659,6 @@
 
         // Quando o cronômetro inicia ou termina, muda automaticamente para "Registrar estudo"
         document.addEventListener('estudos:ir-para-registro', () => {
-            localStorage.setItem('estudos_aba_ativa', 'registro');
             showView('registro');
             // Sincroniza matéria/horários APÓS o form estar visível
             sincronizarFormularioComCronometro();
@@ -1124,6 +1748,328 @@
         });
 
         window.addEventListener('popstate', () => atualizarProgresso(window.location.href, false));
+    })();
+</script>
+<script>
+    (() => {
+        const btnSemanal = document.getElementById('btnModoSemanal');
+        const btnCiclo = document.getElementById('btnModoCiclo');
+        const containerSemanal = document.getElementById('quadroGradeSemanal');
+        const containerCiclo = document.getElementById('quadroCicloEstudos');
+        const quadroTitulo = document.getElementById('quadroTitulo');
+
+        // Matérias atualmente cadastradas no quadro semanal
+        const materiasDoQuadro = {{ (materias_quadro or []) | tojson }};
+
+        // Chaves de armazenamento local
+        const KEY_MODO = 'estudos_modo_quadro';
+        const KEY_MATERIAS = 'estudos_ciclo_materias';
+        const KEY_INDEX = 'estudos_ciclo_index';
+        const KEY_CUSTOM = 'estudos_ciclo_custom';
+
+        function getMateriasCiclo() {
+            // Se o usuário adicionou ou removeu matérias manualmente no ciclo
+            try {
+                const salvo = JSON.parse(localStorage.getItem(KEY_MATERIAS) || 'null');
+                if (Array.isArray(salvo) && localStorage.getItem(KEY_CUSTOM) === 'true') {
+                    return salvo;
+                }
+            } catch (e) {}
+
+            // Se o quadro semanal tem matérias preenchidas, sincroniza com o quadro
+            if (materiasDoQuadro && materiasDoQuadro.length > 0) {
+                const unicas = [...new Set(materiasDoQuadro)];
+                salvarMateriasCiclo(unicas);
+                return unicas;
+            }
+
+            // Se o quadro está zerado sem matérias, o ciclo fica ZERADO (vazio)
+            return [];
+        }
+
+        function salvarMateriasCiclo(lista) {
+            localStorage.setItem(KEY_MATERIAS, JSON.stringify(lista));
+        }
+
+        function getIndexAtual(total) {
+            if (total <= 0) return 0;
+            const idx = parseInt(localStorage.getItem(KEY_INDEX) || '0', 10);
+            return (isNaN(idx) || idx < 0 || idx >= total) ? 0 : idx;
+        }
+
+        function salvarIndexAtual(idx) {
+            localStorage.setItem(KEY_INDEX, String(idx));
+        }
+
+        function aplicarModo(modo) {
+            const isCiclo = modo === 'ciclo';
+            localStorage.setItem(KEY_MODO, modo);
+
+            if (containerSemanal) containerSemanal.classList.toggle('hidden', isCiclo);
+            if (containerCiclo) containerCiclo.classList.toggle('hidden', !isCiclo);
+
+            if (quadroTitulo) {
+                quadroTitulo.textContent = isCiclo ? 'Ciclo de Estudos (Fila)' : 'Planejamento da semana';
+            }
+
+            if (btnSemanal && btnCiclo) {
+                if (isCiclo) {
+                    btnCiclo.className = 'rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all bg-sky-500 text-slate-950 shadow-md cursor-pointer';
+                    btnSemanal.className = 'rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all text-slate-400 hover:text-white cursor-pointer';
+                } else {
+                    btnSemanal.className = 'rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all bg-sky-500 text-slate-950 shadow-md cursor-pointer';
+                    btnCiclo.className = 'rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all text-slate-400 hover:text-white cursor-pointer';
+                }
+            }
+
+            if (isCiclo) renderizarCiclo();
+        }
+
+        if (btnSemanal) btnSemanal.addEventListener('click', () => aplicarModo('semanal'));
+        if (btnCiclo) btnCiclo.addEventListener('click', () => aplicarModo('ciclo'));
+
+        function renderizarCiclo() {
+            const materias = getMateriasCiclo();
+            let idx = getIndexAtual(materias.length);
+
+            const elAtual = document.getElementById('cicloMateriaAtual');
+            const elContador = document.getElementById('cicloContador');
+            const elLista = document.getElementById('cicloLista');
+
+            if (elContador) elContador.textContent = materias.length;
+
+            if (materias.length === 0) {
+                if (elAtual) elAtual.textContent = 'Nenhuma matéria na fila';
+                if (elLista) elLista.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-slate-500">Adicione matérias abaixo para iniciar seu ciclo.</div>';
+                return;
+            }
+
+            const materiaAtual = materias[idx];
+            if (elAtual) elAtual.textContent = materiaAtual;
+
+            if (elLista) {
+                const cores = ['#38bdf8', '#fbbf24', '#a3e635', '#fb7185', '#c084fc', '#2dd4bf', '#fb923c', '#818cf8'];
+                elLista.innerHTML = materias.map((mat, i) => {
+                    const isAtiva = i === idx;
+                    const cor = cores[i % cores.length];
+
+                    return `
+                        <div class="ciclo-item-card relative flex flex-col justify-between rounded-xl border p-4 transition-all ${
+                            isAtiva 
+                                ? 'is-active border-sky-400 bg-sky-500/10 shadow-lg shadow-sky-500/10 ring-1 ring-sky-400' 
+                                : 'border-white/10 bg-slate-900/60 hover:border-white/20 hover:bg-slate-900/90'
+                        }">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-black text-slate-950 shrink-0" style="background-color: ${cor}">
+                                        ${i + 1}
+                                    </span>
+                                    <span class="text-xs font-black uppercase text-white truncate max-w-[150px]" title="${mat}">${mat}</span>
+                                </div>
+                                ${isAtiva 
+                                    ? '<span class="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-300 shrink-0">Sua Vez</span>' 
+                                    : `<button type="button" data-ciclo-set="${i}" class="text-[10px] font-bold text-slate-400 hover:text-sky-300 cursor-pointer">Definir</button>`
+                                }
+                            </div>
+                            <div class="mt-4 flex items-center justify-between border-t border-white/5 pt-2 text-[10px]">
+                                <button type="button" data-ciclo-estudar="${encodeURIComponent(mat)}" class="font-black text-sky-400 hover:text-sky-300 uppercase cursor-pointer">
+                                    Estudar ❯
+                                </button>
+                                <button type="button" data-ciclo-remover="${i}" class="font-bold text-slate-500 hover:text-rose-400 cursor-pointer" title="Remover do ciclo">
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        const btnAvancar = document.getElementById('cicloBtnAvancar');
+        const btnVoltar = document.getElementById('cicloBtnVoltar');
+        const btnIniciar = document.getElementById('cicloBtnIniciar');
+
+        if (btnAvancar) {
+            btnAvancar.addEventListener('click', () => {
+                const materias = getMateriasCiclo();
+                if (materias.length === 0) return;
+                const idx = (getIndexAtual(materias.length) + 1) % materias.length;
+                salvarIndexAtual(idx);
+                renderizarCiclo();
+            });
+        }
+
+        if (btnVoltar) {
+            btnVoltar.addEventListener('click', () => {
+                const materias = getMateriasCiclo();
+                if (materias.length === 0) return;
+                const idx = (getIndexAtual(materias.length) - 1 + materias.length) % materias.length;
+                salvarIndexAtual(idx);
+                renderizarCiclo();
+            });
+        }
+
+        function iniciarEstudoMateria(nomeMateria) {
+            if (!nomeMateria) return;
+            const selectMateria = document.getElementById('timerMateria');
+            if (selectMateria) {
+                selectMateria.value = nomeMateria;
+                if (!selectMateria.value) {
+                    const opt = document.createElement('option');
+                    opt.value = nomeMateria;
+                    opt.textContent = nomeMateria;
+                    selectMateria.appendChild(opt);
+                    selectMateria.value = nomeMateria;
+                }
+            }
+            const timerEl = document.getElementById('timerDisplay');
+            if (timerEl) timerEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            const btnStart = document.getElementById('timerStart');
+            if (btnStart) btnStart.click();
+        }
+
+        if (btnIniciar) {
+            btnIniciar.addEventListener('click', () => {
+                const materias = getMateriasCiclo();
+                const idx = getIndexAtual(materias.length);
+                if (materias[idx]) iniciarEstudoMateria(materias[idx]);
+            });
+        }
+
+        const elLista = document.getElementById('cicloLista');
+        if (elLista) {
+            elLista.addEventListener('click', (e) => {
+                const btnSet = e.target.closest('[data-ciclo-set]');
+                if (btnSet) {
+                    const idx = parseInt(btnSet.dataset.cicloSet, 10);
+                    salvarIndexAtual(idx);
+                    renderizarCiclo();
+                    return;
+                }
+
+                const btnEstudar = e.target.closest('[data-ciclo-estudar]');
+                if (btnEstudar) {
+                    const mat = decodeURIComponent(btnEstudar.dataset.cicloEstudar);
+                    iniciarEstudoMateria(mat);
+                    return;
+                }
+
+                const btnRemover = e.target.closest('[data-ciclo-remover]');
+                if (btnRemover) {
+                    const remIdx = parseInt(btnRemover.dataset.cicloRemover, 10);
+                    let materias = getMateriasCiclo();
+                    materias.splice(remIdx, 1);
+                    localStorage.setItem(KEY_CUSTOM, 'true');
+                    salvarMateriasCiclo(materias);
+                    let curIdx = getIndexAtual(materias.length);
+                    if (curIdx >= materias.length) curIdx = Math.max(0, materias.length - 1);
+                    salvarIndexAtual(curIdx);
+                    renderizarCiclo();
+                }
+            });
+        }
+
+        const selectGrade = document.getElementById('cicloSelectGrade');
+        const btnAddGrade = document.getElementById('cicloBtnAddGrade');
+        const btnToggleNova = document.getElementById('cicloBtnToggleNova');
+        const boxNova = document.getElementById('cicloBoxNovaMateria');
+        const inputNova = document.getElementById('cicloInputNova');
+        const btnSalvarNova = document.getElementById('cicloBtnSalvarNova');
+        const btnCancelarNova = document.getElementById('cicloBtnCancelarNova');
+
+        // Adicionar matéria selecionada da grade ao ciclo
+        if (btnAddGrade && selectGrade) {
+            btnAddGrade.addEventListener('click', () => {
+                const materia = selectGrade.value.trim();
+                if (!materia) {
+                    selectGrade.focus();
+                    return;
+                }
+                const materias = getMateriasCiclo();
+                materias.push(materia);
+                localStorage.setItem(KEY_CUSTOM, 'true');
+                salvarMateriasCiclo(materias);
+                selectGrade.value = '';
+                renderizarCiclo();
+            });
+        }
+
+        // Alternar caixa de nova matéria
+        if (btnToggleNova && boxNova) {
+            btnToggleNova.addEventListener('click', () => {
+                boxNova.classList.toggle('hidden');
+                if (!boxNova.classList.contains('hidden') && inputNova) {
+                    inputNova.focus();
+                }
+            });
+        }
+
+        if (btnCancelarNova && boxNova) {
+            btnCancelarNova.addEventListener('click', () => {
+                boxNova.classList.add('hidden');
+                if (inputNova) inputNova.value = '';
+            });
+        }
+
+        // Salvar nova matéria personalizada avulsa
+        function salvarNovaMateriaCustom() {
+            if (!inputNova) return;
+            const nova = inputNova.value.trim();
+            if (!nova) {
+                inputNova.focus();
+                return;
+            }
+            const materias = getMateriasCiclo();
+            materias.push(nova);
+            localStorage.setItem(KEY_CUSTOM, 'true');
+            salvarMateriasCiclo(materias);
+            inputNova.value = '';
+            if (boxNova) boxNova.classList.add('hidden');
+            renderizarCiclo();
+        }
+
+        if (btnSalvarNova) {
+            btnSalvarNova.addEventListener('click', salvarNovaMateriaCustom);
+        }
+
+        if (inputNova) {
+            inputNova.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    salvarNovaMateriaCustom();
+                }
+            });
+        }
+
+        const btnResetar = document.getElementById('cicloBtnResetar');
+        if (btnResetar) {
+            btnResetar.addEventListener('click', () => {
+                if (confirm('Sincronizar o ciclo com as matérias do quadro de horários?')) {
+                    const padrao = materiasDoQuadro && materiasDoQuadro.length > 0 ? [...new Set(materiasDoQuadro)] : [];
+                    localStorage.removeItem(KEY_CUSTOM);
+                    salvarMateriasCiclo(padrao);
+                    salvarIndexAtual(0);
+                    renderizarCiclo();
+                }
+            });
+        }
+
+        const modoSalvo = localStorage.getItem(KEY_MODO) || 'semanal';
+
+        {% if success == 'plano_importado' or success == 'grade' %}
+        try {
+            const novasMateriasDoQuadro = [
+                {% for m in materias_quadro %}"{{ m }}",{% endfor %}
+            ];
+            const unicas = [...new Set(novasMateriasDoQuadro)];
+            localStorage.removeItem(KEY_CUSTOM);
+            salvarMateriasCiclo(unicas);
+            salvarIndexAtual(0);
+        } catch (e) {}
+        {% endif %}
+
+        aplicarModo(modoSalvo);
     })();
 </script>
 {% endblock %}

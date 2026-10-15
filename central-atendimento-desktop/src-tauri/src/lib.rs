@@ -49,7 +49,7 @@ fn register_windows_notification_identity() -> bool {
 #[tauri::command]
 fn trigger_message_alert(app: tauri::AppHandle, sender: String) {
     let body = format!("{} enviou uma nova mensagem.", sender);
-    let app_title = "Central de Atendimento v0.1.4";
+    let app_title = "Central de Atendimento v0.1.7";
 
     // Pisca a barra de tarefas sem forçar foco (forçar foco suprime o toast do Windows)
     if let Some(window) = app.get_webview_window("main") {
@@ -81,6 +81,15 @@ fn trigger_message_alert(app: tauri::AppHandle, sender: String) {
     }
 }
 
+#[tauri::command]
+fn request_native_notification_permission(app: tauri::AppHandle) -> Result<String, String> {
+    let permission = app
+        .notification()
+        .request_permission()
+        .map_err(|error| format!("Falha ao solicitar permissão de notificação: {error}"))?;
+    Ok(format!("{permission:?}"))
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -101,7 +110,10 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![trigger_message_alert])
+        .invoke_handler(tauri::generate_handler![
+            trigger_message_alert,
+            request_native_notification_permission
+        ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar a Central de Atendimento");
 }

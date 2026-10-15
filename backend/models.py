@@ -110,6 +110,7 @@ class Chamado(SQLModel, table=True):
     origem: str = Field(default="Web", index=True)
     assigned_user: Optional[str] = Field(default=None, index=True)
     visivel_suporte: bool = Field(default=True, index=True)
+    empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
     
     interacoes: List["ChamadoInteracao"] = Relationship(back_populates="chamado")
 
@@ -144,6 +145,7 @@ class ContatoWhatsApp(SQLModel, table=True):
     observacao: Optional[str] = None
     status_interno: str = Field(default="Normal", index=True)
     whatsapp_instance: Optional[str] = None
+    empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
     data_cadastro: datetime = Field(default_factory=datetime.now)
 
 class StatusMaquina(SQLModel, table=True):
@@ -179,6 +181,8 @@ class StatusEmpresa(SQLModel, table=True):
     criado_por: str = Field(default="admin")
     criado_em: datetime = Field(default_factory=datetime.now, index=True)
     expira_em: datetime = Field(default_factory=lambda: datetime.now() + timedelta(hours=24), index=True)
+    empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
+    whatsapp_instance: Optional[str] = Field(default=None, index=True)
 
 class MarmitaCardapio(SQLModel, table=True):
     __tablename__ = "marmita_cardapio"

@@ -469,19 +469,30 @@
     </div>
     <div class="flex items-center gap-2">
         <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-emerald-300">Conversas</a>
-        {% if is_admin %}
+        {% if is_admin or can_edit_identity %}
         <button type="button" onclick="openTauriStatusModal()" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-amber-300 transition hover:bg-amber-500/10">Status</button>
         <a href="/central-atendimento/configuracoes" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition hover:bg-white/5 hover:text-white">Conexão e configurações</a>
+        {% if is_admin %}<a href="/central-atendimento/empresas" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-indigo-300 transition hover:bg-indigo-500/10 hover:text-white">Empresas e usuários</a>{% endif %}
         {% endif %}
     </div>
 </div>
+
+{% if atendimento_multiempresa_enabled and not is_admin %}
+<div id="atendimento-empresa-selector" class="mb-4 hidden rounded-2xl border border-indigo-400/30 bg-indigo-500/10 px-4 py-3">
+    <div class="flex flex-wrap items-center gap-3">
+        <span class="text-[10px] font-black uppercase tracking-widest text-indigo-200">Empresa do atendimento</span>
+        <select id="atendimento-empresa-select" class="min-w-[220px] flex-1 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs text-white"></select>
+        <button type="button" onclick="selecionarEmpresaAtendimento()" class="rounded-xl bg-indigo-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-indigo-500">Selecionar</button>
+    </div>
+</div>
+{% endif %}
 
 <audio id="notif-sound" src="https://assets.mixkit.co/active_storage/sfx/2357/2357-84.wav" preload="auto"></audio>
 <div id="attendance-toast" class="flex items-center gap-3 rounded-2xl border border-emerald-400/30 bg-slate-900/95 px-4 py-3 shadow-2xl backdrop-blur">
     <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-lg text-emerald-300">💬</div>
     <div class="min-w-0"><span id="attendance-toast-title" class="block text-[10px] font-black uppercase tracking-widest text-emerald-300">Nova mensagem</span><span id="attendance-toast-message" class="mt-1 block line-clamp-2 text-xs font-semibold text-slate-200"></span></div>
 </div>
-{% if is_admin %}
+{% if is_admin or can_edit_identity %}
 <div id="tauriStatusModal" class="hidden fixed inset-0 z-[120] items-center justify-center bg-slate-950/90 p-4 backdrop-blur-xl">
     <div class="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
         <div class="mb-5 flex items-center justify-between"><h3 class="text-lg font-black uppercase italic text-white">Status da empresa</h3><button type="button" onclick="closeTauriStatusModal()" class="text-2xl text-slate-500">×</button></div>
@@ -521,12 +532,13 @@
                 </div>
                 <div class="flex items-center gap-2">
                     <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black tracking-widest uppercase">WhatsApp</span>
-                    {% if is_admin %}<button type="button" onclick="openTauriStatusModal()" class="rounded-lg border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-amber-300 hover:bg-amber-400/20" title="Publicar Status">Status</button>{% endif %}
+                    {% if is_admin or can_edit_identity %}<button type="button" onclick="openTauriStatusModal()" class="rounded-lg border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-amber-300 hover:bg-amber-400/20" title="Publicar Status">Status</button>{% endif %}
                 </div>
             </div>
 
             <div id="queue-menu" class="queue-menu rounded-xl border border-white/10 bg-slate-900 p-1 shadow-xl">
                 {% if can_edit_identity %}<button type="button" onclick="window.location.href='/central-atendimento/configuracoes?desktop=1'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/10">Configurações</button>{% endif %}
+                {% if is_admin %}<button type="button" onclick="window.location.href='/central-atendimento/empresas'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-indigo-300 hover:bg-indigo-500/10">Empresas e usuários</button>{% endif %}
                 <button type="button" onclick="window.location.href='/central-atendimento/contatos?desktop=1'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/10">Lista de contatos</button>
                 <button type="button" onclick="selectQueueMenu('aguardando')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Fila de atendimento</button>
                 <button type="button" onclick="selectQueueMenu('atendendo')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Meus atendimentos</button>
@@ -624,7 +636,7 @@
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </button>
             <button type="button" onclick="toggleGifPicker()" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black text-slate-400 transition-colors hover:text-white" title="GIF">GIF</button>
-            <input id="attachment-input" type="file" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            <input id="attachment-input" type="file" multiple class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
             <button type="button" onclick="document.getElementById('attachment-input').click()" class="w-10 h-10 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-colors mr-1" title="Anexar arquivo">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
             </button>
@@ -816,11 +828,11 @@
 </div>
 
 <!-- Banner de permissão de notificação -->
-<div id="notif-permission-banner" class="hidden fixed top-0 left-0 right-0 z-[200] flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 shadow-lg">
-    <div class="flex items-center gap-2 text-sm font-bold text-amber-950">
+<div id="notif-permission-banner" class="hidden fixed top-0 left-0 right-0 z-[200] flex items-center justify-between gap-3 border-b border-amber-400/30 bg-slate-950/95 px-4 py-2 shadow-lg backdrop-blur">
+    <div class="flex items-center gap-2 text-sm font-bold text-amber-200">
         🔔 Ative as notificações para não perder mensagens dos clientes!
     </div>
-    <button id="btn-allow-notif" type="button" class="shrink-0 rounded-lg bg-amber-950 px-4 py-1.5 text-xs font-black text-amber-100 hover:bg-amber-900 transition-colors">
+    <button id="btn-allow-notif" type="button" class="shrink-0 rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-black text-white hover:bg-emerald-500 transition-colors">
         ATIVAR NOTIFICAÇÕES
     </button>
     <button type="button" onclick="this.closest('#notif-permission-banner').classList.add('hidden')" class="shrink-0 text-amber-900 hover:text-amber-950 text-lg leading-none">×</button>
@@ -1971,9 +1983,17 @@
             if (mediaUrl && mediaUrl.startsWith('/')) {
                 media.url = new URL(mediaUrl, window.location.origin).href;
             }
+            // Evita que o Tauri reutilize uma miniatura antiga em cache.
+            if (media.url && m.id) {
+                media.url += `${media.url.includes('?') ? '&' : '?'}v=${encodeURIComponent(m.id)}`;
+            }
             const caption = media.caption ? `<div class="mt-2 text-sm">${media.caption}</div>` : '';
             const direction = m.is_me ? 'enviado' : 'recebido';
             const directionF = m.is_me ? 'enviada' : 'recebida';
+            if (media.url && String(media.url).includes('/uploads/whatsapp_media/')) {
+                const mediaFilename = String(media.url).split('/').pop().split('?')[0];
+                media.url = new URL(`/api/whatsapp/media/${encodeURIComponent(mediaFilename)}`, window.location.origin).href;
+            }
             if (media.type === 'image') {
                 formattedMsg = `<div class="media-type-label mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">📷 Foto ${directionF}</div><a href="${escapeHtml(media.url)}" class="media-image-trigger" data-image-url="${escapeHtml(media.url)}" aria-label="Ampliar imagem"><img src="${escapeHtml(media.url)}" class="rounded-xl object-contain" alt="Imagem ${directionF}">${caption}</a>`;
             } else if (media.type === 'gif') {
@@ -2619,35 +2639,35 @@
         const input = document.getElementById('msg-input');
         const attachmentInput = document.getElementById('attachment-input');
         const text = input.value.trim();
-        const file = attachmentInput && attachmentInput.files ? attachmentInput.files[0] : null;
-        if (!text && !file) return;
+        const files = attachmentInput && attachmentInput.files ? Array.from(attachmentInput.files) : [];
+        if (!text && !files.length) return;
         
         input.value = '';
         
-        const form = new FormData();
-        form.append('mensagem', text);
-        if (replyToMessageState?.id) form.append('reply_to_id', replyToMessageState.id);
-        if (file) form.append('anexo', file);
-        
         try {
-            const res = await fetch(`/api/tickets/chat/send?chamado_id=${activeTicketId}`, {
-                method: 'POST',
-                body: form
-            });
-            if (res.ok) {
-                // Atualiza o chat localmente recarregando a timeline
-                loadMessages(activeTicketId);
-                cancelReply();
-                loadChats();
-                if (attachmentInput) attachmentInput.value = '';
-                const attachmentName = document.getElementById('attachment-name');
-                if (attachmentName) { attachmentName.textContent = ''; attachmentName.classList.add('hidden'); }
-            } else {
-                const detail = await res.text();
-                mostrarToast(detail || 'Falha ao enviar mensagem.');
+            const items = files.length ? files : [null];
+            for (let index = 0; index < items.length; index += 1) {
+                const form = new FormData();
+                form.append('mensagem', index === 0 ? text : '');
+                if (index === 0 && replyToMessageState?.id) form.append('reply_to_id', replyToMessageState.id);
+                if (items[index]) form.append('anexo', items[index]);
+                const res = await fetch(`/api/tickets/chat/send?chamado_id=${activeTicketId}`, {
+                    method: 'POST',
+                    body: form
+                });
+                if (!res.ok) {
+                    const detail = await res.text();
+                    throw new Error(detail || 'Falha ao enviar mensagem.');
+                }
             }
+            await loadMessages(activeTicketId);
+            cancelReply();
+            loadChats();
+            if (attachmentInput) attachmentInput.value = '';
+            const attachmentName = document.getElementById('attachment-name');
+            if (attachmentName) { attachmentName.textContent = ''; attachmentName.classList.add('hidden'); }
         } catch(e) {
-            mostrarToast('Erro de rede ao enviar.');
+            mostrarToast(e.message || 'Erro de rede ao enviar.');
         }
     }
 
@@ -2722,10 +2742,12 @@
 
     document.getElementById('attachment-input')?.addEventListener('change', function () {
         const label = document.getElementById('attachment-name');
-        const file = this.files && this.files[0];
+        const files = this.files ? Array.from(this.files) : [];
+        const file = files[0] || null;
         if (!label) return;
         label.textContent = file ? `📎 ${file.name}` : '';
-        label.classList.toggle('hidden', !file);
+        label.textContent = files.length === 1 ? files[0].name : (files.length ? `${files.length} arquivos selecionados` : '');
+        label.classList.toggle('hidden', !files.length);
     });
 
     async function notifyTyping() {
@@ -2994,11 +3016,11 @@
                     }
                     const tId = data.chamado_id || data.ticket_id;
                     const visibleChat = chatsData.find(x => sameTicket(x.id, tId));
-                    if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
                     if (data.whatsapp_instance && !visibleChat) {
                         loadChats();
                         return;
                     }
+                    if (!data.is_me && data.usuario !== currentUser) notifyIncomingMessage(data);
 
                     if (sameTicket(tId, activeTicketId)) {
                         const activeMessageId = data.msg_id || data.message_id || data.id;
@@ -3096,6 +3118,12 @@
 
         // Solicita permissão de notificação assim que a página carrega
         function pedirPermissaoNotificacao() {
+            if (isDesktopApp) {
+                let nativeEnabled = false;
+                try { nativeEnabled = localStorage.getItem('central_atendimento_native_notifications') === '1'; } catch (_) {}
+                if (!nativeEnabled) document.getElementById('notif-permission-banner')?.classList.remove('hidden');
+                return;
+            }
             if (!('Notification' in window)) return;
             if (Notification.permission === 'granted') {
                 document.getElementById('notif-permission-banner')?.remove();
@@ -3111,6 +3139,27 @@
         setTimeout(pedirPermissaoNotificacao, 1500);
 
         document.getElementById('btn-allow-notif')?.addEventListener('click', () => {
+            const nativeTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+            if (nativeTauri) {
+                const invoke = window.__TAURI_INTERNALS__
+                    ? window.__TAURI_INTERNALS__.invoke
+                    : window.__TAURI__.core?.invoke;
+                if (typeof invoke === 'function') {
+                    Promise.resolve(invoke('request_native_notification_permission'))
+                        .catch(() => null)
+                        .then(() => invoke('trigger_message_alert', { sender: 'Teste' }))
+                        .then(() => {
+                            try { localStorage.setItem('central_atendimento_native_notifications', '1'); } catch (_) {}
+                            document.getElementById('notif-permission-banner')?.remove();
+                            mostrarToast('✅ Notificações do Windows ativadas!');
+                        })
+                        .catch(() => {
+                            const banner = document.getElementById('notif-permission-banner');
+                            if (banner) banner.innerHTML = `<span class="text-rose-300 text-xs font-bold">⚠️ Não foi possível ativar. Verifique as notificações do Windows.</span>`;
+                        });
+                    return;
+                }
+            }
             Notification.requestPermission().then(result => {
                 const banner = document.getElementById('notif-permission-banner');
                 if (result === 'granted') {
@@ -3147,8 +3196,8 @@
         // Sincronização de segurança: também avisa quando o WebSocket perde um evento.
         setInterval(() => {
             loadChats();
-            if (!wsConnected) pollActiveMessages();
-        }, 7000);
+            if (!document.hidden) pollActiveMessages();
+        }, 3000);
         
         // Configura polling de fallback caso o websocket falhe
         // setInterval(loadChats, 15000); // Removido para tempo real puramente via WebSocket
@@ -3359,5 +3408,29 @@
         const res = await fetch('/api/status-empresa/' + id, { method: 'DELETE' });
         if (res.ok) openTauriStatusModal();
     }
+
+    async function carregarEmpresasAtendimento() {
+        const selector = document.getElementById('atendimento-empresa-selector');
+        const select = document.getElementById('atendimento-empresa-select');
+        if (!selector || !select) return;
+        const response = await fetch('/api/atendimento/tenants/context');
+        if (!response.ok) return;
+        const context = await response.json();
+        if (context.companies.length <= 1) {
+            if (context.companies.length === 1 && !context.selected) {
+                await fetch('/api/atendimento/tenants/context/select/' + context.companies[0].id, { method: 'POST' });
+            }
+            return;
+        }
+        select.innerHTML = context.companies.map(company => `<option value="${company.id}" ${company.id === context.selected ? 'selected' : ''}>${company.nome}</option>`).join('');
+        selector.classList.remove('hidden');
+    }
+    async function selecionarEmpresaAtendimento() {
+        const select = document.getElementById('atendimento-empresa-select');
+        if (!select?.value) return;
+        const response = await fetch('/api/atendimento/tenants/context/select/' + select.value, { method: 'POST' });
+        if (response.ok) window.location.reload();
+    }
+    carregarEmpresasAtendimento();
 </script>
 {% endblock %}

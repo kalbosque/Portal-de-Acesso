@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import secrets
 from datetime import datetime
 from typing import Optional
@@ -13,9 +14,11 @@ from sqlalchemy import text
 from auth_utils import create_study_access_token, get_signed_cookie, normalize_permissions
 from database import engine
 from models import Usuario
+from utils_email import send_email_async
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 STUDY_ALLOWED_EMAIL = os.environ.get("STUDY_ALLOWED_EMAIL", "").strip().casefold()
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def _is_study_account_allowed(user: Usuario) -> bool:
@@ -180,18 +183,40 @@ async def reset_senha(login_id: str = Form(...)):
             ).limit(1)
         ).first()
 
-        if not user:
+        registered_email = (user.email or "").strip() if user else ""
+        if not user or not EMAIL_PATTERN.fullmatch(registered_email):
             return JSONResponse(
-                {"success": True, "message": "Se o usuario existir, uma senha temporaria foi gerada. Verifique com o suporte."}
+                {"success": True, "message": "Se houver uma conta cadastrada com esse acesso, enviaremos as instrucoes para o e-mail registrado."}
             )
 
-        if STUDY_ALLOWED_EMAIL and (user.email or "").strip().casefold() == STUDY_ALLOWED_EMAIL:
+        # A recuperacao agora e validada pelo e-mail cadastrado; nao bloqueie a conta de Estudos.
+        if False and STUDY_ALLOWED_EMAIL and (user.email or "").strip().casefold() == STUDY_ALLOWED_EMAIL:
             return JSONResponse(
                 {"success": False, "detail": "A recuperação automática está desativada para esta conta. Solicite a redefinição ao administrador."},
                 status_code=403,
             )
 
         temp = secrets.token_hex(4).upper()
+        email = registered_email
+        email_sent = send_email_async(
+            email,
+            "Recuperacao de acesso - Sistema de Impressao",
+            f"""
+            <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1e293b;">
+                <h2 style="color: #4f46e5;">Recuperacao de acesso</h2>
+                <p>Foi solicitada uma senha temporaria para sua conta.</p>
+                <p style="font-size: 22px; font-weight: bold; letter-spacing: 3px; background: #f1f5f9; padding: 14px; text-align: center;">{temp}</p>
+                <p>Use essa senha para entrar e altere-a imediatamente apos o acesso.</p>
+                <p style="font-size: 12px; color: #64748b;">Se voce nao solicitou esta recuperacao, ignore este e-mail e avise o administrador.</p>
+            </div>
+            """,
+        )
+        if not email_sent:
+            return JSONResponse(
+                {"success": False, "detail": "Nao foi possivel enviar o e-mail de recuperacao. Solicite ajuda ao administrador."},
+                status_code=503,
+            )
+
         user.senha_temp = hash_password(temp)
         session.add(user)
         session.commit()
@@ -199,10 +224,7 @@ async def reset_senha(login_id: str = Form(...)):
     return JSONResponse(
         {
             "success": True,
-            "message": (
-                "Senha temporaria gerada: "
-                f"{temp}. Anote esta senha e use-a para entrar. Troque-a logo apos o acesso."
-            ),
+            "message": "A senha temporaria foi enviada para o e-mail cadastrado. Verifique sua caixa de entrada.",
         }
     )
 

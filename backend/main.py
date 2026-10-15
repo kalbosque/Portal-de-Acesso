@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from fastapi import FastAPI, Header, HTTPException, Request, BackgroundTasks, Form, UploadFile, File
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -29,10 +29,12 @@ import api_status
 import api_equipamentos_ti
 import api_cofre
 import api_whatsapp
+import api_tenants
 from database import engine
 from dotenv import load_dotenv
 from websocket_manager import manager
 from auth_utils import get_signed_cookie, normalize_permissions, verify_study_access_token
+from atendimento_tenant_context import resolve_context
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -165,8 +167,32 @@ def ensure_schema_compatibility():
         "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS horario_fim VARCHAR(10)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS visivel_suporte BOOLEAN DEFAULT TRUE",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_status VARCHAR(20) DEFAULT 'sent'",
+        "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS limite_usuarios_custom INTEGER",
+        "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS limite_instancias_whatsapp_custom INTEGER",
+        "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
+        "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS cor VARCHAR(20)",
+        "ALTER TABLE status_empresa ADD COLUMN IF NOT EXISTS empresa_atendimento_id INTEGER",
+        "ALTER TABLE status_empresa ADD COLUMN IF NOT EXISTS whatsapp_instance VARCHAR(120)",
         "ALTER TABLE impressoes DROP CONSTRAINT IF EXISTS impressoes_tipo_impressao_check",
         "ALTER TABLE impressoes ADD CONSTRAINT impressoes_tipo_impressao_check CHECK (tipo_impressao IN ('Preto e Branco', 'Colorida', 'Digital', 'P&B', 'Colorido'))",
+        """CREATE TABLE IF NOT EXISTS setores_atendimento (
+            id SERIAL PRIMARY KEY,
+            empresa_atendimento_id INTEGER NOT NULL REFERENCES empresas_atendimento(id) ON DELETE CASCADE,
+            nome VARCHAR(120) NOT NULL,
+            ativo BOOLEAN NOT NULL DEFAULT TRUE,
+            UNIQUE (empresa_atendimento_id, nome)
+        )""",
+        """CREATE TABLE IF NOT EXISTS usuarios_setores_atendimento (
+            usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            setor_id INTEGER NOT NULL REFERENCES setores_atendimento(id) ON DELETE CASCADE,
+            papel VARCHAR(30) NOT NULL DEFAULT 'operador',
+            PRIMARY KEY (usuario_id, setor_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS instancias_setores_atendimento (
+            instancia_id INTEGER NOT NULL REFERENCES instancias_whatsapp_tenant(id) ON DELETE CASCADE,
+            setor_id INTEGER NOT NULL REFERENCES setores_atendimento(id) ON DELETE CASCADE,
+            PRIMARY KEY (instancia_id, setor_id)
+        )""",
     ]
 
     # Cada ajuste usa sua própria transação. Assim, uma alteração opcional
@@ -202,6 +228,10 @@ async def view_chamados(request: Request, success: str = None, error: str = None
         with Session(engine) as session:
             impressoras = session.exec(select(Impressora)).all()
             atalhos = session.exec(select(TipoProblema)).all()
+            tenant_context = resolve_context(request)
+            tenant_conditions = []
+            if tenant_context.enabled and tenant_context.tenant_id is not None:
+                tenant_conditions.append(Chamado.empresa_atendimento_id == tenant_context.tenant_id)
             
             hoje = datetime.now().date()
             amanha = hoje + timedelta(days=1)
@@ -209,9 +239,9 @@ async def view_chamados(request: Request, success: str = None, error: str = None
 
             try:
                 if user_role == "admin":
-                    chamados = session.exec(select(Chamado).where(Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+                    chamados = session.exec(select(Chamado).where(Chamado.visivel_suporte == True, *tenant_conditions).order_by(desc(Chamado.data_abertura))).all()
                 else:
-                    chamados = session.exec(select(Chamado).where(Chamado.usuario == user_name, Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+                    chamados = session.exec(select(Chamado).where(Chamado.usuario == user_name, Chamado.visivel_suporte == True, *tenant_conditions).order_by(desc(Chamado.data_abertura))).all()
             except ProgrammingError as pe:
                 if "whatsapp_instance" in str(pe) or "whatsapp_cliente" in str(pe):
                     print(f"[STARTUP] Detectado erro de schema WhatsApp em chamados: {pe}. Aplicando correção de schema.")
@@ -220,9 +250,9 @@ async def view_chamados(request: Request, success: str = None, error: str = None
                     session.rollback()
                     ensure_whatsapp_columns()
                     if user_role == "admin":
-                        chamados = session.exec(select(Chamado).where(Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+                        chamados = session.exec(select(Chamado).where(Chamado.visivel_suporte == True, *tenant_conditions).order_by(desc(Chamado.data_abertura))).all()
                     else:
-                        chamados = session.exec(select(Chamado).where(Chamado.usuario == user_name, Chamado.visivel_suporte == True).order_by(desc(Chamado.data_abertura))).all()
+                        chamados = session.exec(select(Chamado).where(Chamado.usuario == user_name, Chamado.visivel_suporte == True, *tenant_conditions).order_by(desc(Chamado.data_abertura))).all()
                 else:
                     raise
 
@@ -287,6 +317,7 @@ include_router_if_available(api_status, "api_status")
 include_router_if_available(api_equipamentos_ti, "api_equipamentos_ti")
 include_router_if_available(api_cofre, "api_cofre")
 include_router_if_available(api_whatsapp, "api_whatsapp")
+include_router_if_available(api_tenants, "api_tenants")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 🤖 Endpoint: Chat do Assistente Contador
@@ -1505,6 +1536,73 @@ async def concluir_cronometro(request: Request):
         session.commit()
     return {"ok": True, "registrada": True}
 
+@app.get("/estudos/modelo-excel")
+async def download_modelo_excel(request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/login")
+
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Quadro de Horarios"
+
+    colunas = ["Hora", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    ws.append(colunas)
+
+    linhas = [
+        ["21:00 às 22:00", "Português", "Raciocínio Lógico", "Informática", "Direito Constitucional", "Direito Administrativo", "Revisão Geral", "Simulado"],
+        ["22:15 às 00:15", "Conhecimentos Específicos", "Conhecimentos Específicos", "Informática", "Português", "Conhecimentos Específicos", "Questões", "Descanso"],
+        ["00:31 às 01:15", "Questões", "Questões", "Questões", "Questões", "Questões", "Flashcards", "Planejamento"],
+    ]
+    for r in linhas:
+        ws.append(r)
+
+    header_fill = PatternFill(start_color="0284C7", end_color="0284C7", fill_type="solid")
+    header_font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+    data_font = Font(name="Arial", size=10)
+    center_align = Alignment(horizontal="center", vertical="center")
+    thin_border = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="thin", color="CBD5E1"),
+        bottom=Side(style="thin", color="CBD5E1")
+    )
+
+    for col_idx in range(1, len(colunas) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = thin_border
+
+    for row_idx in range(2, len(linhas) + 2):
+        for col_idx in range(1, len(colunas) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.font = data_font
+            cell.alignment = center_align
+            cell.border = thin_border
+            if row_idx % 2 == 1:
+                cell.fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+
+    larguras = {"A": 18, "B": 24, "C": 24, "D": 24, "E": 24, "F": 24, "G": 20, "H": 20}
+    for col_letter, width in larguras.items():
+        ws.column_dimensions[col_letter].width = width
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="modelo_quadro_estudos.xlsx"'}
+    )
+
+
 @app.post("/estudos/importar-plano", response_class=HTMLResponse)
 async def importar_plano_estudo(request: Request, semana_inicio: str = Form(...)):
     user_id = request.cookies.get("user_id")
@@ -1521,18 +1619,16 @@ async def importar_plano_estudo(request: Request, semana_inicio: str = Form(...)
     texto_plano = str(form.get("plano_texto") or "").strip()
     arquivo = form.get("plano_arquivo")
 
+    conteudo_bytes = None
+    nome_arquivo = ""
     if arquivo is not None and getattr(arquivo, "filename", None):
         try:
-            conteudo = await arquivo.read()
-            if conteudo:
-                texto_plano = (texto_plano + "\n" + conteudo.decode("utf-8", errors="ignore")).strip()
+            conteudo_bytes = await arquivo.read()
+            nome_arquivo = (arquivo.filename or "").lower()
         except Exception:
-            texto_plano = texto_plano
+            conteudo_bytes = None
 
-    if not texto_plano:
-        return RedirectResponse(url=f"/estudos?success=erro&semana={semana_inicio}", status_code=303)
-
-    dias_semana = [
+    dias_semana_oficiais = [
         ("segunda", "Segunda"),
         ("terca", "Terça"),
         ("quarta", "Quarta"),
@@ -1541,67 +1637,213 @@ async def importar_plano_estudo(request: Request, semana_inicio: str = Form(...)
         ("sabado", "Sábado"),
         ("domingo", "Domingo"),
     ]
+    dias_ordenados = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     default_slots = [("21:00", "22:00"), ("22:15", "00:15"), ("00:31", "01:15")]
 
-    def normalizar_materia(valor: str) -> str:
-        texto = re.sub(r"\s+", " ", valor or "").strip(" -:;|/\n")
+    palavras_ignoradas = {
+        "id", "cod", "codigo", "código", "data", "hora", "horario", "horário", "horas",
+        "tempo", "status", "questoes", "questões", "acertos", "erros", "obs", "observacao",
+        "observação", "total", "dia", "dias", "semana", "materia", "materias", "matéria",
+        "matérias", "disciplina", "disciplinas", "assunto", "assuntos", "conteudo",
+        "conteúdo", "conteudos", "conteúdos", "ciclo", "fila", "nome", "descricao",
+        "descrição", "ordem", "meta", "tipo", "item", "null", "none", "nan", "ok", "sim",
+        "nao", "não",
+    }
+
+    def normalizar_materia(valor) -> str:
+        if valor is None:
+            return ""
+        texto = re.sub(r"\s+", " ", str(valor)).strip(" -:;|/\n\t\r")
         return texto.strip()
 
-    def encontrar_slot(hora_inicio: str | None, hora_fim: str | None):
-        if hora_inicio and hora_fim:
-            try:
-                inicio = datetime.strptime(hora_inicio, "%H:%M")
-                fim = datetime.strptime(hora_fim, "%H:%M")
-                for idx, (slot_inicio, slot_fim) in enumerate(default_slots):
-                    try:
-                        slot_i = datetime.strptime(slot_inicio, "%H:%M")
-                        slot_f = datetime.strptime(slot_fim, "%H:%M")
-                        if inicio >= slot_i and fim <= slot_f:
-                            return idx
-                    except ValueError:
-                        continue
-            except ValueError:
-                pass
-        return 0
+    def eh_cabecalho_ou_invalido(texto: str) -> bool:
+        if not texto:
+            return True
+        t_clean = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii").casefold().strip(" :;-#*")
+        if t_clean in palavras_ignoradas:
+            return True
+        if re.fullmatch(r"^\d+([.,]\d+)?$", t_clean):
+            return True
+        if re.fullmatch(r"^\d{1,2}:\d{2}(\s*(?:-|–|a|ate|até)\s*\d{1,2}:\d{2})?$", t_clean):
+            return True
+        if re.fullmatch(r"^\d{1,2}/\d{1,2}(/\d{2,4})?$", t_clean):
+            return True
+        if len(t_clean) <= 1:
+            return True
+        return False
 
-    linhas = [linha.strip() for linha in texto_plano.splitlines() if linha.strip()]
+    tabela_linhas = []
+
+    # A. Leitura se for XLSX (openpyxl)
+    if conteudo_bytes and (nome_arquivo.endswith((".xlsx", ".xlsm", ".xltx")) or conteudo_bytes.startswith(b"PK\x03\x04")):
+        try:
+            import io
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(conteudo_bytes), data_only=True)
+            for sheet in wb.worksheets:
+                rows = list(sheet.iter_rows(values_only=True))
+                for r in rows:
+                    if r and any(c is not None and str(c).strip() for c in r):
+                        tabela_linhas.append([str(c).strip() if c is not None else "" for c in r])
+                if tabela_linhas:
+                    break
+        except Exception as e:
+            print(f"[IMPORT_XLSX_ERROR] {e}")
+
+    # B. Leitura se for XLS legado (xlrd)
+    if not tabela_linhas and conteudo_bytes and (nome_arquivo.endswith(".xls") or conteudo_bytes.startswith(b"\xd0\xcf\x11\xe0")):
+        try:
+            import xlrd
+            book = xlrd.open_workbook(file_contents=conteudo_bytes)
+            for sheet_idx in range(book.nsheets):
+                sh = book.sheet_by_index(sheet_idx)
+                for rx in range(sh.nrows):
+                    r_vals = [str(sh.cell_value(rx, cx)).strip() for cx in range(sh.ncols)]
+                    if any(r_vals):
+                        tabela_linhas.append(r_vals)
+                if tabela_linhas:
+                    break
+        except Exception as e:
+            print(f"[IMPORT_XLS_ERROR] {e}")
+
+    # C. Leitura se for CSV ou texto puro
+    if not tabela_linhas:
+        if conteudo_bytes and not texto_plano:
+            try:
+                texto_plano = conteudo_bytes.decode("utf-8-sig", errors="ignore")
+            except Exception:
+                texto_plano = ""
+        if texto_plano:
+            import csv
+            import io
+            try:
+                sniffer = csv.Sniffer()
+                sample = texto_plano[:2048]
+                dialect = sniffer.sniff(sample, delimiters=",;\t|")
+                reader = csv.reader(io.StringIO(texto_plano), dialect)
+                for row in reader:
+                    if any(row):
+                        tabela_linhas.append([str(c).strip() for c in row])
+            except Exception:
+                for line in texto_plano.splitlines():
+                    if line.strip():
+                        tabela_linhas.append([line.strip()])
+
     importacoes = []
 
-    for linha in linhas:
-        linha_limpa = re.sub(r"\s+", " ", linha).strip()
-        if not linha_limpa:
-            continue
-
-        dia_encontrado = None
-        for chave, nome in dias_semana:
-            if re.search(rf"\b{chave}\b", linha_limpa, flags=re.IGNORECASE):
-                dia_encontrado = nome
+    if tabela_linhas:
+        # ESTRATÉGIA 1: Matriz com dias da semana nas colunas (Segunda, Terça, etc.)
+        melhor_linha_dias = None
+        col_dias = {}
+        for r_idx in range(min(6, len(tabela_linhas))):
+            dias_detectados = {}
+            for c_idx, cell_val in enumerate(tabela_linhas[r_idx]):
+                cell_ascii = unicodedata.normalize("NFKD", cell_val).encode("ascii", "ignore").decode("ascii").casefold()
+                for chave, nome_oficial in dias_semana_oficiais:
+                    padrao = rf"\b{chave}(?:-feira)?\b"
+                    if chave == "segunda": padrao = r"\bseg(?:unda)?(?:-feira)?\b"
+                    elif chave == "terca": padrao = r"\bter(?:ca|ça)?(?:-feira)?\b"
+                    elif chave == "quarta": padrao = r"\bqua(?:rta)?(?:-feira)?\b"
+                    elif chave == "quinta": padrao = r"\bqui(?:nta)?(?:-feira)?\b"
+                    elif chave == "sexta": padrao = r"\bsex(?:ta)?(?:-feira)?\b"
+                    elif chave == "sabado": padrao = r"\bs[aá]?b(?:ado)?\b"
+                    elif chave == "domingo": padrao = r"\bdom(?:ingo)?\b"
+                    if re.search(padrao, cell_ascii):
+                        dias_detectados[c_idx] = nome_oficial
+                        break
+            if len(dias_detectados) >= 2:
+                melhor_linha_dias = r_idx
+                col_dias = dias_detectados
                 break
 
-        if not dia_encontrado:
-            continue
+        if col_dias and melhor_linha_dias is not None:
+            for r_idx, row in enumerate(tabela_linhas[melhor_linha_dias + 1:]):
+                hora_str = str(row[0] or "") if len(row) > 0 else ""
+                hora_match = re.search(r"(\d{1,2}:\d{2})\s*(?:-|–|a|ate|até)\s*(\d{1,2}:\d{2})", hora_str, flags=re.IGNORECASE)
+                hora_inicio = hora_match.group(1) if hora_match else None
+                hora_fim = hora_match.group(2) if hora_match else None
+                slot = r_idx if r_idx < len(default_slots) else 0
+                h_ini = hora_inicio or default_slots[min(slot, len(default_slots)-1)][0]
+                h_fim = hora_fim or default_slots[min(slot, len(default_slots)-1)][1]
 
-        hora_match = re.search(r"(\d{1,2}:\d{2})\s*(?:-|–|a|ate|até)\s*(\d{1,2}:\d{2})", linha_limpa, flags=re.IGNORECASE)
-        hora_inicio = hora_match.group(1) if hora_match else None
-        hora_fim = hora_match.group(2) if hora_match else None
+                for c_idx, dia_nome in col_dias.items():
+                    if c_idx < len(row):
+                        mat = normalizar_materia(row[c_idx])
+                        if mat and not eh_cabecalho_ou_invalido(mat):
+                            importacoes.append({
+                                "dia": dia_nome,
+                                "slot": slot,
+                                "materia": mat,
+                                "horario_inicio": h_ini,
+                                "horario_fim": h_fim,
+                            })
 
-        materia = linha_limpa
-        for chave, _ in dias_semana:
-            materia = re.sub(rf"\b{chave}\b", "", materia, flags=re.IGNORECASE)
-        if hora_match:
-            materia = materia.replace(hora_match.group(0), "")
-        materia = re.sub(r"[|;:,-]+", " ", materia)
-        materia = re.sub(r"\s+", " ", materia).strip(" -")
-        materia = normalizar_materia(materia)
-        if not materia:
-            continue
+        # ESTRATÉGIA 2: Tabela em colunas [Dia, Matéria]
+        if not importacoes:
+            col_dia_idx = None
+            col_mat_idx = None
+            for c_idx, cell_val in enumerate(tabela_linhas[0]):
+                c_ascii = unicodedata.normalize("NFKD", cell_val).encode("ascii", "ignore").decode("ascii").casefold()
+                if any(d in c_ascii for d in ["dia", "data", "semana"]):
+                    col_dia_idx = c_idx
+                elif any(m in c_ascii for m in ["materia", "disciplina", "assunto", "conteudo"]):
+                    col_mat_idx = c_idx
 
-        dia_index = [nome for _, nome in dias_semana].index(dia_encontrado)
-        slot = encontrar_slot(hora_inicio, hora_fim)
-        importacoes.append({"dia": dia_encontrado, "slot": slot, "materia": materia, "horario_inicio": hora_inicio or default_slots[slot][0], "horario_fim": hora_fim or default_slots[slot][1]})
+            if col_dia_idx is not None and col_mat_idx is not None:
+                contagem_por_dia = {}
+                for row in tabela_linhas[1:]:
+                    if len(row) > max(col_dia_idx, col_mat_idx):
+                        dia_raw = unicodedata.normalize("NFKD", row[col_dia_idx]).encode("ascii", "ignore").decode("ascii").casefold()
+                        mat = normalizar_materia(row[col_mat_idx])
+                        if not mat or eh_cabecalho_ou_invalido(mat):
+                            continue
+                        dia_nome = None
+                        for chave, oficial in dias_semana_oficiais:
+                            if chave in dia_raw:
+                                dia_nome = oficial
+                                break
+                        if not dia_nome:
+                            dia_nome = "Segunda"
+                        slot = contagem_por_dia.get(dia_nome, 0)
+                        contagem_por_dia[dia_nome] = slot + 1
+                        slot_clamped = min(slot, len(default_slots) - 1)
+                        importacoes.append({
+                            "dia": dia_nome,
+                            "slot": slot_clamped,
+                            "materia": mat,
+                            "horario_inicio": default_slots[slot_clamped][0],
+                            "horario_fim": default_slots[slot_clamped][1],
+                        })
+
+        # ESTRATÉGIA 3: UNIVERSAL (Aceita QUALQUER planilha Excel ou lista com matérias)
+        if not importacoes:
+            materias_encontradas = []
+            for row in tabela_linhas:
+                for cell in row:
+                    mat = normalizar_materia(cell)
+                    if mat and not eh_cabecalho_ou_invalido(mat):
+                        if mat not in materias_encontradas:
+                            materias_encontradas.append(mat)
+
+            if materias_encontradas:
+                dia_idx = 0
+                slot_idx = 0
+                for mat in materias_encontradas:
+                    dia_nome = dias_ordenados[dia_idx % len(dias_ordenados)]
+                    importacoes.append({
+                        "dia": dia_nome,
+                        "slot": slot_idx,
+                        "materia": mat,
+                        "horario_inicio": default_slots[slot_idx][0],
+                        "horario_fim": default_slots[slot_idx][1],
+                    })
+                    dia_idx += 1
+                    if dia_idx >= len(dias_ordenados):
+                        dia_idx = 0
+                        slot_idx = min(slot_idx + 1, len(default_slots) - 1)
 
     if not importacoes:
-        return RedirectResponse(url=f"/estudos?success=erro&semana={semana_inicio}", status_code=303)
+        return RedirectResponse(url=f"/estudos?success=erro_importar&semana={semana_inicio}", status_code=303)
 
     with Session(engine) as session:
         existentes = session.exec(select(EstudoPlano).where(
@@ -2250,6 +2492,8 @@ async def view_central_atendimento(request: Request):
     has_access = _can_access_atendimento(request)
     if not has_access:
         return RedirectResponse(url="/")
+    can_edit_identity = api_whatsapp._can_edit_identity(request)
+    can_manage_company = user_role == "admin" or (user_role == "cliente_atendimento" and can_edit_identity)
 
     response = templates.TemplateResponse(
         request=request,
@@ -2267,6 +2511,9 @@ async def view_central_atendimento(request: Request):
             "can_edit_identity": user_role in ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepÃ§Ã£o", "recepcionista"),
             "profile_name": profile_name,
             "profile_photo_url": profile_photo_url,
+            "can_edit_identity": can_edit_identity,
+            "can_manage_company": can_manage_company,
+            "atendimento_multiempresa_enabled": os.getenv("ATENDIMENTO_MULTIEMPRESA_ENABLED", "false").lower() in ("1", "true", "yes", "on"),
         }
     )
     if request.query_params.get("desktop") == "1":
@@ -2393,7 +2640,8 @@ async def view_whatsapp_config(request: Request):
         return RedirectResponse(url="/login")
 
     allowed_roles = ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepÃ§Ã£o", "recepcionista")
-    if user_role not in allowed_roles:
+    tenant_admin_identity = api_whatsapp._can_edit_identity(request)
+    if user_role not in allowed_roles and not tenant_admin_identity:
         return RedirectResponse(url="/central-atendimento")
 
     config = load_app_config()
@@ -2408,7 +2656,7 @@ async def view_whatsapp_config(request: Request):
             "authenticated": True,
             "user_name": request.cookies.get("user_name", ""),
             "desktop_mode": desktop_mode,
-            "can_edit_identity": user_role in allowed_roles,
+            "can_edit_identity": user_role in allowed_roles or tenant_admin_identity,
             "profile_name": (current_user.nome or current_user.username) if current_user else "",
             "profile_photo_url": current_user.foto_perfil_url if current_user else "",
         }
@@ -2441,3 +2689,28 @@ async def view_whatsapp_groups(request: Request):
 @app.get("/whatsapp_config")
 async def redirect_whatsapp_config():
     return RedirectResponse(url="/central-atendimento/configuracoes")
+
+
+@app.get("/central-atendimento/empresas", response_class=HTMLResponse)
+async def view_atendimento_companies(request: Request):
+    if not get_signed_cookie(request, "user_id"):
+        return RedirectResponse(url="/login")
+    is_platform_admin = get_signed_cookie(request, "user_role") == "admin"
+    if not is_platform_admin:
+        try:
+            tenant_context = resolve_context(request)
+            with Session(engine) as session:
+                is_tenant_admin = bool(session.exec(text("""
+                    SELECT 1 FROM usuarios_empresas_atendimento
+                    WHERE empresa_atendimento_id = :tenant_id AND usuario_id = :user_id
+                      AND papel = 'tenant_admin' AND ativo = TRUE
+                """).bindparams(tenant_id=tenant_context.tenant_id, user_id=int(tenant_context.user_id))).first())
+        except Exception:
+            is_tenant_admin = False
+        if not is_tenant_admin:
+            return RedirectResponse(url="/central-atendimento")
+    return templates.TemplateResponse(
+        request=request,
+        name="atendimento_empresas.html",
+        context={"config": load_app_config(), "user_name": get_signed_cookie(request, "user_name", ""), "is_platform_admin": is_platform_admin},
+    )

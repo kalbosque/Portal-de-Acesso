@@ -9,16 +9,31 @@ from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Body, UploadFile, File, Form
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, FileResponse
 from sqlalchemy import text
 from sqlmodel import Session, select, desc
 
 from models import Chamado, ChamadoInteracao, Usuario, ContatoWhatsApp
 from database import engine
+from atendimento_tenant_context import tenant_id_for_instance
 from auth_utils import get_signed_cookie, normalize_permissions
 from websocket_manager import manager
+from atendimento_tenant_context import is_enabled as atendimento_multiempresa_enabled, resolve_context, tenant_id_for_instance
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
+
+
+@router.get("/media/{filename:path}")
+def serve_whatsapp_media(filename: str, request: Request):
+    """Serve anexos da conversa sem permitir que o Tauri reutilize cache antigo."""
+    _require_atendimento_access(request)
+    safe_name = os.path.basename(str(filename or "").strip())
+    if not safe_name or safe_name != str(filename or "").strip().split("/")[-1]:
+        raise HTTPException(status_code=404, detail="Mídia não encontrada")
+    media_path = os.path.join(_BASE_DIR, "public_html", "uploads", "whatsapp_media", safe_name)
+    if not os.path.isfile(media_path):
+        raise HTTPException(status_code=404, detail="Mídia não encontrada")
+    return FileResponse(media_path, headers={"Cache-Control": "no-store, max-age=0"})
 
 _whatsapp_columns_ready = False
 _connected_map_cache = {"expires_at": 0.0, "value": {}}
@@ -135,6 +150,14 @@ def user_can_access_instance(request: Request, instance: Optional[str]) -> bool:
         return True
     if not instance:
         return True
+    if atendimento_multiempresa_enabled():
+        try:
+            context = resolve_context(request)
+            instance_tenant_id = tenant_id_for_instance(instance)
+            if context.tenant_id is None or instance_tenant_id != context.tenant_id:
+                return False
+        except HTTPException:
+            return False
     access = get_whatsapp_config().get("WHATSAPP_INSTANCE_ACCESS", {}) or {}
     allowed = access.get(str(instance))
     if not allowed:
@@ -145,6 +168,18 @@ def user_can_access_instance(request: Request, instance: Optional[str]) -> bool:
 
 def _can_edit_identity(request: Request) -> bool:
     role = get_signed_cookie(request, "user_role")
+    if atendimento_multiempresa_enabled() and role == "cliente_atendimento":
+        try:
+            context = resolve_context(request)
+            if context.tenant_id is not None:
+                with Session(engine) as session:
+                    row = session.exec(text("""
+                        SELECT papel FROM usuarios_empresas_atendimento
+                        WHERE empresa_atendimento_id = :tenant_id AND usuario_id = :user_id AND ativo = TRUE
+                    """).bindparams(tenant_id=context.tenant_id, user_id=context.user_id)).first()
+                return bool(row and row[0] == "tenant_admin")
+        except HTTPException:
+            return False
     if role in ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepção", "recepcionista"):
         return True
     try:
@@ -170,6 +205,32 @@ async def update_attendance_identity(
     user_id = get_signed_cookie(request, "user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Sessão expirada.")
+    tenant_context = resolve_context(request) if atendimento_multiempresa_enabled() else None
+    if tenant_context and tenant_context.tenant_id is not None:
+        with Session(engine) as session:
+            company = session.exec(text("SELECT id, nome, logo_url FROM empresas_atendimento WHERE id = :tenant_id").bindparams(tenant_id=tenant_context.tenant_id)).first()
+            if not company:
+                raise HTTPException(status_code=404, detail="Empresa não encontrada")
+            if nome.strip():
+                session.exec(text("UPDATE empresas_atendimento SET nome = :nome WHERE id = :tenant_id").bindparams(nome=nome.strip()[:180], tenant_id=tenant_context.tenant_id))
+            if logo and logo.filename:
+                allowed = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/svg+xml": ".svg"}
+                ext = allowed.get(logo.content_type or "") or os.path.splitext(logo.filename)[1].lower()
+                if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}:
+                    raise HTTPException(status_code=400, detail="Use uma imagem JPG, PNG, WEBP, GIF ou SVG.")
+                content = await logo.read()
+                if len(content) > 5 * 1024 * 1024:
+                    raise HTTPException(status_code=413, detail="A imagem deve ter no máximo 5 MB.")
+                folder = os.path.join(_BASE_DIR, "public_html", "uploads")
+                os.makedirs(folder, exist_ok=True)
+                filename = f"empresa-{tenant_context.tenant_id}{ext}"
+                with open(os.path.join(folder, filename), "wb") as output:
+                    output.write(content)
+                session.exec(text("UPDATE empresas_atendimento SET logo_url = :logo_url WHERE id = :tenant_id").bindparams(logo_url=f"uploads/{filename}?v={int(time.time())}", tenant_id=tenant_context.tenant_id))
+            session.commit()
+            company = session.exec(text("SELECT nome, logo_url FROM empresas_atendimento WHERE id = :tenant_id").bindparams(tenant_id=tenant_context.tenant_id)).first()
+            return {"success": True, "nome": company[0], "logo_url": company[1] or ""}
+
     with Session(engine) as session:
         user = session.get(Usuario, int(user_id))
         if not user:
@@ -200,6 +261,14 @@ def get_attendance_identity(request: Request):
     user_id = get_signed_cookie(request, "user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Sessão expirada.")
+    if atendimento_multiempresa_enabled():
+        context = resolve_context(request)
+        if context.tenant_id is not None:
+            with Session(engine) as session:
+                company = session.exec(text("SELECT nome, logo_url FROM empresas_atendimento WHERE id = :tenant_id").bindparams(tenant_id=context.tenant_id)).first()
+            if not company:
+                raise HTTPException(status_code=404, detail="Empresa não encontrada")
+            return {"success": True, "nome": company[0], "foto_url": company[1] or ""}
     with Session(engine) as session:
         user = session.get(Usuario, int(user_id))
         if not user:
@@ -908,6 +977,11 @@ def _require_admin(request: Request):
 def list_whatsapp_instances(request: Request):
     _require_atendimento_access(request)
     instances, default_instance = get_whatsapp_instances()
+    if atendimento_multiempresa_enabled() and get_signed_cookie(request, "user_role") != "admin":
+        context = resolve_context(request)
+        instances = [item for item in instances if tenant_id_for_instance(item.get("instanceName")) == context.tenant_id]
+        if default_instance not in {item.get("instanceName") for item in instances}:
+            default_instance = instances[0].get("instanceName") if instances else None
 
     # Para cada instância, tenta consultar o estado atual na Evolution API
     detailed = []
@@ -936,6 +1010,22 @@ def list_whatsapp_instances(request: Request):
                         state = "error"
                 except Exception:
                     state = "error"
+                if not connected_numbers:
+                    try:
+                        instances_resp = requests.get(f"{base_url}/instance/fetchInstances", headers=headers, timeout=3)
+                        if instances_resp.status_code == 200:
+                            for remote_instance in instances_resp.json() or []:
+                                if not isinstance(remote_instance, dict):
+                                    continue
+                                if str(remote_instance.get("name") or "") != str(resolved):
+                                    continue
+                                connected_numbers = _extract_connected_numbers({
+                                    "ownerJid": remote_instance.get("ownerJid"),
+                                    "number": remote_instance.get("number"),
+                                })
+                                break
+                    except Exception:
+                        pass
         except Exception:
             state = "error"
 
@@ -1389,6 +1479,7 @@ def update_contact_status(payload: dict = Body(...), request: Request = None):
                 nome=chamado.usuario or "Cliente",
                 numero=chamado.whatsapp_cliente,
                 whatsapp_instance=chamado.whatsapp_instance,
+                empresa_atendimento_id=chamado.empresa_atendimento_id,
             )
         contato.status_interno = status
         session.add(contato)
@@ -1919,6 +2010,7 @@ def start_whatsapp_contact(payload: dict = Body(...), request: Request = None, b
                     origem="WhatsApp",
                     whatsapp_cliente=number,
                     whatsapp_instance=instance,
+                    empresa_atendimento_id=tenant_id_for_instance(instance),
                     status="Aberto",
                     prioridade="Media",
                     visivel_suporte=True,
@@ -2112,11 +2204,17 @@ def assumir_chat(ticket_id: int, request: Request, background_tasks: BackgroundT
 @router.get("/operators")
 def list_atendimento_operators(request: Request):
     _require_atendimento_access(request)
+    tenant_context = resolve_context(request)
     with Session(engine) as session:
+        tenant_user_ids = None
+        if tenant_context.enabled and tenant_context.tenant_id is not None:
+            rows = session.exec(text("SELECT usuario_id FROM usuarios_empresas_atendimento WHERE empresa_atendimento_id = :tenant_id AND ativo = TRUE").bindparams(tenant_id=tenant_context.tenant_id)).all()
+            tenant_user_ids = [int(row[0]) for row in rows]
         users = session.exec(
             select(Usuario)
             .where(
                 Usuario.status_conta == "ativo",
+                *([Usuario.id.in_(tenant_user_ids)] if tenant_user_ids is not None else []),
                 Usuario.role.notin_(["recepcao", "recepção", "recepcionista", "cliente_atendimento"]),
             )
             .order_by(Usuario.nome, Usuario.username)
@@ -2532,6 +2630,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
             if not chamado:
                 stmt2 = select(Chamado).where(
                     Chamado.whatsapp_cliente == phone_number,
+                    Chamado.whatsapp_instance == None,
                     Chamado.status != "Resolvido"
                 ).order_by(desc(Chamado.data_abertura))
                 chamado = session.exec(stmt2).first()
@@ -2562,6 +2661,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 # Garanta que o chamado tem a instância registrada
                 if not chamado.whatsapp_instance:
                     chamado.whatsapp_instance = instance_from_payload
+                if chamado.empresa_atendimento_id is None:
+                    chamado.empresa_atendimento_id = tenant_id_for_instance(instance_from_payload)
                 session.commit()
                 session.refresh(interacao)
                 ticket_id = chamado.id
@@ -2592,6 +2693,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     origem="WhatsApp",
                     whatsapp_cliente=phone_number,
                     whatsapp_instance=instance_from_payload,
+                    empresa_atendimento_id=tenant_id_for_instance(instance_from_payload),
                     status="Aberto",
                     prioridade="Media",
                     visivel_suporte=auto_create_ticket,
@@ -2628,9 +2730,12 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     }
                 )
 
-                # Auto-resposta de boas-vindas
-                welcome_msg = f"Olá, {customer_name}! Seu atendimento foi registrado sob o chamado #{ticket_id}. Um de nossos operadores irá atendê-lo em breve."
-                background_tasks.add_task(send_whatsapp_text, phone_number, welcome_msg, instance_from_payload)
+                # Auto-resposta de boas-vindas. Temporariamente desativada
+                # somente para a empresa Atual Contabilidade (tenant 1),
+                # mantendo o comportamento das demais empresas.
+                if tenant_id_for_instance(instance_from_payload) != 1:
+                    welcome_msg = f"Olá, {customer_name}! Seu atendimento foi registrado sob o chamado #{ticket_id}. Um de nossos operadores irá atendê-lo em breve."
+                    background_tasks.add_task(send_whatsapp_text, phone_number, welcome_msg, instance_from_payload)
 
             last_ticket_id = ticket_id
 

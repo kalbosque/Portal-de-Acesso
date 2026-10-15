@@ -7,19 +7,41 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
+from sqlalchemy import text
 
 from auth_utils import get_signed_cookie
 from database import engine
 from models import StatusEmpresa
-from api_whatsapp import get_evolution_api_endpoints, get_whatsapp_instances
+from api_whatsapp import get_evolution_api_endpoints, get_whatsapp_instances, _can_edit_identity
+from atendimento_tenant_context import resolve_context
 
 router = APIRouter()
 
 
 def _admin(request: Request) -> str:
-    if get_signed_cookie(request, "user_role") != "admin":
+    if get_signed_cookie(request, "user_role") != "admin" and not _can_edit_identity(request):
         raise HTTPException(status_code=403, detail="Apenas administradores podem publicar Status.")
     return get_signed_cookie(request, "user_name") or "admin"
+
+
+def _status_scope(request: Request):
+    """Retorna a empresa e a instância WhatsApp do usuário atual."""
+    if get_signed_cookie(request, "user_role") == "admin":
+        instances, default_instance = get_whatsapp_instances()
+        return None, default_instance or (instances[0]["instanceName"] if instances else None)
+    context = resolve_context(request)
+    if context.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Empresa de Atendimento não determinada")
+    with Session(engine) as session:
+        row = session.exec(text("""
+            SELECT instance_name FROM instancias_whatsapp_tenant
+            WHERE empresa_atendimento_id = :tenant_id AND ativa = TRUE
+            ORDER BY padrao DESC, id
+            LIMIT 1
+        """).bindparams(tenant_id=context.tenant_id)).first()
+    if not row:
+        raise HTTPException(status_code=400, detail="Nenhum WhatsApp ativo está vinculado a esta empresa.")
+    return context.tenant_id, str(row[0])
 
 
 def _payload(status: StatusEmpresa) -> dict:
@@ -42,10 +64,11 @@ def _public_media_url(request: Request, media_url: Optional[str]) -> Optional[st
     return str(request.url_for("uploads", path=relative))
 
 
-def _publish_whatsapp_status(request: Request, titulo: str, mensagem: str, media_url: Optional[str], media_tipo: Optional[str], cor: str) -> dict:
+def _publish_whatsapp_status(request: Request, titulo: str, mensagem: str, media_url: Optional[str], media_tipo: Optional[str], cor: str, instance: Optional[str] = None) -> dict:
     """Publica o mesmo conteúdo no Status do WhatsApp conectado."""
-    instances, default_instance = get_whatsapp_instances()
-    instance = default_instance or (instances[0]["instanceName"] if instances else None)
+    if not instance:
+        instances, default_instance = get_whatsapp_instances()
+        instance = default_instance or (instances[0]["instanceName"] if instances else None)
     if not instance:
         return {"ok": False, "detail": "Nenhuma instância WhatsApp configurada."}
 
@@ -84,14 +107,16 @@ def _publish_whatsapp_status(request: Request, titulo: str, mensagem: str, media
 
 
 @router.get("/api/status-empresa")
-def listar_status():
+def listar_status(request: Request):
     agora = datetime.now()
+    tenant_id = None
+    if get_signed_cookie(request, "user_role") != "admin":
+        tenant_id, _ = _status_scope(request)
     with Session(engine) as session:
-        itens = session.exec(
-            select(StatusEmpresa)
-            .where(StatusEmpresa.ativo == True, StatusEmpresa.expira_em > agora)
-            .order_by(StatusEmpresa.criado_em.desc())
-        ).all()
+        stmt = select(StatusEmpresa).where(StatusEmpresa.ativo == True, StatusEmpresa.expira_em > agora)
+        if tenant_id is not None:
+            stmt = stmt.where(StatusEmpresa.empresa_atendimento_id == tenant_id)
+        itens = session.exec(stmt.order_by(StatusEmpresa.criado_em.desc())).all()
         return JSONResponse([_payload(item) for item in itens])
 
 
@@ -104,6 +129,7 @@ async def publicar_status(
     media: Optional[UploadFile] = File(None),
 ):
     criado_por = _admin(request)
+    tenant_id, instance = _status_scope(request)
     media_url = None
     media_tipo = None
     if media and media.filename:
@@ -134,11 +160,13 @@ async def publicar_status(
             cor=cor if cor in {"emerald", "indigo", "amber", "rose"} else "emerald",
             criado_por=criado_por,
             expira_em=datetime.now() + timedelta(hours=24),
+            empresa_atendimento_id=tenant_id,
+            whatsapp_instance=instance,
         )
         session.add(status)
         session.commit()
         session.refresh(status)
-        whatsapp = _publish_whatsapp_status(request, status.titulo, status.mensagem or "", status.media_url, status.media_tipo, status.cor)
+        whatsapp = _publish_whatsapp_status(request, status.titulo, status.mensagem or "", status.media_url, status.media_tipo, status.cor, instance)
         result = {"ok": True, "status": _payload(status), "whatsapp": whatsapp}
         return JSONResponse(result)
 
@@ -146,9 +174,14 @@ async def publicar_status(
 @router.delete("/api/status-empresa/{status_id}")
 def remover_status(status_id: int, request: Request):
     _admin(request)
+    tenant_id = None
+    if get_signed_cookie(request, "user_role") != "admin":
+        tenant_id, _ = _status_scope(request)
     with Session(engine) as session:
         status = session.get(StatusEmpresa, status_id)
         if not status:
+            raise HTTPException(status_code=404, detail="Status não encontrado.")
+        if tenant_id is not None and status.empresa_atendimento_id != tenant_id:
             raise HTTPException(status_code=404, detail="Status não encontrado.")
         status.ativo = False
         session.add(status)

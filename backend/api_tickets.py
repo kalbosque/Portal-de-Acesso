@@ -18,6 +18,7 @@ from auth_utils import get_signed_cookie
 from notifications import send_alert
 from websocket_manager import manager
 import api_whatsapp
+from atendimento_tenant_context import resolve_context
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
 
@@ -44,18 +45,35 @@ def _check_whatsapp_instance_access(request: Request, chamado: Chamado):
 
 # ─── Contagem de tickets (usado no badge do menu) ───────────────────────────
 
+def _get_ticket_for_request(session: Session, ticket_id: int, request: Request):
+    """Busca um chamado respeitando a empresa quando o recurso estiver ativo."""
+    context = resolve_context(request)
+    stmt = select(Chamado).where(Chamado.id == ticket_id)
+    if context.enabled and context.tenant_id is not None:
+        stmt = stmt.where(Chamado.empresa_atendimento_id == context.tenant_id)
+    return session.exec(stmt).first()
+
+
+def _tenant_conditions(request: Request):
+    context = resolve_context(request)
+    if context.enabled and context.tenant_id is not None:
+        return [Chamado.empresa_atendimento_id == context.tenant_id]
+    return []
+
+
 @router.get("/count")
 def get_ticket_count(request: Request):
     user_name, user_role = _get_user(request)
+    tenant_conditions = _tenant_conditions(request)
     with Session(engine) as session:
         if user_role == "admin":
             count = session.exec(
-                select(func.count(Chamado.id)).where(Chamado.status != "Resolvido")
+                select(func.count(Chamado.id)).where(Chamado.status != "Resolvido", *tenant_conditions)
             ).one()
         else:
             count = session.exec(
                 select(func.count(Chamado.id))
-                .where(Chamado.usuario == user_name, Chamado.status != "Resolvido")
+                .where(Chamado.usuario == user_name, Chamado.status != "Resolvido", *tenant_conditions)
             ).one()
     return {"count": count}
 
@@ -65,8 +83,9 @@ def get_ticket_count(request: Request):
 @router.get("/status_global")
 def status_global(request: Request):
     user_name, user_role = _get_user(request)
+    tenant_conditions = _tenant_conditions(request)
     with Session(engine) as session:
-        stmt = select(Chamado.id, Chamado.status, Chamado.usuario, Chamado.unread_admin, Chamado.unread_user)
+        stmt = select(Chamado.id, Chamado.status, Chamado.usuario, Chamado.unread_admin, Chamado.unread_user).where(*tenant_conditions)
         chamados = session.exec(stmt).all()
         
         abertos = 0
@@ -83,9 +102,10 @@ def status_global(request: Request):
             elif user_role != "admin" and usu == user_name and un_user and un_user > 0:
                 unread_list[str(cid)] = un_user
 
-        latest_msg = session.exec(
-            select(ChamadoInteracao.id, ChamadoInteracao.chamado_id).order_by(desc(ChamadoInteracao.id)).limit(1)
-        ).first()
+        latest_msg_stmt = select(ChamadoInteracao.id, ChamadoInteracao.chamado_id).order_by(desc(ChamadoInteracao.id)).limit(1)
+        if tenant_conditions:
+            latest_msg_stmt = latest_msg_stmt.join(Chamado, Chamado.id == ChamadoInteracao.chamado_id).where(*tenant_conditions)
+        latest_msg = session.exec(latest_msg_stmt).first()
 
         return {
             "abertos": abertos,
@@ -113,6 +133,7 @@ async def create_ticket(
     custom_redirect: str = Form(None),
 ):
     user_name, _ = _get_user(request)
+    tenant_context = resolve_context(request)
     if usuario_kiosk and (user_name == "Desconhecido" or not user_name):
         user_name = usuario_kiosk
 
@@ -139,6 +160,7 @@ async def create_ticket(
             ip_address=request.client.host,
             user_agent=request.headers.get("user-agent", ""),
             vencimento_sla=_calc_sla(prioridade),
+            empresa_atendimento_id=tenant_context.tenant_id,
         )
         session.add(chamado)
         session.commit()
@@ -179,7 +201,7 @@ async def update_status(request: Request, background_tasks: BackgroundTasks):
     new_status = data.get("status")
 
     with Session(engine) as session:
-        chamado = session.get(Chamado, ticket_id)
+        chamado = _get_ticket_for_request(session, ticket_id, request)
         if not chamado:
             raise HTTPException(status_code=404, detail="Chamado não encontrado")
         
@@ -221,7 +243,7 @@ async def finalizar_ticket(request: Request, background_tasks: BackgroundTasks):
     send_msg = data.get("send_message", True)
 
     with Session(engine) as session:
-        chamado = session.get(Chamado, ticket_id)
+        chamado = _get_ticket_for_request(session, ticket_id, request)
         if not chamado:
             raise HTTPException(status_code=404, detail="Chamado não encontrado")
         chamado.status = "Resolvido"
@@ -260,7 +282,7 @@ async def resolver_ticket_compat(ticket_id: int, request: Request, background_ta
         nota = str(form.get("nota_tecnica", ""))
 
     with Session(engine) as session:
-        chamado = session.get(Chamado, ticket_id)
+        chamado = _get_ticket_for_request(session, ticket_id, request)
         if not chamado:
             raise HTTPException(status_code=404, detail="Chamado não encontrado")
 
@@ -361,7 +383,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
     _ensure_favorite_schema()
     user_name, user_role = _get_user(request)
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if not chamado:
             raise HTTPException(status_code=404)
         _check_whatsapp_instance_access(request, chamado)
@@ -435,7 +457,7 @@ async def send_chat_message(
 ):
     user_name, user_role = _get_user(request)
     with Session(engine) as access_session:
-        access_ticket = access_session.get(Chamado, chamado_id)
+        access_ticket = _get_ticket_for_request(access_session, chamado_id, request)
         if not access_ticket:
             raise HTTPException(status_code=404)
         _check_whatsapp_instance_access(request, access_ticket)
@@ -480,7 +502,7 @@ async def send_chat_message(
 
     _ensure_typing_schema()
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if not chamado:
             raise HTTPException(status_code=404)
 
@@ -568,7 +590,7 @@ def edit_chat_message(message_id: int, payload: dict, request: Request, backgrou
             raise HTTPException(status_code=403, detail="Prazo de edição expirado")
         if msg.mensagem.lstrip().startswith('{'):
             raise HTTPException(status_code=400, detail="Anexos não podem ser editados")
-        chamado = session.get(Chamado, msg.chamado_id)
+        chamado = _get_ticket_for_request(session, msg.chamado_id, request)
         whatsapp_synced = True
         if chamado and chamado.origem == "WhatsApp" and chamado.whatsapp_cliente and msg.whatsapp_message_id:
             from api_whatsapp import edit_whatsapp_message
@@ -616,7 +638,7 @@ def forward_chat_message(message_id: int, payload: dict, request: Request, backg
             raise HTTPException(status_code=404, detail="Mensagem nÃ£o encontrada")
         if any(item.chamado_id != messages[0].chamado_id for item in messages):
             raise HTTPException(status_code=400, detail="As mensagens precisam ser da mesma conversa")
-        chamado = session.get(Chamado, msg.chamado_id)
+        chamado = _get_ticket_for_request(session, msg.chamado_id, request)
         if not chamado or chamado.origem != "WhatsApp":
             raise HTTPException(status_code=400, detail="Mensagem sem conversa WhatsApp")
         from api_whatsapp import send_whatsapp_text
@@ -658,7 +680,7 @@ def delete_chat_message(message_id: int, request: Request, background_tasks: Bac
 def mark_chat_read(chamado_id: int, request: Request):
     _, user_role = _get_user(request)
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if chamado:
             # A Central de Atendimento usa unread_admin para todos os perfis
             # autorizados; zerar ambos mantém o contador consistente após abrir.
@@ -672,7 +694,7 @@ def mark_chat_read(chamado_id: int, request: Request):
 def mark_chat_unread(chamado_id: int, request: Request):
     """Retorna a conversa para a fila de mensagens pendentes."""
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if not chamado:
             raise HTTPException(status_code=404, detail="Atendimento não encontrado")
         chamado.unread_admin = max(1, int(chamado.unread_admin or 0))
@@ -691,7 +713,7 @@ def get_typing(chamado_id: int, request: Request):
     # Usuários que digitaram nos últimos 4 segundos (excluindo o próprio usuário)
     active = [u for u, ts in store.items() if now - ts < 4 and u != user_name]
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if chamado and chamado.whatsapp_typing_until and chamado.whatsapp_typing_until > datetime.now():
             active.append("Cliente")
             return {"typing": active, "media": bool(chamado.whatsapp_typing_media)}
@@ -714,7 +736,7 @@ def get_chat_legacy(chamado_id: int, request: Request):
     _ensure_typing_schema()
     user_name, user_role = _get_user(request)
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if not chamado:
             raise HTTPException(status_code=404)
         _check_whatsapp_instance_access(request, chamado)
@@ -768,7 +790,7 @@ async def post_chat(chamado_id: int, request: Request, background_tasks: Backgro
         raise HTTPException(status_code=400, detail="Mensagem vazia")
 
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if not chamado:
             raise HTTPException(status_code=404)
         _check_whatsapp_instance_access(request, chamado)
@@ -813,7 +835,7 @@ async def avaliar_ticket(chamado_id: int, request: Request):
     comentario = data.get("comentario", "")
 
     with Session(engine) as session:
-        chamado = session.get(Chamado, chamado_id)
+        chamado = _get_ticket_for_request(session, chamado_id, request)
         if not chamado or chamado.usuario != user_name:
             raise HTTPException(status_code=403, detail="Não autorizado")
         chamado.avaliacao_estrelas = estrelas
@@ -878,9 +900,9 @@ def delete_atalho(atalho_id: int, request: Request):
 # ─── Obter ticket por id ─────────────────────────────────────────────────────
 
 @router.get("/{ticket_id}")
-def get_ticket(ticket_id: int):
+def get_ticket(ticket_id: int, request: Request):
     with Session(engine) as session:
-        chamado = session.get(Chamado, ticket_id)
+        chamado = _get_ticket_for_request(session, ticket_id, request)
         if not chamado:
             raise HTTPException(status_code=404)
         return chamado.dict()
@@ -891,7 +913,7 @@ def get_ticket(ticket_id: int):
 async def reabrir_ticket(request: Request, background_tasks: BackgroundTasks, id: int = Form(...)):
     user_name, user_role = _get_user(request)
     with Session(engine) as session:
-        chamado = session.get(Chamado, id)
+        chamado = _get_ticket_for_request(session, id, request)
         if not chamado: return RedirectResponse(url="/chamados?error=not_found", status_code=303)
         if not (user_role == "admin" or chamado.usuario == user_name):
             return RedirectResponse(url="/chamados?error=denied", status_code=303)
@@ -911,7 +933,7 @@ async def reabrir_ticket(request: Request, background_tasks: BackgroundTasks, id
 async def avaliar_nps(request: Request, background_tasks: BackgroundTasks, id: int = Form(...), estrelas: int = Form(...), comentario: str = Form("")):
     user_name, _ = _get_user(request)
     with Session(engine) as session:
-        chamado = session.get(Chamado, id)
+        chamado = _get_ticket_for_request(session, id, request)
         if not chamado: return RedirectResponse(url="/chamados?error=not_found", status_code=303)
         if chamado.usuario != user_name:
             return RedirectResponse(url="/chamados?error=denied", status_code=303)

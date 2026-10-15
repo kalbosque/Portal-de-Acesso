@@ -16,6 +16,10 @@
         {
             "instanceName": "portal-de-acesso",
             "label": "portal-de-acesso"
+        },
+        {
+            "instanceName": "atual-contabilidade",
+            "label": "atual-contabilidade"
         }
     ],
     "WHATSAPP_SHOW_GROUPS": true,

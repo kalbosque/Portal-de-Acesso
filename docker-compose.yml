@@ -64,6 +64,12 @@ services:
       - AGENT_API_KEY=${AGENT_API_KEY:?Defina AGENT_API_KEY no arquivo .env}
       - STUDY_ALLOWED_EMAIL=jkalbosque@gmail.com
       - STUDY_ACCESS_SECRET=${STUDY_ACCESS_SECRET:-}
+      - ATENDIMENTO_MULTIEMPRESA_ENABLED=${ATENDIMENTO_MULTIEMPRESA_ENABLED:-false}
+      - SMTP_SERVER=${SMTP_SERVER:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     volumes:
       - ./backend:/app
       - ./status_maquinas.json:/app/status_maquinas.json
@@ -87,11 +93,11 @@ services:
       - DB_PASS=${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
       - TZ=America/Porto_Velho
       - ADMIN_EMAIL=admin@empresa.local
-      - SMTP_SERVER=smtp.empresa.local
-      - SMTP_PORT=587
-      - SMTP_USER=alertas
-      - SMTP_PASS=${SMTP_PASS:?Defina SMTP_PASS no arquivo .env}
-      - SMTP_FROM=alertas@empresa.local
+      - SMTP_SERVER=${SMTP_SERVER:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
     volumes:
       - ./backend:/app
     depends_on:

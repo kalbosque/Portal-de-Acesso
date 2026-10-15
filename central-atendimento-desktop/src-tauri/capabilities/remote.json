@@ -4,7 +4,12 @@
   "description": "Permite que o servidor web local acione comandos Tauri (notificações, alertas)",
   "windows": ["main"],
   "remote": {
-    "urls": ["http://192.168.1.230:3001/**"]
+    "urls": [
+      "http://192.168.1.230:3001/**",
+      "http://localhost:3001/**",
+      "http://127.0.0.1:3001/**",
+      "https://crust-backroom-jolt.ngrok-free.dev/**"
+    ]
   },
   "permissions": [
     "core:default",

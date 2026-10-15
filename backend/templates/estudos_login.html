@@ -5,42 +5,246 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Área de Estudos | {{ config.APP_NAME }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { background: #09111f; color: #f8fafc; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-        .panel { background: rgba(15, 23, 42, .88); border: 1px solid rgba(56, 189, 248, .18); box-shadow: 0 30px 80px rgba(2, 8, 23, .45); }
-        .field { background: #020617; border: 1px solid rgba(148, 163, 184, .2); }
-        .field:focus { border-color: #38bdf8; outline: none; box-shadow: 0 0 0 3px rgba(56, 189, 248, .12); }
+        body { font-family: 'Inter', sans-serif; background: #0b0214; color: white; overflow-x: hidden; }
+        .font-premium { font-family: 'Outfit', sans-serif; }
+        .bg-custom-grid { background-color: #0b0214; background-image: radial-gradient(circle at 50% 50%, rgba(99,102,241,.15) 0%, transparent 50%), radial-gradient(circle at 20% 30%, rgba(139,92,246,.1) 0%, transparent 40%), linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 100% 100%, 100% 100%, 40px 40px; }
+        .glass-panel { background: rgba(23,20,31,.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 20px 50px rgba(0,0,0,.4), inset 0 1px 1px rgba(255,255,255,.1); position: relative; }
+        .glass-panel::before { content: ''; position: absolute; top: 0; left: 25%; right: 25%; height: 1px; background: linear-gradient(90deg, transparent, #6366f1, transparent); opacity: .6; }
+        .login-heading > p:first-of-type, .login-heading > p:last-of-type { display: none; }
+        .glass-input { background: #120f1a; border: 1px solid #1f2937; transition: all .2s ease; }
+        .glass-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.2); outline: none; }
+
+        /* ===== CAROUSEL BACKGROUND ===== */
+        .bg-carousel { display: none; position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+        .bg-slide {
+            position: absolute; inset: 0;
+            opacity: 0;
+            transition: opacity 2s ease-in-out;
+        }
+        .bg-slide.active { opacity: 1; }
+
+        /* Slide 1 — Azul Índigo profundo */
+        .slide-1 { background: radial-gradient(ellipse at 20% 20%, #312e81 0%, transparent 60%),
+                               radial-gradient(ellipse at 80% 80%, #1e1b4b 0%, transparent 60%),
+                               linear-gradient(135deg, #0f0f2d 0%, #0f172a 50%, #1a0533 100%); }
+        /* Slide 2 — Roxo Violeta */
+        .slide-2 { background: radial-gradient(ellipse at 70% 10%, #4c1d95 0%, transparent 55%),
+                               radial-gradient(ellipse at 20% 90%, #1e1b4b 0%, transparent 55%),
+                               linear-gradient(135deg, #120a2a 0%, #0f172a 50%, #0d1a3a 100%); }
+        /* Slide 3 — Azul Ciano oceano */
+        .slide-3 { background: radial-gradient(ellipse at 10% 60%, #0e4f6e 0%, transparent 55%),
+                               radial-gradient(ellipse at 90% 30%, #0c2340 0%, transparent 55%),
+                               linear-gradient(135deg, #061523 0%, #0f172a 50%, #03102a 100%); }
+        /* Slide 4 — Esmeralda escuro */
+        .slide-4 { background: radial-gradient(ellipse at 60% 80%, #064e3b 0%, transparent 55%),
+                               radial-gradient(ellipse at 30% 10%, #0f2027 0%, transparent 55%),
+                               linear-gradient(135deg, #0a1f18 0%, #0f172a 50%, #041520 100%); }
+        /* Slide 5 — Magenta / Rubi */
+        .slide-5 { background: radial-gradient(ellipse at 80% 20%, #6b1838 0%, transparent 55%),
+                               radial-gradient(ellipse at 10% 80%, #2d0636 0%, transparent 55%),
+                               linear-gradient(135deg, #1a0511 0%, #0f172a 50%, #1a0a2e 100%); }
+
+        /* Floating orbs */
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0;
+            animation: orbFloat 20s ease-in-out infinite;
+            transition: opacity 2s;
+        }
+        .bg-slide.active .orb { opacity: 0.35; }
+        .orb-1 { width: 500px; height: 500px; top: -100px; left: -100px; animation-delay: 0s; }
+        .orb-2 { width: 400px; height: 400px; bottom: -80px; right: -80px; animation-delay: -7s; }
+        .orb-3 { width: 300px; height: 300px; top: 40%; left: 50%; transform: translate(-50%, -50%); animation-delay: -14s; }
+
+        .slide-1 .orb-1 { background: #4f46e5; } .slide-1 .orb-2 { background: #7c3aed; } .slide-1 .orb-3 { background: #3730a3; }
+        .slide-2 .orb-1 { background: #7c3aed; } .slide-2 .orb-2 { background: #6d28d9; } .slide-2 .orb-3 { background: #5b21b6; }
+        .slide-3 .orb-1 { background: #0891b2; } .slide-3 .orb-2 { background: #0284c7; } .slide-3 .orb-3 { background: #0e7490; }
+        .slide-4 .orb-1 { background: #059669; } .slide-4 .orb-2 { background: #047857; } .slide-4 .orb-3 { background: #065f46; }
+        .slide-5 .orb-1 { background: #be185d; } .slide-5 .orb-2 { background: #9d174d; } .slide-5 .orb-3 { background: #7c1d4a; }
+
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33%       { transform: translate(40px, -40px) scale(1.1); }
+            66%       { transform: translate(-30px, 30px) scale(0.9); }
+        }
+
+        /* Grid overlay */
+        .bg-grid {
+            position: absolute; inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 60px 60px;
+        }
+
+        /* Vignette */
+        .bg-vignette {
+            position: absolute; inset: 0;
+            background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%);
+        }
+
+        /* Dots de progresso do carrossel */
+        .carousel-dots {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; z-index: 20;
+        }
+        .c-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            transition: all 0.4s ease;
+        }
+        .c-dot.active { width: 24px; border-radius: 3px; background: rgba(255,255,255,0.7); }
     </style>
 </head>
-<body class="min-h-screen px-4 py-10">
-    <main class="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md items-center justify-center">
-        <section class="panel w-full rounded-3xl p-7 sm:p-9">
-            <div class="mb-8 text-center">
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-sky-500 text-3xl font-black text-slate-950">E</div>
-                <p class="mt-5 text-xs font-black uppercase tracking-[.28em] text-sky-300">Área independente</p>
-                <h1 class="mt-2 text-3xl font-black">Estudos</h1>
-                <p class="mt-2 text-sm text-slate-400">Acesse seu quadro, histórico e desempenho.</p>
+<body class="bg-custom-grid min-h-screen flex flex-col justify-between items-center px-4 py-10 relative overflow-hidden">
+
+    <!-- ===== FUNDO CARROSSEL VIVO COM CORES ===== -->
+    <div class="bg-carousel">
+        <div class="bg-slide slide-1 active">
+            <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+        </div>
+        <div class="bg-slide slide-2">
+            <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+        </div>
+        <div class="bg-slide slide-3">
+            <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+        </div>
+        <div class="bg-slide slide-4">
+            <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+        </div>
+        <div class="bg-slide slide-5">
+            <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+        </div>
+        <div class="bg-grid"></div>
+        <div class="bg-vignette"></div>
+    </div>
+
+    <!-- Dots do carrossel -->
+    <div class="carousel-dots">
+        <div class="c-dot active" id="dot-0"></div>
+        <div class="c-dot" id="dot-1"></div>
+        <div class="c-dot" id="dot-2"></div>
+        <div class="c-dot" id="dot-3"></div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main class="relative z-10 w-full max-w-md">
+        <section class="glass-panel w-full rounded-3xl p-7 sm:p-9 shadow-2xl">
+            <div class="login-heading mb-8 text-center">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-500 text-3xl font-black text-white shadow-lg shadow-sky-500/30">
+                    E
+                </div>
+                <p class="mt-5 text-xs font-black uppercase tracking-[.28em] text-sky-400">Área independente</p>
+                <h1 class="mt-5 text-3xl font-bold tracking-tight text-white">Estudos</h1>
+                <p class="mt-1 text-xs font-semibold uppercase tracking-widest text-indigo-400">Acessar sua conta</p>
+                <p class="mt-2 text-sm text-center text-slate-400">Entre para acessar seu quadro, histórico e progresso.</p>
+                <p class="mt-2 text-sm text-slate-300">Acesse seu quadro, histórico e desempenho.</p>
             </div>
 
             <form id="formEntrar" class="space-y-4">
                 <input type="hidden" name="intent" value="estudos">
                 <div>
-                    <label class="mb-2 block text-xs font-black uppercase tracking-widest text-slate-400">Usuário ou e-mail autorizado</label>
-                    <input name="login_id" required class="field w-full rounded-xl px-4 py-3 text-sm text-white" placeholder="Digite seu usuário ou e-mail">
+                    <label class="mb-2 block text-xs font-black uppercase tracking-widest text-slate-300">Usuário ou e-mail autorizado</label>
+                    <input name="login_id" required class="glass-input w-full rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500" placeholder="Digite seu usuário ou e-mail">
                 </div>
                 <div>
-                    <label class="mb-2 block text-xs font-black uppercase tracking-widest text-slate-400">Senha</label>
-                    <input type="password" name="password" required class="field w-full rounded-xl px-4 py-3 text-sm text-white" placeholder="Sua senha">
+                    <label class="mb-2 block text-xs font-medium uppercase tracking-wider text-slate-400">Senha</label>
+                    <div class="relative">
+                        <input type="password" id="login_pass" name="password" required class="glass-input w-full rounded-xl pl-4 pr-12 py-3 text-sm text-white placeholder-slate-500" placeholder="Sua senha">
+                        <button type="button" onclick="togglePass('login_pass', this)" aria-label="Mostrar ou ocultar senha" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-sky-300 transition-colors p-1">
+                            <svg class="w-5 h-5 eye-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                        </button>
+                    </div>
                 </div>
-                <button class="w-full rounded-xl bg-sky-500 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-950 hover:bg-sky-400">Entrar nos estudos</button>
+                <div class="flex justify-end pt-1"><a href="#" id="linkRecuperarSenha" class="text-xs font-medium text-slate-400 transition-colors hover:text-indigo-400">Esqueceu sua senha?</a></div>
+                <button class="w-full rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:from-blue-600 hover:to-indigo-700 transition-all duration-300">Acessar Plataforma</button>
+            </form>
+
+            <form id="formRecuperarSenha" class="mt-5 hidden space-y-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4">
+                <p class="text-xs leading-relaxed text-indigo-200">Informe seu usuário ou e-mail para gerar uma senha temporária.</p>
+                <input name="login_id" required class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Usuário ou e-mail">
+                <button type="submit" class="w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500">Gerar senha temporária</button>
+                    <button type="button" id="cancelarRecuperacao" class="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5">Voltar ao login</button>
             </form>
 
             <div id="mensagem" class="mt-4 hidden rounded-xl border px-4 py-3 text-sm"></div>
         </section>
     </main>
+
     <script>
+        // ===== MOSTRAR / OCULTAR SENHA =====
+        function togglePass(id, btn) {
+            const input = document.getElementById(id);
+            const icon = btn.querySelector('.eye-icon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path>';
+            } else {
+                input.type = 'password';
+                icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>';
+            }
+        }
+        // ===== CARROSSEL DE FUNDO DINÂMICO =====
+        const slides = document.querySelectorAll('.bg-slide');
+        const dots = document.querySelectorAll('.c-dot');
+        let currentSlide = 0;
+
+        function nextSlide() {
+            slides[currentSlide].classList.remove('active');
+            dots[currentSlide].classList.remove('active');
+            currentSlide = (currentSlide + 1) % slides.length;
+            slides[currentSlide].classList.add('active');
+            dots[currentSlide].classList.add('active');
+        }
+
+        if (dots.length === slides.length) setInterval(nextSlide, 6000);
+
+        // ===== LÓGICA DE LOGIN =====
         const formEntrar = document.getElementById('formEntrar');
         const mensagem = document.getElementById('mensagem');
+        const linkRecuperarSenha = document.getElementById('linkRecuperarSenha');
+        const formRecuperarSenha = document.getElementById('formRecuperarSenha');
+        const cancelarRecuperacao = document.getElementById('cancelarRecuperacao');
+
+        linkRecuperarSenha.addEventListener('click', (event) => {
+            event.preventDefault();
+            formEntrar.classList.add('hidden');
+            formRecuperarSenha.classList.remove('hidden');
+            formRecuperarSenha.querySelector('input[name="login_id"]').value = formEntrar.elements.login_id.value;
+            formRecuperarSenha.querySelector('input[name="login_id"]').focus();
+        });
+
+        cancelarRecuperacao.addEventListener('click', () => {
+            formEntrar.classList.remove('hidden');
+            formRecuperarSenha.classList.add('hidden');
+            mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
+            mensagem.textContent = '';
+        });
+
+        formRecuperarSenha.onsubmit = async (event) => {
+            event.preventDefault();
+            mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
+            try {
+                const resposta = await fetch('/api/auth/reset_senha', { method: 'POST', body: new FormData(formRecuperarSenha) });
+                const dados = await resposta.json();
+                mensagem.className = resposta.ok && dados.success
+                    ? 'mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300'
+                    : 'mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300';
+                mensagem.textContent = dados.message || dados.detail || 'Não foi possível gerar a senha temporária.';
+                if (resposta.ok && dados.success) {
+                    formRecuperarSenha.classList.add('hidden');
+                    formEntrar.classList.remove('hidden');
+                }
+            } catch {
+                mensagem.className = 'mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300';
+                mensagem.textContent = 'Não foi possível conectar ao servidor.';
+            }
+        };
+
         formEntrar.onsubmit = async (event) => {
             event.preventDefault();
             mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';

@@ -21,7 +21,7 @@
         .gradient-text { background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
         /* === High Contrast & Modern Premium Light/Dark Mode Customizations === */
-        html.light-mode { --light-page: #e8edf4; --light-panel: #f8fafc; --light-inset: #edf2f7; --light-border: #cbd5e1; }
+        html.light-mode { --light-page: #e8edf4; --light-panel: #f8fafc; --light-inset: #edf2f7; --light-border: #cbd5e1; color-scheme: light !important; }
         html.light-mode body { background-color: var(--light-page); color: #0f172a; }
         html.light-mode .glass-panel { background: var(--light-panel) !important; border: 1px solid #e2e8f0 !important; box-shadow: 0 10px 15px -3px rgba(15,23,42,0.07), 0 4px 6px -4px rgba(15,23,42,0.04); }
         html.light-mode .text-white, html.light-mode .font-bold, html.light-mode .font-black, html.light-mode h1 { color: #0f172a !important; }
@@ -34,6 +34,34 @@
         html.light-mode [class*="bg-slate-800"] { background-color: #e2e8f0 !important; }
         html.light-mode [class*="bg-slate-700"] { background-color: #cbd5e1 !important; }
         html.light-mode [class*="border-white/"], html.light-mode [class*="border-slate-700"] { border-color: var(--light-border) !important; }
+        
+        /* Suporte completo a ícones nativos no modo claro (Calendário, Relógio, Setas numéricas) */
+        html.light-mode input,
+        html.light-mode select,
+        html.light-mode textarea {
+            color-scheme: light !important;
+            color: #0f172a !important;
+        }
+        html.light-mode input[type="date"]::-webkit-calendar-picker-indicator,
+        html.light-mode input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: none !important;
+            opacity: 0.75 !important;
+            cursor: pointer;
+        }
+        html.light-mode input[type="date"]:hover::-webkit-calendar-picker-indicator,
+        html.light-mode input[type="time"]:hover::-webkit-calendar-picker-indicator {
+            opacity: 1 !important;
+        }
+        html.light-mode input[type="number"]::-webkit-inner-spin-button,
+        html.light-mode input[type="number"]::-webkit-outer-spin-button {
+            filter: none !important;
+            opacity: 0.75 !important;
+            cursor: pointer;
+        }
+        html.light-mode input[type="number"]:hover::-webkit-inner-spin-button,
+        html.light-mode input[type="number"]:hover::-webkit-outer-spin-button {
+            opacity: 1 !important;
+        }
         
         /* Modern Premium Navigation Styles */
         .nav-shell {
