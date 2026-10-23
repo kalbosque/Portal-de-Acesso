@@ -27,8 +27,18 @@ def load_config():
 
 def save_config(config):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
+    backup_file = f"{CONFIG_FILE}.bak"
+    temp_file = f"{CONFIG_FILE}.tmp"
+    # Mantém uma cópia recuperável e evita deixar um JSON pela metade
+    # se o processo for interrompido durante a gravação.
+    if os.path.exists(CONFIG_FILE):
+        shutil.copy2(CONFIG_FILE, backup_file)
+    with open(temp_file, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(temp_file, CONFIG_FILE)
 
 @router.get("/get")
 async def get_settings():
@@ -84,7 +94,10 @@ async def save_settings(
                 shutil.copyfileobj(guia_suporte_upload.file, buffer)
             guia_url = f"uploads/{new_name}"
     
+    # Atualiza somente as opções desta tela e preserva integrações/instâncias
+    # adicionadas por outras partes do sistema.
     new_config = {
+        **config,
         "APP_NAME": app_name,
         "APP_TAGLINE": app_tagline,
         "APP_LOGO_URL": logo,

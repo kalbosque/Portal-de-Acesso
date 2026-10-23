@@ -28,8 +28,18 @@
       const SERVER_KEY = 'central_atendimento_server_url';
       // Mantém o comportamento anterior: abre automaticamente no servidor
       // atual quando ainda não existe uma configuração salva.
-      const DEFAULT_SERVER = 'https://crust-backroom-jolt.ngrok-free.dev';
+      // Túnel público temporário do Atual, usado para acesso fora da rede local.
+      const DEFAULT_SERVER = 'https://parks-trio-nutritional-contemporary.trycloudflare.com';
       let redirectTimer;
+
+      function getSavedServer() {
+        const stored = localStorage.getItem(SERVER_KEY);
+        if (stored && /ngrok-free\.dev|crust-backroom-jolt|locked-allowed-telescope-vinyl\.trycloudflare\.com|progress-spectacular-habitat-honest\.trycloudflare\.com|servidor-xml\.taildbf5af\.ts\.net|portaldoacessos\.taildbf5af\.ts\.net/i.test(stored)) {
+          localStorage.setItem(SERVER_KEY, DEFAULT_SERVER);
+          return DEFAULT_SERVER;
+        }
+        return stored || DEFAULT_SERVER;
+      }
 
       function normalizeServer(value) {
         let server = String(value || '').trim().replace(/\/+$/, '');
@@ -39,7 +49,7 @@
 
       function renderSetup(message = '') {
         clearTimeout(redirectTimer);
-        const saved = localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER;
+        const saved = getSavedServer();
         document.getElementById('app').innerHTML = `
           <form class="panel" id="server-form">
             <h1>Configurar servidor</h1>
@@ -80,7 +90,7 @@
         } catch (_) {}
       }
 
-      const savedServer = normalizeServer(localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER);
+      const savedServer = normalizeServer(getSavedServer());
       if (new URLSearchParams(window.location.search).has('config')) {
         renderSetup();
       } else {

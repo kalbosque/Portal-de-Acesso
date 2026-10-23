@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import Optional, List
 from sqlmodel import Field, SQLModel, create_engine, Session, select, Relationship
 
@@ -97,7 +97,9 @@ class Chamado(SQLModel, table=True):
     unread_user: int = Field(default=0)
     prioridade: str = Field(default="Media") # "Baixa", "Media", "Alta"
     status: str = Field(default="Aberto", index=True) # "Aberto", "Em Atendimento", "Resolvido"
-    data_abertura: datetime = Field(default_factory=datetime.now, index=True)
+    # O SQLModel atual exige datetimes com fuso para campos datetime.
+    # Armazena sempre em UTC para evitar HTTP 500 ao criar chamados pelo WhatsApp.
+    data_abertura: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     vencimento_sla: Optional[datetime] = None
     data_resolucao: Optional[datetime] = None
     nota_tecnica: Optional[str] = None
@@ -131,7 +133,7 @@ class ChamadoInteracao(SQLModel, table=True):
     reacao_detalhes: Optional[str] = None
     favorito: bool = Field(default=False, index=True)
     whatsapp_status: str = Field(default="sent")
-    data_hora: datetime = Field(default_factory=datetime.now)
+    data_hora: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     chamado: Chamado = Relationship(back_populates="interacoes")
 
@@ -154,7 +156,7 @@ class StatusMaquina(SQLModel, table=True):
     nome: str
     status: str = Field(default="Online")
     windows_user: str = Field(default="Desconhecido")
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     versao_agente: str = Field(default="2.0")
     alerta_enviado: bool = Field(default=False)
 
@@ -216,12 +218,14 @@ class EstudoSessao(SQLModel, table=True):
     horario_inicio: Optional[str] = None
     horario_fim: Optional[str] = None
     assunto: str = Field(index=True)
+    tipo_registro: str = Field(default="estudo", index=True)
+    nome_simulado: Optional[str] = None
     quantidade_questoes: int = Field(default=0)
     total_acertos: int = Field(default=0)
     total_erros: int = Field(default=0)
     observacao: Optional[str] = None
     status: str = Field(default="concluido", index=True)
-    criado_em: datetime = Field(default_factory=datetime.now, index=True)
+    criado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 class EstudoPlano(SQLModel, table=True):
     __tablename__ = "estudos_planos"
@@ -235,7 +239,7 @@ class EstudoPlano(SQLModel, table=True):
     horario_inicio: Optional[str] = None
     horario_fim: Optional[str] = None
     meta_questoes: int = Field(default=0)
-    criado_em: datetime = Field(default_factory=datetime.now, index=True)
+    criado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 class EstudoCronometro(SQLModel, table=True):
     __tablename__ = "estudos_cronometros"
@@ -244,7 +248,21 @@ class EstudoCronometro(SQLModel, table=True):
     session_id: str = Field(unique=True, max_length=64)
     materia: Optional[str] = None
     duracao_segundos: int
-    concluido_em: datetime = Field(default_factory=datetime.now, index=True)
+    concluido_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+class EstudoRaioXBanca(SQLModel, table=True):
+    """Análise de edital e perfil de uma banca para o módulo Estudos."""
+    __tablename__ = "estudos_raio_x_bancas"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    usuario_id: Optional[int] = Field(default=None, foreign_key="usuarios.id", index=True)
+    banca: str = Field(index=True)
+    cargo: Optional[str] = None
+    edital_nome: Optional[str] = None
+    edital_texto: Optional[str] = None
+    materias_json: str = Field(default="[]")
+    analise_json: str = Field(default="{}")
+    fontes_json: str = Field(default="[]")
+    criado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 class CofreSenha(SQLModel, table=True):
     __tablename__ = "cofre_senhas"

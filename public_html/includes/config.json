@@ -26,5 +26,10 @@
     "WHATSAPP_AUTO_CREATE_TICKETS": false,
     "WHATSAPP_CHAT_BACKGROUND_IMAGE": "",
     "WHATSAPP_CHAT_BACKGROUND_COLOR": "#0b141a",
-    "WHATSAPP_DEFAULT_INSTANCE": "portal-de-acesso"
+    "WHATSAPP_DEFAULT_INSTANCE": "portal-de-acesso",
+    "WHATSAPP_INSTANCE_ACCESS": {},
+    "WHATSAPP_INSTANCE_COLORS": {
+        "portal-de-acesso": "#00a884",
+        "atual-contabilidade": "#00a884"
+    }
 }

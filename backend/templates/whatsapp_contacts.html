@@ -234,7 +234,7 @@ async function startConversation() {
         }
 
         if (hasSuccessfulTicket) {
-            window.location.href = `/central-atendimento?ticket=${ticketId || payload?.ticket_id || payload?.id || ''}`;
+            window.location.href = `/central-atendimento?ticket=${ticketId || payload?.ticket_id || payload?.id || ''}&queue=atendendo`;
             return;
         }
 

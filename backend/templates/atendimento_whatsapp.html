@@ -121,6 +121,7 @@
     .media-album[data-album-side="sent"] { align-self: flex-end; }
     .media-album[data-album-side="received"] { align-self: flex-start; }
     .media-album > .message-row { position: relative; display: block; width: auto; height: 170px; min-width: 0; margin: 0; overflow: hidden; }
+    .media-album > .message-row:not(.media-album-overflow) { display: block !important; visibility: visible !important; }
     .media-album > .message-row > .bubble { display: block; width: 100%; max-width: none; height: 100%; padding: 0; overflow: hidden; border-radius: 0.4rem; background: transparent; box-shadow: none; }
     .media-album > .message-row > .bubble::before { display: none; }
     .media-album .message-sender-label,
@@ -472,7 +473,7 @@
         {% if is_admin or can_edit_identity %}
         <button type="button" onclick="openTauriStatusModal()" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-amber-300 transition hover:bg-amber-500/10">Status</button>
         <a href="/central-atendimento/configuracoes" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition hover:bg-white/5 hover:text-white">Conexão e configurações</a>
-        {% if is_admin %}<a href="/central-atendimento/empresas" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-indigo-300 transition hover:bg-indigo-500/10 hover:text-white">Empresas e usuários</a>{% endif %}
+        {% if can_manage_company %}<a href="/central-atendimento/empresas" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-indigo-300 transition hover:bg-indigo-500/10 hover:text-white">Empresas e usuários</a>{% endif %}
         {% endif %}
     </div>
 </div>
@@ -538,7 +539,7 @@
 
             <div id="queue-menu" class="queue-menu rounded-xl border border-white/10 bg-slate-900 p-1 shadow-xl">
                 {% if can_edit_identity %}<button type="button" onclick="window.location.href='/central-atendimento/configuracoes?desktop=1'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-amber-300 hover:bg-amber-500/10">Configurações</button>{% endif %}
-                {% if is_admin %}<button type="button" onclick="window.location.href='/central-atendimento/empresas'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-indigo-300 hover:bg-indigo-500/10">Empresas e usuários</button>{% endif %}
+                {% if can_manage_company %}<button type="button" onclick="window.location.href='/central-atendimento/empresas'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-indigo-300 hover:bg-indigo-500/10">Empresas e usuários</button>{% endif %}
                 <button type="button" onclick="window.location.href='/central-atendimento/contatos?desktop=1'" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/10">Lista de contatos</button>
                 <button type="button" onclick="selectQueueMenu('aguardando')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Fila de atendimento</button>
                 <button type="button" onclick="selectQueueMenu('atendendo')" class="w-full rounded-lg px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10">Meus atendimentos</button>
@@ -910,6 +911,8 @@
     let typingPolling = false;
     let typingNotifyTimer = null;
     let toastTimer = null;
+    let nativeNotificationQueue = Promise.resolve();
+    let nativeAlertSequence = 0;
     let unreadTitleCount = 0;
     let titleBlinkInterval = null;
     const _originalTitle = 'Central de Atendimento';
@@ -1247,12 +1250,16 @@
         const rawPreview = data.preview || data.mensagem || 'Nova mensagem recebida';
         const preview = formatMessagePreview(rawPreview);
         let mediaTitle = isNewChat ? 'Novo atendimento' : 'Nova mensagem';
+        let isMediaPreview = false;
         try {
             const media = JSON.parse(rawPreview);
-            if (media && media.__wa_media__ && media.type === 'gif') mediaTitle = 'Novo GIF';
-            else if (media && media.__wa_media__ && media.type === 'sticker') mediaTitle = 'Novo sticker';
+            if (media && media.__wa_media__ && media.type === 'gif') { mediaTitle = 'Novo GIF'; isMediaPreview = true; }
+            else if (media && media.__wa_media__ && media.type === 'sticker') { mediaTitle = 'Novo sticker'; isMediaPreview = true; }
             else if (media && media.__wa_media__) mediaTitle = 'Nova mídia';
         } catch (_) {}
+        if (!isMediaPreview) {
+            try { isMediaPreview = Boolean(JSON.parse(rawPreview)?.__wa_media__); } catch (_) {}
+        }
         mostrarToast(`${name}: ${preview}`, mediaTitle);
 
         // Título piscante sempre (mesmo com o app em foco mas sem olhar a fila)
@@ -1261,17 +1268,28 @@
         // Notificação nativa do Windows via Tauri (funciona mesmo com app minimizado)
         const isTauriApp = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
         if (isTauriApp) {
-            try {
-                const invokeResult = window.__TAURI_INTERNALS__
-                    ? window.__TAURI_INTERNALS__.invoke('trigger_message_alert', { sender: name })
-                    : window.__TAURI__.core.invoke('trigger_message_alert', { sender: name });
-                await Promise.resolve(invokeResult);
-            } catch (_) {
+            // Evita que o Windows coalesça várias fotos idênticas do mesmo álbum.
+            const nativePreview = isMediaPreview ? `${preview}\u200b${++nativeAlertSequence}` : preview;
+            nativeNotificationQueue = nativeNotificationQueue
+                .catch(() => {})
+                .then(async () => {
+                    try {
+                        const invokeResult = window.__TAURI_INTERNALS__
+                            ? window.__TAURI_INTERNALS__.invoke('trigger_message_alert', { sender: name, preview: nativePreview })
+                            : window.__TAURI__.core.invoke('trigger_message_alert', { sender: name, preview: nativePreview });
+                        await Promise.race([
+                            Promise.resolve(invokeResult),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500))
+                        ]);
+                    } catch (_) {
                 // fallback: notificação do browser
                 if ('Notification' in window && Notification.permission === 'granted') {
                     new Notification(mediaTitle, { body: `${name}: ${preview}` });
-                }
-            }
+                    }
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 350));
+                });
+            await nativeNotificationQueue;
         } else {
             // No browser web, usa Notification API padrão
             if ('Notification' in window && Notification.permission === 'granted') {
@@ -1428,6 +1446,19 @@
         });
     }
 
+    function chatLastActivity(chat) {
+        const parsed = Date.parse(chat?.data_ultima_mensagem_iso || '');
+        if (Number.isFinite(parsed)) return parsed;
+        const fallback = String(chat?.data_abertura || '').match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+        return fallback
+            ? new Date(Number(fallback[3]), Number(fallback[2]) - 1, Number(fallback[1]), Number(fallback[4]), Number(fallback[5])).getTime()
+            : 0;
+    }
+
+    function sortChatsByLastActivity(chats) {
+        return chats.sort((a, b) => chatLastActivity(b) - chatLastActivity(a));
+    }
+
     // --- Carregamento da Lista de Chats ---
 
     async function loadQuickReplies() {
@@ -1460,7 +1491,7 @@
     }
 
     async function loadChats() {
-        if (chatsLoading || document.hidden) return;
+        if (chatsLoading) return;
         chatsLoading = true;
         const listDiv = document.getElementById('chats-list');
         try {
@@ -1516,7 +1547,8 @@
     function renderChatsList() {
         const listDiv = document.getElementById('chats-list');
         listDiv.innerHTML = '';
-        const queueUnread = chatsData.filter(c => c.status === 'Aberto' && !c.assigned_user && Number(c.unread_admin || 0) > 0)
+        // Mensagens de grupos ficam somente na aba Grupos e não entram na fila.
+        const queueUnread = chatsData.filter(c => !_isGroupChat(c) && c.status === 'Aberto' && !c.assigned_user && Number(c.unread_admin || 0) > 0)
             .reduce((total, c) => total + Number(c.unread_admin || 0), 0);
         const queueBadge = document.getElementById('queue-unread-count');
         if (queueBadge) {
@@ -1543,11 +1575,12 @@
         if (currentQueue === 'grupos') {
             const gruposMap = new Map();
             chatsData.filter(c => isGroupChat(c)).forEach(c => {
-                if (!gruposMap.has(c.whatsapp_cliente)) {
+                const previous = gruposMap.get(c.whatsapp_cliente);
+                if (!previous || chatLastActivity(c) > chatLastActivity(previous)) {
                     gruposMap.set(c.whatsapp_cliente, c);
                 }
             });
-            filtered = Array.from(gruposMap.values());
+            filtered = sortChatsByLastActivity(Array.from(gruposMap.values()));
         } else if (currentQueue === 'aguardando') {
             filtered = chatsData.filter(c => !isGroupChat(c) && c.status === 'Aberto' && !c.assigned_user);
         } else if (currentQueue === 'resolvidos') {
@@ -1573,6 +1606,10 @@
                 c.prioridade
             ].some(value => String(value || '').toLowerCase().includes(query)));
         }
+
+        // Mantém qualquer fila, inclusive Meu Chat, ordenada pela atividade
+        // mais recente. Assim, uma nova mensagem sobe o atendimento para o topo.
+        filtered = sortChatsByLastActivity(filtered);
         
         if (filtered.length === 0) {
             const emptyMessages = {
@@ -1773,7 +1810,7 @@
         document.querySelectorAll('.chat-card').forEach(c => c.classList.remove('active'));
         renderChatsList(); // Força re-render para marcar o ativo correto
         
-        const chat = chatsData.find(c => c.id === ticketId);
+        const chat = chatsData.find(c => sameTicket(c.id, ticketId));
         if (!chat) return;
         
         // Preenche o Header do Chat
@@ -1908,7 +1945,11 @@
     async function loadMessages(ticketId) {
         const loadToken = ++messageHistoryLoadToken;
         try {
-            const res = await fetch(`/api/tickets/chat?chamado_id=${ticketId}`);
+            const res = await fetch(`/api/tickets/chat?chamado_id=${encodeURIComponent(ticketId)}`, {
+                credentials: 'include',
+                cache: 'no-store',
+                headers: { 'Accept': 'application/json' }
+            });
             if (!res.ok) throw new Error(`Falha ao carregar histórico (${res.status})`);
             const payload = await res.json();
             if (loadToken !== messageHistoryLoadToken || !sameTicket(ticketId, activeTicketId)) return;
@@ -1927,6 +1968,10 @@
         } catch(e) {
             if (loadToken !== messageHistoryLoadToken) return;
             console.error("Erro ao carregar mensagens:", e);
+            const timeline = document.getElementById('chat-timeline');
+            if (timeline && sameTicket(ticketId, activeTicketId)) {
+                timeline.innerHTML = '<div class="flex h-full items-center justify-center p-6 text-center text-xs text-amber-300">Não foi possível carregar as mensagens. Tentando novamente...</div>';
+            }
         }
     }
 
@@ -2135,14 +2180,29 @@
         const previousTime = Number(previousRow.dataset.albumTime);
         const currentTime = Number(row.dataset.albumTime);
         const interval = currentTime - previousTime;
-        if (!Number.isFinite(interval) || interval < 0 || interval > 120000) return;
+        if (!Number.isFinite(interval) || interval < 0 || interval > 600000) return;
 
         let album = previous?.matches('.media-album') ? previous : null;
         if (!album) {
+            // Só cria álbum a partir da quarta foto consecutiva. As três
+            // primeiras permanecem como mensagens individuais.
+            const chain = [previousRow];
+            let cursor = previousRow.previousElementSibling;
+            while (cursor?.matches('.message-row[data-album-image="true"]')) {
+                if (cursor.dataset.albumSender !== row.dataset.albumSender || cursor.dataset.albumSide !== row.dataset.albumSide) break;
+                const cursorTime = Number(cursor.dataset.albumTime);
+                const nextTime = Number(chain[chain.length - 1].dataset.albumTime);
+                if (!Number.isFinite(cursorTime) || !Number.isFinite(nextTime) || nextTime - cursorTime < 0 || nextTime - cursorTime > 600000) break;
+                chain.push(cursor);
+                cursor = cursor.previousElementSibling;
+            }
+            if (chain.length < 3) return;
+            chain.reverse();
+
             album = document.createElement('div');
             album.className = 'media-album';
             album.dataset.albumSide = row.dataset.albumSide;
-            const senderLabel = previousRow.querySelector('.message-sender-label');
+            const senderLabel = chain[0].querySelector('.message-sender-label');
             if (senderLabel) {
                 const header = document.createElement('div');
                 header.className = 'media-album-header';
@@ -2150,8 +2210,8 @@
                 header.textContent = senderLabel.textContent;
                 album.appendChild(header);
             }
-            previousRow.before(album);
-            album.appendChild(previousRow);
+            chain[0].before(album);
+            chain.forEach(item => album.appendChild(item));
             const footer = document.createElement('div');
             footer.className = 'media-album-footer';
             album.appendChild(footer);
@@ -2164,7 +2224,13 @@
 
     function atualizarVisualAlbum(album) {
         const rows = Array.from(album.querySelectorAll(':scope > .message-row[data-album-image="true"]'));
-        rows.forEach((item, index) => item.classList.toggle('media-album-overflow', index >= 4));
+        rows.forEach((item, index) => {
+            const overflow = index >= 4;
+            item.classList.toggle('media-album-overflow', overflow);
+            item.style.display = overflow ? 'none' : 'block';
+            item.style.visibility = overflow ? 'hidden' : 'visible';
+        });
+        album.style.minHeight = rows.length ? '176px' : '';
 
         const footer = album.querySelector(':scope > .media-album-footer');
         const latestMetadata = rows.at(-1)?.querySelector('.bubble-meta');
@@ -2659,6 +2725,15 @@
                     const detail = await res.text();
                     throw new Error(detail || 'Falha ao enviar mensagem.');
                 }
+                // Mostra imediatamente a mensagem enviada no Tauri. O webhook
+                // do WhatsApp pode demorar ou não retornar eventos fromMe.
+                const sentPayload = await res.json().catch(() => null);
+                if (sentPayload?.message) {
+                    appendMessageToTimeline({
+                        ...sentPayload.message,
+                        is_me: true,
+                    }, true);
+                }
             }
             await loadMessages(activeTicketId);
             cancelReply();
@@ -3062,6 +3137,7 @@
                         c.ultima_mensagem = data.preview || data.mensagem || '...';
                         const d = new Date();
                         c.data_ultima_mensagem = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                        c.data_ultima_mensagem_iso = d.toISOString();
                         
                         chatsData = chatsData.filter(x => !sameTicket(x.id, tId));
                         chatsData.unshift(c);
@@ -3141,13 +3217,30 @@
         document.getElementById('btn-allow-notif')?.addEventListener('click', () => {
             const nativeTauri = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
             if (nativeTauri) {
-                const invoke = window.__TAURI_INTERNALS__
-                    ? window.__TAURI_INTERNALS__.invoke
-                    : window.__TAURI__.core?.invoke;
-                if (typeof invoke === 'function') {
-                    Promise.resolve(invoke('request_native_notification_permission'))
-                        .catch(() => null)
-                        .then(() => invoke('trigger_message_alert', { sender: 'Teste' }))
+                const tauri = window.__TAURI__ || {};
+                const nativeNotifications = tauri.notification;
+                const invoke = window.__TAURI_INTERNALS__?.invoke || tauri.core?.invoke;
+                const enableNativeNotifications = async () => {
+                    // API oficial do plugin Tauri. Ela funciona melhor no instalador
+                    // do Windows do que chamar somente o comando Rust personalizado.
+                    if (nativeNotifications?.isPermissionGranted && nativeNotifications?.requestPermission && nativeNotifications?.sendNotification) {
+                        let granted = await nativeNotifications.isPermissionGranted();
+                        if (!granted) {
+                            granted = (await nativeNotifications.requestPermission()) === 'granted';
+                        }
+                        if (!granted) throw new Error('Permissão de notificação negada');
+                        nativeNotifications.sendNotification({
+                            title: 'Central de Atendimento',
+                            body: 'Notificações do Windows ativadas.'
+                        });
+                        return;
+                    }
+                    if (typeof invoke !== 'function') throw new Error('API Tauri indisponível');
+                    await invoke('request_native_notification_permission');
+                    await invoke('trigger_message_alert', { sender: 'Teste', preview: 'Notificações do Windows ativadas.' });
+                };
+                if (nativeNotifications || typeof invoke === 'function') {
+                    enableNativeNotifications()
                         .then(() => {
                             try { localStorage.setItem('central_atendimento_native_notifications', '1'); } catch (_) {}
                             document.getElementById('notif-permission-banner')?.remove();
@@ -3171,9 +3264,22 @@
             });
         });
         loadChats().then(() => {
-            const ticketFromUrl = Number(new URLSearchParams(window.location.search).get('ticket'));
+            const params = new URLSearchParams(window.location.search);
+            const queueFromUrl = params.get('queue');
+            if (['aguardando', 'atendendo', 'grupos', 'resolvidos'].includes(queueFromUrl)) {
+                changeQueueTab(queueFromUrl);
+            }
+            const ticketFromUrl = Number(params.get('ticket'));
             if (ticketFromUrl) openChat(ticketFromUrl);
         });
+        // Recupera a tela caso uma resposta antiga do túnel deixe o carregamento preso.
+        setTimeout(() => {
+            const list = document.getElementById('chats-list');
+            if (list?.textContent.includes('Buscando conversas')) {
+                chatsLoading = false;
+                loadChats();
+            }
+        }, 8000);
         loadChatBackground();
         loadAtendimentoOperators();
         connectWebSocket();
@@ -3199,8 +3305,12 @@
             if (!document.hidden) pollActiveMessages();
         }, 3000);
         
-        // Configura polling de fallback caso o websocket falhe
-        // setInterval(loadChats, 15000); // Removido para tempo real puramente via WebSocket
+        // Fallback para o Tauri e túneis que não mantêm WebSocket de forma estável.
+        setInterval(() => {
+            if (!document.hidden && activeTicketId && !chatsLoading) {
+                loadMessages(activeTicketId);
+            }
+        }, 15000);
     });
 
     // --- Painel de Contato ---

@@ -1,7 +1,7 @@
 import os
 import uuid
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -108,7 +108,7 @@ def _publish_whatsapp_status(request: Request, titulo: str, mensagem: str, media
 
 @router.get("/api/status-empresa")
 def listar_status(request: Request):
-    agora = datetime.now()
+    agora = datetime.now(timezone.utc)
     tenant_id = None
     if get_signed_cookie(request, "user_role") != "admin":
         tenant_id, _ = _status_scope(request)
@@ -159,7 +159,7 @@ async def publicar_status(
             media_tipo=media_tipo,
             cor=cor if cor in {"emerald", "indigo", "amber", "rose"} else "emerald",
             criado_por=criado_por,
-            expira_em=datetime.now() + timedelta(hours=24),
+            expira_em=datetime.now(timezone.utc) + timedelta(hours=24),
             empresa_atendimento_id=tenant_id,
             whatsapp_instance=instance,
         )

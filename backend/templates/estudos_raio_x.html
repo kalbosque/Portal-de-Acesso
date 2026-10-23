@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Raio-X da banca | {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-8">
+    <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+            <a href="/estudos" class="text-xs font-bold text-sky-300 hover:text-sky-200">← Voltar para Estudos</a>
+            <p class="mt-4 text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Análise de concurso</p>
+            <h1 class="mt-2 text-3xl font-black text-white">Raio-X da banca</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">Escolha a banca e envie o edital. A plataforma separa o que foi identificado no edital do que é perfil orientativo. Frequência e percentuais só aparecem com base real de questões.</p>
+        </div>
+        <div class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-200">Fontes oficiais e análise rastreável</div>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-[380px_1fr]">
+        <section class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+            <h2 class="text-lg font-black text-white">Nova leitura</h2>
+            <form method="post" action="/estudos/raio-x" enctype="multipart/form-data" class="mt-5 space-y-4">
+                <div>
+                    <label class="mb-1 block text-xs font-bold text-slate-300">Banca</label>
+                    <select name="banca" required class="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white">
+                        {% for banca in bancas %}<option value="{{ banca }}">{{ banca }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-bold text-slate-300">Cargo (opcional)</label>
+                    <input name="cargo" class="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white" placeholder="Ex.: Técnico administrativo">
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-bold text-slate-300">Edital em PDF</label>
+                    <input type="file" name="edital" accept="application/pdf,.pdf" required class="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-xs text-slate-300">
+                    <p class="mt-2 text-[11px] text-slate-500">Máximo de 15 MB. O texto é extraído para localizar as matérias previstas.</p>
+                </div>
+                <button class="w-full rounded-xl bg-amber-400 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-950 hover:bg-amber-300">Ler edital e gerar raio-X</button>
+            </form>
+        </section>
+
+        <section class="space-y-6">
+            {% if analise and dados %}
+            <div class="rounded-3xl border border-sky-500/20 bg-slate-900/70 p-6">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div><p class="text-[10px] font-black uppercase tracking-widest text-sky-300">Resultado salvo</p><h2 class="mt-2 text-2xl font-black text-white">{{ analise.banca }}</h2><p class="mt-1 text-sm text-slate-400">{{ analise.cargo or 'Cargo não informado' }} · {{ analise.edital_nome }}</p></div>
+                    <form method="post" action="/estudos/raio-x/excluir" onsubmit="return confirm('Excluir esta análise? Essa ação não poderá ser desfeita.');">
+                        <button type="submit" class="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-500 hover:text-white">Excluir análise</button>
+                    </form>
+                    <span class="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">{{ dados.analise.paginas }} página(s) lida(s)</span>
+                </div>
+                <p class="mt-5 rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-6 text-slate-300">{{ dados.analise.descricao }}</p>
+            </div>
+
+            <div class="grid gap-6 md:grid-cols-2">
+                <div class="rounded-3xl border border-violet-500/20 bg-slate-900/70 p-6">
+                    <h3 class="text-lg font-black text-white">Estilo da banca</h3>
+                    <p class="mt-3 text-sm leading-6 text-slate-300">{{ dados.analise.estilo }}</p>
+                    <p class="mt-4 text-xs leading-5 text-slate-500"><strong class="text-slate-300">Formato:</strong> {{ dados.analise.formato }}</p>
+                </div>
+                <div class="rounded-3xl border border-cyan-500/20 bg-slate-900/70 p-6">
+                    <h3 class="text-lg font-black text-white">O que costuma cobrar</h3>
+                    <ul class="mt-4 space-y-2 text-sm text-slate-300">{% for item in dados.analise.como_cobra %}<li>• {{ item }}</li>{% endfor %}</ul>
+                </div>
+                <div class="rounded-3xl border border-rose-500/20 bg-slate-900/70 p-6 md:col-span-2">
+                    <h3 class="text-lg font-black text-white">Armadilhas e atenção na prova</h3>
+                    <div class="mt-4 grid gap-2 sm:grid-cols-2">{% for item in dados.analise.armadilhas_banca %}<div class="rounded-xl border border-rose-500/10 bg-rose-500/5 px-3 py-3 text-sm text-slate-300">{{ item }}</div>{% endfor %}</div>
+                </div>
+            </div>
+
+            <div class="grid gap-6 md:grid-cols-2">
+                <div class="rounded-3xl border border-emerald-500/20 bg-slate-900/70 p-6">
+                    <h3 class="text-lg font-black text-white">Matérias encontradas no edital</h3>
+                    <p class="mt-1 text-xs text-slate-500">{{ dados.analise.escopo }}. Confira sempre o PDF original.</p>
+                    {% if dados.analise.linha_cargo %}<p class="mt-2 rounded-lg border border-sky-500/10 bg-sky-500/5 px-3 py-2 text-[11px] text-sky-200"><strong>Linha usada:</strong> {{ dados.analise.linha_cargo }}</p>{% endif %}
+                    <div class="mt-4">
+                        <div class="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Conhecimentos gerais</div>
+                        <div class="flex flex-wrap gap-2">{% for materia in dados.materias.gerais %}<span class="rounded-full bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-200">{{ materia }}</span>{% else %}<span class="text-xs text-slate-500">Nenhuma matéria geral identificada neste trecho.</span>{% endfor %}</div>
+                        <div class="mb-2 mt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Conhecimentos específicos</div>
+                        <div class="flex flex-wrap gap-2">{% for materia in dados.materias.especificas %}<span class="rounded-full bg-sky-500/15 px-3 py-2 text-xs font-bold text-sky-200">{{ materia }}</span>{% else %}<span class="text-xs text-slate-500">Nenhuma matéria específica identificada neste trecho.</span>{% endfor %}</div>
+                    </div>
+                </div>
+                <div class="rounded-3xl border border-amber-500/20 bg-slate-900/70 p-6">
+                    <h3 class="text-lg font-black text-white">Foco orientativo da banca</h3>
+                    <ul class="mt-4 space-y-2 text-sm text-slate-300">{% for item in dados.analise.foco %}<li>• {{ item }}</li>{% endfor %}</ul>
+                </div>
+                <div class="rounded-3xl border border-rose-500/20 bg-slate-900/70 p-6">
+                    <h3 class="text-lg font-black text-white">Armadilhas para revisar</h3>
+                    <ul class="mt-4 space-y-2 text-sm text-slate-300">{% for item in dados.analise.alertas %}<li>• {{ item }}</li>{% endfor %}</ul>
+                </div>
+                <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+                    <h3 class="text-lg font-black text-white">Transparência da análise</h3>
+                    <ul class="mt-4 space-y-2 text-xs leading-5 text-slate-400">{% for item in dados.analise.limites %}<li>• {{ item }}</li>{% endfor %}</ul>
+                </div>
+            </div>
+
+            <div class="rounded-3xl border border-indigo-500/20 bg-slate-900/70 p-6">
+                <h3 class="text-lg font-black text-white">Provas anteriores e comparação</h3>
+                <p class="mt-2 text-sm text-slate-400">Use esta busca para localizar provas do mesmo cargo e da mesma banca. Quando não houver prova pública, compare com cargos semelhantes e confirme no site oficial.</p>
+                <a href="{{ dados.analise.referencia_provas }}" target="_blank" rel="noopener" class="mt-4 inline-flex rounded-xl bg-indigo-500 px-4 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-400">Pesquisar provas do cargo</a>
+            </div>
+
+            <div class="rounded-3xl border border-white/10 bg-slate-900/70 p-6">
+                <h3 class="text-lg font-black text-white">Fontes para conferência</h3>
+                <div class="mt-4 grid gap-2 sm:grid-cols-2">{% for fonte in dados.fontes %}<a href="{{ fonte }}" target="_blank" rel="noopener" class="truncate rounded-xl border border-white/10 bg-slate-950/50 px-3 py-3 text-xs text-sky-300 hover:bg-slate-800">{{ fonte }}</a>{% endfor %}</div>
+            </div>
+            {% else %}
+            <div class="flex min-h-[420px] items-center justify-center rounded-3xl border border-dashed border-white/10 bg-slate-900/50 p-8 text-center"><div><div class="text-5xl">🔎</div><h2 class="mt-4 text-xl font-black text-white">Envie um edital para começar</h2><p class="mt-2 max-w-md text-sm text-slate-400">A análise ficará salva no seu usuário e poderá ser revisada depois.</p></div></div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %}

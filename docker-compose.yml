@@ -82,6 +82,19 @@ services:
       evolution-api:
         condition: service_healthy
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
   worker:
     build: ./backend
     command: python background_worker.py
@@ -104,19 +117,25 @@ services:
       db:
         condition: service_healthy
 
-  ngrok:
-    image: ngrok/ngrok:latest
+  cloudflared:
+    image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command:
-      - "http"
-      - "--url=crust-backroom-jolt.ngrok-free.dev"
-      - "web:8000"
+      - "tunnel"
+      - "--no-autoupdate"
+      - "run"
+      - "--token-file"
+      - "/run/secrets/cloudflare_tunnel_token"
     environment:
-      - NGROK_AUTHTOKEN=3JTEEKtO8JI8zFGuYFRbMScl1Mc_6suYrBaNhSBqzwcVfohg4
+      - TUNNEL_TRANSPORT_PROTOCOL=quic
+    volumes:
+      - ./cloudflare-tunnel-token.txt:/run/secrets/cloudflare_tunnel_token:ro
     depends_on:
       - web
 
 volumes:
   db_data:
   evolution_instances:
+  caddy_data:
+  caddy_config:
 

@@ -17,8 +17,8 @@ DB_PASS = os.getenv("DB_PASS", "root")
 # Monta a URL diretamente a partir das variáveis de ambiente
 # O healthcheck do docker-compose já garante que o DB está pronto antes
 # de este container iniciar — não é necessário testar a conexão aqui.
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
-print(f"[DB] Usando URL: postgresql://{DB_USER}:***@{DB_HOST}/{DB_NAME}")
+DATABASE_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
+print(f"[DB] Usando URL: postgresql+psycopg2://{DB_USER}:***@{DB_HOST}/{DB_NAME}")
 
 engine = create_engine(
     DATABASE_URL,

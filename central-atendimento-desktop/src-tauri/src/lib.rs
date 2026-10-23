@@ -47,8 +47,14 @@ fn register_windows_notification_identity() -> bool {
 }
 
 #[tauri::command]
-fn trigger_message_alert(app: tauri::AppHandle, sender: String) {
-    let body = format!("{} enviou uma nova mensagem.", sender);
+fn trigger_message_alert(app: tauri::AppHandle, sender: String, preview: String) {
+    let sender = sender.trim().to_string();
+    let preview = preview.trim().to_string();
+    let body = if preview.is_empty() {
+        "Nova mensagem recebida pelo WhatsApp.".to_string()
+    } else {
+        preview.chars().take(240).collect::<String>()
+    };
     let app_title = "Central de Atendimento v0.1.7";
 
     // Pisca a barra de tarefas sem forçar foco (forçar foco suprime o toast do Windows)
@@ -57,7 +63,7 @@ fn trigger_message_alert(app: tauri::AppHandle, sender: String) {
         std::thread::spawn(move || {
             for i in 0..20 {
                 let flash_title = if i % 2 == 0 {
-                    "⚠️ NOVA MENSAGEM"
+                    "NOVA MENSAGEM"
                 } else {
                     app_title
                 };
@@ -73,7 +79,7 @@ fn trigger_message_alert(app: tauri::AppHandle, sender: String) {
     // Notificação nativa Windows (toast no canto da tela)
     let result = app.notification()
         .builder()
-        .title("⚠️ Nova mensagem")
+        .title(&format!("Nova mensagem · {}", if sender.is_empty() { "Cliente" } else { &sender }))
         .body(&body)
         .show();
     if let Err(error) = result {

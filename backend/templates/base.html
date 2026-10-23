@@ -10,7 +10,9 @@
     <!-- Assets hospedados localmente - sem dependência de internet -->
     <script src="/static/js/tailwind.min.js"></script>
     <link href="/static/css/google-fonts.css" rel="stylesheet">
+    {% if not request.url.path.startswith('/estudos') %}
     <script src="/static/js/chart.min.js"></script>
+    {% endif %}
     
     <style>
         :root { --app-color: {{ config.APP_COLOR }}; }

@@ -4,7 +4,8 @@ import base64
 import json
 import mimetypes
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 from fastapi import APIRouter, Request, Form, UploadFile, File, HTTPException, BackgroundTasks
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
 
 UPLOADS_DIR = "public_html/uploads"
 os.makedirs(UPLOADS_DIR, exist_ok=True)
+DISPLAY_TIMEZONE = ZoneInfo("America/Porto_Velho")
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,14 @@ def _get_user(request: Request):
 
 def _calc_sla(prioridade: str) -> datetime:
     hours = {"Alta": 4, "Media": 24, "Baixa": 72}.get(prioridade, 24)
-    return datetime.now() + timedelta(hours=hours)
+    return datetime.now(timezone.utc) + timedelta(hours=hours)
+
+
+def _display_datetime(value: datetime) -> datetime:
+    """Converte timestamps UTC armazenados para o horário de Rondônia."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(DISPLAY_TIMEZONE)
 
 
 def _check_whatsapp_instance_access(request: Request, chamado: Chamado):
@@ -210,7 +219,7 @@ async def update_status(request: Request, background_tasks: BackgroundTasks):
             chamado.assigned_user = user_name
             
         if new_status == "Resolvido":
-            chamado.data_resolucao = datetime.now()
+            chamado.data_resolucao = datetime.now(timezone.utc)
             
         session.commit()
         session.refresh(chamado)
@@ -251,7 +260,7 @@ async def finalizar_ticket(request: Request, background_tasks: BackgroundTasks):
             chamado.assigned_user = user_name
             
         chamado.nota_tecnica = nota
-        chamado.data_resolucao = datetime.now()
+        chamado.data_resolucao = datetime.now(timezone.utc)
         session.commit()
         session.refresh(chamado)
 
@@ -289,7 +298,7 @@ async def resolver_ticket_compat(ticket_id: int, request: Request, background_ta
         chamado.status = "Resolvido"
         chamado.assigned_user = chamado.assigned_user or user_name
         chamado.nota_tecnica = nota
-        chamado.data_resolucao = datetime.now()
+        chamado.data_resolucao = datetime.now(timezone.utc)
         session.add(chamado)
         session.commit()
 
@@ -336,13 +345,18 @@ def _ensure_favorite_schema():
 MESSAGE_EDIT_WINDOW_MINUTES = 15
 MESSAGE_DELETE_WINDOW_HOURS = 60
 
+def _message_age(message: ChamadoInteracao):
+    data_hora = message.data_hora
+    agora = datetime.now(data_hora.tzinfo) if data_hora and data_hora.tzinfo else datetime.now()
+    return agora - data_hora if data_hora else timedelta.max
+
 
 def _message_can_edit(message: ChamadoInteracao, user_name: str) -> bool:
-    return message.usuario == user_name and datetime.now() - message.data_hora <= timedelta(minutes=MESSAGE_EDIT_WINDOW_MINUTES)
+    return message.usuario == user_name and _message_age(message) <= timedelta(minutes=MESSAGE_EDIT_WINDOW_MINUTES)
 
 
 def _message_can_delete(message: ChamadoInteracao, user_name: str, user_role: str) -> bool:
-    return (message.usuario == user_name or user_role == "admin") and datetime.now() - message.data_hora <= timedelta(hours=MESSAGE_DELETE_WINDOW_HOURS)
+    return (message.usuario == user_name or user_role == "admin") and _message_age(message) <= timedelta(hours=MESSAGE_DELETE_WINDOW_HOURS)
 
 
 def _sync_group_history_name(session: Session, chamado: Chamado, messages):
@@ -438,7 +452,7 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
                     "can_edit": _message_can_edit(m, user_name),
                     "can_delete": _message_can_delete(m, user_name, user_role),
                     "whatsapp_status": m.whatsapp_status or "sent",
-                    "data_hora": m.data_hora.strftime("%d/%m/%Y %H:%M:%S"),
+                    "data_hora": _display_datetime(m.data_hora).strftime("%d/%m/%Y %H:%M:%S"),
                 }
                 for m in unique_msgs
             ],
@@ -553,6 +567,9 @@ async def send_chat_message(
             "msg_id": msg.id,
             "usuario": user_name,
             "preview": msg_text[:80],
+            "mensagem": msg_text,
+            "data_hora": _display_datetime(msg.data_hora).strftime("%d/%m/%Y %H:%M:%S"),
+            "is_me": True,
         },
     )
 
@@ -566,7 +583,7 @@ async def send_chat_message(
             "responde_a_usuario": msg.responde_a_usuario,
             "responde_a_texto": msg.responde_a_texto,
             "whatsapp_status": msg.whatsapp_status or "sent",
-            "data_hora": msg.data_hora.strftime("%d/%m/%Y %H:%M:%S"),
+            "data_hora": _display_datetime(msg.data_hora).strftime("%d/%m/%Y %H:%M:%S"),
             "is_me": True,
             "can_edit": True,
             "can_delete": True,
@@ -771,7 +788,7 @@ def get_chat_legacy(chamado_id: int, request: Request):
                 "whatsapp_message_id": m.whatsapp_message_id,
                 "whatsapp_remote_jid": m.whatsapp_remote_jid,
                 "reacao": m.reacao,
-                "data_hora": m.data_hora.strftime("%d/%m %H:%M"),
+                "data_hora": _display_datetime(m.data_hora).strftime("%d/%m %H:%M"),
                 "is_me": m.usuario == user_name,
                 "can_edit": _message_can_edit(m, user_name),
                 "can_delete": _message_can_delete(m, user_name, user_role),

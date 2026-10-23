@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background: #0b0214; color: white; overflow-x: hidden; }
+        body { font-family: 'Inter', sans-serif; background: #0b0214; color: white; overflow-x: hidden; overflow-y: auto; }
         .font-premium { font-family: 'Outfit', sans-serif; }
         .bg-custom-grid { background-color: #0b0214; background-image: radial-gradient(circle at 50% 50%, rgba(99,102,241,.15) 0%, transparent 50%), radial-gradient(circle at 20% 30%, rgba(139,92,246,.1) 0%, transparent 40%), linear-gradient(rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 100% 100%, 100% 100%, 40px 40px; }
         .glass-panel { background: rgba(23,20,31,.65); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.08); box-shadow: 0 20px 50px rgba(0,0,0,.4), inset 0 1px 1px rgba(255,255,255,.1); position: relative; }
@@ -17,7 +17,7 @@
         .glass-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.2); outline: none; }
 
         /* ===== CAROUSEL BACKGROUND ===== */
-        .bg-carousel { display: none; position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+        .bg-carousel { display: block; position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
         .bg-slide {
             position: absolute; inset: 0;
             opacity: 0;
@@ -98,6 +98,15 @@
             transition: all 0.4s ease;
         }
         .c-dot.active { width: 24px; border-radius: 3px; background: rgba(255,255,255,0.7); }
+
+        @media (max-width: 640px) {
+            body { padding: 1.25rem 0.75rem 3.5rem; }
+            main { max-width: 100%; }
+            section.glass-panel { padding: 1.5rem; border-radius: 1.5rem; }
+            .login-heading { margin-bottom: 1.5rem; }
+            .login-heading h1 { font-size: 1.75rem; }
+            .carousel-dots { bottom: 12px; }
+        }
     </style>
 </head>
 <body class="bg-custom-grid min-h-screen flex flex-col justify-between items-center px-4 py-10 relative overflow-hidden">
@@ -129,6 +138,7 @@
         <div class="c-dot" id="dot-1"></div>
         <div class="c-dot" id="dot-2"></div>
         <div class="c-dot" id="dot-3"></div>
+        <div class="c-dot" id="dot-4"></div>
     </div>
 
     <!-- Conteúdo Principal -->

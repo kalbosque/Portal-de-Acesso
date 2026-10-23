@@ -1,9 +1,11 @@
 import os
 import json
+import logging
 import re
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
+from urllib.parse import quote
 from fastapi import FastAPI, Header, HTTPException, Request, BackgroundTasks, Form, UploadFile, File
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
@@ -13,7 +15,7 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, create_engine, select, func, SQLModel, desc
-from models import Usuario, Impressora, Impressao, Licenca, Chamado, ChamadoInteracao, TipoProblema, EquipamentoTI, MarmitaCardapio, MarmitaPedido, EstudoSessao, EstudoPlano, EstudoCronometro
+from models import Usuario, Impressora, Impressao, Licenca, Chamado, ChamadoInteracao, TipoProblema, EquipamentoTI, MarmitaCardapio, MarmitaPedido, EstudoSessao, EstudoPlano, EstudoCronometro, EstudoRaioXBanca
 import license_service
 import api_printers
 import api_reports
@@ -43,6 +45,7 @@ from slowapi.errors import RateLimitExceeded
 load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+logger = logging.getLogger(__name__)
 
 # FunÃ§Ã£o para carregar configuraÃ§Ãµes originais do PHP
 def load_app_config():
@@ -56,7 +59,8 @@ def load_app_config():
         try:
             with open(config_path, "r", encoding="utf-8-sig") as f:
                 return json.load(f)
-        except: pass
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.error("Não foi possível carregar %s: %s", config_path, exc)
     return default_config
 
 APP_CONFIG = load_app_config()
@@ -165,6 +169,8 @@ def ensure_schema_compatibility():
         "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS slot INTEGER",
         "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS horario_inicio VARCHAR(10)",
         "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS horario_fim VARCHAR(10)",
+        "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS tipo_registro VARCHAR(20) DEFAULT 'estudo'",
+        "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS nome_simulado VARCHAR(255)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS visivel_suporte BOOLEAN DEFAULT TRUE",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_status VARCHAR(20) DEFAULT 'sent'",
         "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS limite_usuarios_custom INTEGER",
@@ -235,7 +241,15 @@ async def view_chamados(request: Request, success: str = None, error: str = None
             
             hoje = datetime.now().date()
             amanha = hoje + timedelta(days=1)
-            quatro_horas_atras = datetime.now() - timedelta(hours=4)
+            quatro_horas_atras = datetime.now(timezone.utc) - timedelta(hours=4)
+
+            def como_utc(valor):
+                if valor is None:
+                    return None
+                if valor.tzinfo is None:
+                    # Registros antigos foram gravados sem fuso; no servidor eles representam UTC.
+                    return valor.replace(tzinfo=timezone.utc)
+                return valor.astimezone(timezone.utc)
 
             try:
                 if user_role == "admin":
@@ -261,7 +275,12 @@ async def view_chamados(request: Request, success: str = None, error: str = None
             atendimento = sum(1 for c in chamados if c.status == "Em Atendimento")
             resolvidos = sum(1 for c in chamados if c.status == "Resolvido")
             resolvidos_hoje = sum(1 for c in chamados if c.status == "Resolvido" and c.data_resolucao and hoje <= c.data_resolucao.date() < amanha)
-            urgentes = sum(1 for c in chamados if c.status == "Aberto" and getattr(c, "data_abertura", datetime.now()) < quatro_horas_atras)
+            urgentes = sum(
+                1 for c in chamados
+                if c.status == "Aberto"
+                and (data_abertura := como_utc(getattr(c, "data_abertura", None))) is not None
+                and data_abertura < quatro_horas_atras
+            )
 
             saude_val = round((resolvidos / total_tickets * 100)) if total_tickets > 0 else 100
 
@@ -472,7 +491,7 @@ async def download_latest_agent(x_api_key: Optional[str] = Header(None)):
 def update_status_files(maquina: str, ip: str, payload: dict, versao: str):
     """Atualiza os arquivos JSON de status exportando do DB para manter compatibilidade"""
     from models import StatusMaquina
-    agora = datetime.now()
+    agora = datetime.now(timezone.utc)
     status_file = "status_maquinas.json"
     
     with Session(engine) as session:
@@ -669,7 +688,7 @@ async def dashboard(request: Request):
             total_maquinas = session.exec(select(func.count(StatusMaquina.ip))).one() or 0
             
             from datetime import timedelta
-            limite_online = datetime.now() - timedelta(minutes=5)
+            limite_online = datetime.now(timezone.utc) - timedelta(minutes=5)
             maquinas_online = session.exec(select(func.count(StatusMaquina.ip)).where(StatusMaquina.timestamp >= limite_online)).one() or 0
         except Exception as e:
             print("Erro ao carregar maquinas:", str(e))
@@ -682,7 +701,7 @@ async def dashboard(request: Request):
         urgentes_chamados = session.exec(
             select(func.count(Chamado.id)).where(
                 Chamado.status == 'Aberto',
-                Chamado.data_abertura < (datetime.now() - timedelta(hours=4))
+                Chamado.data_abertura < (datetime.now(timezone.utc) - timedelta(hours=4))
             )
         ).one() or 0
         stats_chamados = {
@@ -1176,6 +1195,403 @@ async def view_usuarios(request: Request):
             }
         )
 
+RAIO_X_BANCAS = {
+    "Cebraspe": {
+        "descricao": "Questões frequentemente julgadas como certo/errado, com atenção a detalhes, exceções e interpretação literal.",
+        "foco": ["literalidade da lei", "exceções e prazos", "interpretação de textos", "itens com uma única afirmação"],
+        "alertas": ["palavras absolutas", "troca de conceitos próximos", "jurisprudência desatualizada"],
+        "fontes": ["https://www.cebraspe.org.br/concursos/", "https://www.gov.br/planalto/pt-br/"],
+    },
+    "FGV": {
+        "descricao": "Costuma explorar interpretação, aplicação prática, alternativas próximas e enunciados contextualizados.",
+        "foco": ["interpretação de texto", "casos práticos", "conceitos e exceções", "raciocínio aplicado"],
+        "alertas": ["alternativas parcialmente corretas", "comandos negativos", "mistura de regra e exceção"],
+        "fontes": ["https://conhecimento.fgv.br/concursos", "https://www.fgv.br/"],
+    },
+    "FCC": {
+        "descricao": "Banca tradicional, com cobrança objetiva de legislação, gramática, conceitos e aplicação direta do conteúdo.",
+        "foco": ["lei seca", "conceitos fundamentais", "gramática e interpretação", "jurisprudência consolidada"],
+        "alertas": ["artigos parecidos", "prazos e competências", "detalhes de classificação"],
+        "fontes": ["https://www.concursosfcc.com.br/", "https://www.planalto.gov.br/"],
+    },
+    "Vunesp": {
+        "descricao": "Perfil geralmente objetivo, com textos, legislação e situações práticas ligadas ao cargo.",
+        "foco": ["interpretação", "legislação do edital", "conhecimentos específicos", "situações do cotidiano"],
+        "alertas": ["detalhes do texto-base", "conceitos semelhantes", "comando exato da questão"],
+        "fontes": ["https://www.vunesp.com.br/", "https://www.planalto.gov.br/"],
+    },
+    "Instituto AOCP": {
+        "descricao": "Provas objetivas com cobrança de conteúdo do edital, legislação e conhecimentos específicos do cargo.",
+        "foco": ["legislação", "conhecimentos específicos", "língua portuguesa", "informática e atualidades quando previstas"],
+        "alertas": ["artigos e definições", "itens fora do núcleo mais estudado", "confusão entre atribuições"],
+        "fontes": ["https://www.institutoaocp.org.br/", "https://www.planalto.gov.br/"],
+    },
+    "IBFC": {
+        "descricao": "Cobrança distribuída pelo edital, combinando teoria, legislação e questões de aplicação.",
+        "foco": ["conteúdo programático", "legislação", "português", "conhecimentos específicos"],
+        "alertas": ["detalhes de normas", "conceitos próximos", "interpretação do enunciado"],
+        "fontes": ["https://concursos.ibfc.org.br/", "https://www.planalto.gov.br/"],
+    },
+    "Instituto Consulplan": {
+        "descricao": "Perfil objetivo, com atenção ao conteúdo literal do edital e aos conhecimentos específicos.",
+        "foco": ["lei seca", "conteúdo específico", "português", "informática"],
+        "alertas": ["exceções legais", "termos técnicos", "alternativas muito parecidas"],
+        "fontes": ["https://www.institutoconsulplan.org.br/", "https://www.planalto.gov.br/"],
+    },
+    "Fundação Carlos Chagas": {
+        "descricao": "Mesmo perfil da FCC; cadastro separado para facilitar a busca de editais e provas antigas.",
+        "foco": ["legislação", "conceitos", "português", "conhecimentos específicos"],
+        "alertas": ["prazos", "competências", "diferenças entre dispositivos"],
+        "fontes": ["https://www.concursosfcc.com.br/", "https://www.planalto.gov.br/"],
+    },
+    "Legalle Concursos": {
+        "descricao": "Banca regional com cobrança diretamente relacionada ao edital e à legislação indicada.",
+        "foco": ["conteúdo do edital", "legislação municipal/estadual", "português", "conhecimentos específicos"],
+        "alertas": ["normas locais", "atualização da lei", "detalhes do cargo"],
+        "fontes": ["https://legalleconcursos.com.br/"],
+    },
+    "Fundatec": {
+        "descricao": "Costuma cobrar o programa do edital com questões objetivas e legislação aplicada ao órgão.",
+        "foco": ["legislação local", "conhecimentos específicos", "português", "administração pública"],
+        "alertas": ["normas do órgão", "conceitos administrativos", "atualizações legislativas"],
+        "fontes": ["https://www.fundatec.org.br/"],
+    },
+    "Quadrix": {
+        "descricao": "Cobrança objetiva de legislação profissional, conhecimentos gerais e específicos conforme o conselho ou órgão.",
+        "foco": ["legislação profissional", "ética", "conhecimentos específicos", "português"],
+        "alertas": ["resoluções", "competências do conselho", "prazos e penalidades"],
+        "fontes": ["https://www.quadrix.org.br/"],
+    },
+    "IADES": {"descricao": "Questões objetivas com peso relevante para o conteúdo específico e a legislação do edital.", "foco": ["conhecimentos específicos", "legislação", "português", "atualidades quando previstas"], "alertas": ["comandos negativos", "detalhes normativos", "conceitos próximos"], "fontes": ["https://www.iades.com.br/"]},
+    "Consulplan": {"descricao": "Perfil objetivo e bastante ligado ao conteúdo programático do edital.", "foco": ["lei seca", "conhecimentos específicos", "português", "informática"], "alertas": ["exceções", "termos técnicos", "alternativas parecidas"], "fontes": ["https://www.institutoconsulplan.org.br/"]},
+    "FUNDATEC": {"descricao": "Banca com forte presença regional e cobrança do edital e das normas do órgão.", "foco": ["legislação local", "específicos", "português", "administração pública"], "alertas": ["normas locais", "atualizações legais", "atribuições do cargo"], "fontes": ["https://www.fundatec.org.br/"]},
+    "Instituto Verbena": {"descricao": "Cobra o programa do edital com questões objetivas e conteúdo específico do cargo.", "foco": ["específicos", "legislação", "português", "políticas públicas"], "alertas": ["normas locais", "conceitos técnicos", "comando da questão"], "fontes": ["https://institutoverbena.ufg.br/"]},
+    "COPESE": {"descricao": "Perfil acadêmico e objetivo, com atenção ao conteúdo previsto no edital.", "foco": ["conhecimentos específicos", "português", "legislação", "raciocínio lógico"], "alertas": ["definições", "exceções", "interpretação"], "fontes": ["https://concursos.uft.edu.br/"]},
+    "CESGRANRIO": {"descricao": "Questões contextualizadas, com interpretação, aplicação e cobrança equilibrada do conteúdo.", "foco": ["interpretação", "situações práticas", "português", "conhecimentos específicos"], "alertas": ["texto-base", "dados do enunciado", "alternativas próximas"], "fontes": ["https://www.cesgranrio.org.br/concursos/"]},
+    "Instituto Mais": {"descricao": "Questões objetivas com cobrança do conteúdo programático e das normas indicadas.", "foco": ["legislação", "específicos", "português", "informática"], "alertas": ["detalhes do edital", "prazos", "atribuições"], "fontes": ["https://www.institutomais.org.br/"]},
+    "IDECAN": {"descricao": "Cobra a base do edital combinando legislação, teoria e conhecimentos específicos.", "foco": ["específicos", "legislação", "português", "raciocínio lógico"], "alertas": ["exceções", "conceitos similares", "atualização normativa"], "fontes": ["https://www.idecan.org.br/"]},
+    "Instituto ACCESS": {"descricao": "Perfil objetivo, com foco no conteúdo expressamente previsto no edital.", "foco": ["específicos", "legislação", "português", "informática"], "alertas": ["lei seca", "termos técnicos", "comandos negativos"], "fontes": ["https://concursos.access.org.br/"]},
+    "IBGP": {"descricao": "Banca com cobrança objetiva e forte relação com o conteúdo programático, a legislação indicada e os conhecimentos específicos do cargo.", "foco": ["conhecimentos específicos", "legislação do edital", "língua portuguesa", "informática e raciocínio lógico quando previstos"], "alertas": ["detalhes da legislação", "competências e atribuições", "alternativas com conceitos próximos"], "fontes": ["https://www.ibgpconcursos.com.br/", "https://www.planalto.gov.br/"]},
+    "Outra banca": {"descricao": "A banca será analisada a partir do edital enviado e das fontes indicadas pelo usuário.", "foco": ["conteúdo do edital", "legislação aplicável", "provas anteriores", "perfil das questões"], "alertas": ["confirmar a fonte oficial", "verificar a data do edital", "não confundir tendência com regra"], "fontes": ["https://www.gov.br/pt-br/servicos/consultar-concursos-publicos"]},
+}
+
+RAIO_X_DETALHES = {
+    "IBGP": {
+        "estilo": "Objetivo e direto, com enunciados geralmente ligados ao conteúdo do edital e aos conhecimentos específicos do cargo.",
+        "como_cobra": ["lei seca e conceitos fundamentais", "interpretação de textos e comandos", "atribuições e competências do cargo", "legislação municipal, estadual ou do órgão quando prevista"],
+        "formato": "Questões objetivas de múltipla escolha, com alternativas próximas e atenção ao comando exato.",
+        "armadilhas": ["troca de conceitos semelhantes", "inversão de competência ou prazo", "alternativa correta apenas em parte", "resposta que extrapola o texto da norma"],
+    },
+    "CESGRANRIO": {
+        "estilo": "Contextualizado e aplicado, com uso de situações práticas e textos-base.",
+        "como_cobra": ["interpretação", "aplicação prática", "língua portuguesa", "conhecimentos específicos do cargo"],
+        "formato": "Múltipla escolha, frequentemente exigindo leitura cuidadosa do enunciado e dos dados apresentados.",
+        "armadilhas": ["ignorar informação do texto-base", "alternativas parcialmente corretas", "conclusão que não decorre do enunciado"],
+    },
+    "FGV": {
+        "estilo": "Interpretativo e aplicado, com alternativas próximas e situações-problema.",
+        "como_cobra": ["interpretação", "casos práticos", "conceitos e exceções", "aplicação da legislação"],
+        "formato": "Múltipla escolha com enunciados contextualizados e comandos que podem exigir a alternativa incorreta.",
+        "armadilhas": ["comando negativo", "regra confundida com exceção", "alternativa quase correta"],
+    },
+    "Cebraspe": {
+        "estilo": "Analítico e atento a detalhes, normalmente no formato certo ou errado.",
+        "como_cobra": ["literalidade da lei", "exceções", "prazos", "interpretação e aplicação do conteúdo"],
+        "formato": "Itens de julgamento, em que uma palavra pode alterar toda a correção da afirmação.",
+        "armadilhas": ["palavras absolutas", "troca de conceitos", "generalização indevida", "detalhe fora da regra"],
+    },
+}
+
+def _detalhes_banca(banca: str, perfil: dict) -> dict:
+    return RAIO_X_DETALHES.get(banca, {
+        "estilo": perfil["descricao"],
+        "como_cobra": perfil["foco"],
+        "formato": "Questões objetivas conforme o edital e o padrão das provas anteriores disponíveis.",
+        "armadilhas": perfil["alertas"],
+    })
+
+def _normalizar_raio_x(valor: str) -> str:
+    return unicodedata.normalize("NFKD", (valor or "")).encode("ascii", "ignore").decode("ascii").casefold()
+
+def _extrair_contexto_cargo(texto: str, cargo: str) -> tuple[str, bool, str]:
+    """Limita a leitura ao trecho do cargo, em vez de pesquisar o edital inteiro."""
+    linhas = [linha.strip() for linha in (texto or "").splitlines() if linha.strip()]
+    if not linhas or not cargo.strip():
+        return texto or "", False, ""
+    cargo_normalizado = re.sub(r"\s+", " ", _normalizar_raio_x(cargo)).strip()
+    tokens = [token for token in re.findall(r"[a-z0-9]+", cargo_normalizado) if len(token) > 2 and token not in {"de", "da", "do", "das", "dos"}]
+    if not tokens:
+        return texto or "", False, ""
+    melhor = None
+    maior = 0
+    # Primeiro tenta a expressão completa, evitando confundir cargos que
+    # possuem somente uma palavra em comum, como Farmácia e Endemias.
+    for indice, linha in enumerate(linhas):
+        normalizada = re.sub(r"\s+", " ", _normalizar_raio_x(linha)).strip()
+        if cargo_normalizado in normalizada:
+            melhor = indice
+            maior = len(tokens)
+            break
+    # Fallback para abreviações presentes no edital (ex.: ACE).
+    for indice, linha in enumerate(linhas):
+        if melhor is not None:
+            break
+        normalizada = _normalizar_raio_x(linha)
+        pontuacao = sum(1 for token in tokens if token in normalizada)
+        if pontuacao > maior:
+            maior = pontuacao
+            melhor = indice
+    if melhor is None or maior < max(1, int(len(tokens) * 0.6)):
+        return texto or "", False, ""
+    inicio = max(0, melhor - 5)
+    fim = min(len(linhas), melhor + 90)
+    # Não atravessa o começo de outro cargo/área do conteúdo programático.
+    for indice in range(melhor + 8, fim):
+        linha_original = linhas[indice]
+        linha = _normalizar_raio_x(linhas[indice])
+        if re.match(r"^(cargo|funcao|funcao publica|conteudo programatico)\s*[:\-]", linha) or (linha_original.isupper() and len(linha_original.split()) <= 12):
+            fim = indice
+            break
+    return "\n".join(linhas[inicio:fim]), True, linhas[melhor]
+
+def _extrair_contexto_geral(texto: str) -> str:
+    """Lê somente blocos explicitamente comuns a todos os cargos."""
+    linhas = [linha.strip() for linha in (texto or "").splitlines() if linha.strip()]
+    marcadores = ("conhecimentos gerais", "conhecimentos básicos", "conteúdo comum", "prova de conhecimentos gerais")
+    trechos = []
+    for indice, linha in enumerate(linhas):
+        normalizada = _normalizar_raio_x(linha)
+        if any(_normalizar_raio_x(marcador) in normalizada for marcador in marcadores):
+            trechos.extend(linhas[max(0, indice - 2):min(len(linhas), indice + 90)])
+    return "\n".join(dict.fromkeys(trechos))
+
+def _extrair_materias_edital(texto: str) -> dict:
+    """Extrai matérias somente do trecho selecionado do cargo."""
+    padroes = [
+        ("Língua Portuguesa", "geral"), ("Raciocínio Lógico", "geral"), ("Matemática", "geral"),
+        ("Informática", "geral"), ("Atualidades", "geral"), ("Conhecimentos Gerais", "geral"),
+        ("Direito Constitucional", "especifica"), ("Direito Administrativo", "especifica"),
+        ("Direito Penal", "especifica"), ("Direito Processual Penal", "especifica"), ("Direito Civil", "especifica"),
+        ("Administração Pública", "especifica"), ("Legislação", "especifica"),
+        ("Conhecimentos Específicos", "especifica"), ("Ética", "especifica"),
+        ("Redação Oficial", "geral"), ("Arquivologia", "especifica"), ("Contabilidade", "especifica"),
+        ("Economia", "especifica"), ("Administração Financeira e Orçamentária", "especifica"),
+        ("Direitos Humanos", "especifica"), ("Medicina Legal", "especifica"),
+        ("Saúde Pública", "especifica"), ("Sistema Único de Saúde (SUS)", "especifica"),
+        ("Vigilância Epidemiológica", "especifica"), ("Endemias", "especifica"), ("Dengue", "especifica"),
+        ("Zoonoses", "especifica"), ("Educação em Saúde", "especifica"), ("Leishmaniose", "especifica"),
+    ]
+    normalizado = _normalizar_raio_x(texto)
+    gerais, especificas = [], []
+    for materia, grupo in padroes:
+        if _normalizar_raio_x(materia) in normalizado:
+            (gerais if grupo == "geral" else especificas).append(materia)
+    return {"gerais": gerais, "especificas": especificas, "todas": gerais + especificas}
+
+@app.get("/estudos/raio-x", response_class=HTMLResponse)
+async def view_raio_x_banca(request: Request, analise_id: int = None):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login")
+    usuario_id = int(user_id)
+    with Session(engine) as session:
+        historico = session.exec(select(EstudoRaioXBanca).where(EstudoRaioXBanca.usuario_id == usuario_id).order_by(desc(EstudoRaioXBanca.criado_em))).all()
+        analise = session.get(EstudoRaioXBanca, analise_id) if analise_id else (historico[0] if historico else None)
+        if analise and analise.usuario_id != usuario_id:
+            analise = None
+    dados = None
+    if analise:
+        materias_salvas = json.loads(analise.materias_json or "{}")
+        if isinstance(materias_salvas, list):
+            materias_salvas = {"gerais": materias_salvas, "especificas": [], "todas": materias_salvas}
+        dados = {
+            "materias": materias_salvas,
+            "analise": json.loads(analise.analise_json or "{}"),
+            "fontes": json.loads(analise.fontes_json or "[]"),
+        }
+        perfil_atual = RAIO_X_BANCAS.get(analise.banca) or RAIO_X_BANCAS["Outra banca"]
+        detalhes_atual = _detalhes_banca(analise.banca, perfil_atual)
+        dados["analise"].setdefault("estilo", detalhes_atual["estilo"])
+        dados["analise"].setdefault("como_cobra", detalhes_atual["como_cobra"])
+        dados["analise"].setdefault("formato", detalhes_atual["formato"])
+        dados["analise"].setdefault("armadilhas_banca", detalhes_atual["armadilhas"])
+    return templates.TemplateResponse(request=request, name="estudos_raio_x.html", context={"config": APP_CONFIG, "bancas": sorted(RAIO_X_BANCAS), "historico": historico, "analise": analise, "dados": dados})
+
+@app.post("/estudos/raio-x")
+async def criar_raio_x_banca(request: Request, banca: str = Form(...), cargo: str = Form(""), edital: UploadFile = File(...)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login", status_code=303)
+    perfil = RAIO_X_BANCAS.get(banca) or RAIO_X_BANCAS["Outra banca"]
+    if not edital.filename or not edital.filename.lower().endswith(".pdf"):
+        return RedirectResponse(url="/estudos/raio-x?erro=pdf", status_code=303)
+    conteudo = await edital.read()
+    if len(conteudo) > 15 * 1024 * 1024:
+        return RedirectResponse(url="/estudos/raio-x?erro=tamanho", status_code=303)
+    texto = ""
+    try:
+        from io import BytesIO
+        from pypdf import PdfReader
+        reader = PdfReader(BytesIO(conteudo))
+        texto = "\n".join((pagina.extract_text() or "") for pagina in reader.pages)
+    except Exception:
+        texto = ""
+    cargo_texto, cargo_encontrado, linha_cargo = _extrair_contexto_cargo(texto, cargo)
+    materias = _extrair_materias_edital(cargo_texto)
+    # Muitos editais colocam Português e Raciocínio Lógico em uma seção comum,
+    # fora do bloco do cargo. Complementa somente matérias gerais, sem puxar
+    # conhecimentos específicos de outros cargos.
+    materias_gerais_comuns = _extrair_materias_edital(_extrair_contexto_geral(texto))
+    gerais_permitidas = {"Língua Portuguesa", "Raciocínio Lógico", "Matemática", "Informática", "Atualidades", "Conhecimentos Gerais", "Redação Oficial"}
+    for materia in materias_gerais_comuns.get("gerais", []):
+        if materia in gerais_permitidas and materia not in materias["gerais"]:
+            materias["gerais"].append(materia)
+    # Português e Raciocínio Lógico também podem aparecer em um bloco
+    # separado do título "Conhecimentos Gerais"; são complementados somente
+    # quando constam no texto do edital, sem fazer isso para Informática.
+    materias_gerais_texto = _extrair_materias_edital(texto).get("gerais", [])
+    for materia in ("Língua Portuguesa", "Raciocínio Lógico"):
+        if materia in materias_gerais_texto and materia not in materias["gerais"]:
+            materias["gerais"].append(materia)
+    materias["todas"] = materias["gerais"] + materias["especificas"]
+    materias_normalizadas = {_normalizar_raio_x(materia) for materia in materias["todas"]}
+    foco_filtrado = []
+    for item_foco in perfil["foco"]:
+        texto_foco = item_foco
+        if "informatica" in _normalizar_raio_x(texto_foco) and "informatica" not in materias_normalizadas:
+            texto_foco = re.sub(r"informática\s*(?:e\s*)?", "", texto_foco, flags=re.IGNORECASE).strip()
+            texto_foco = re.sub(r"\s+", " ", texto_foco)
+        if "raciocinio logico" in _normalizar_raio_x(texto_foco) and "raciocinio logico" not in materias_normalizadas:
+            texto_foco = re.sub(r"raciocínio lógico(?:\s+quando previstos)?", "", texto_foco, flags=re.IGNORECASE).strip(" ,;-")
+        if texto_foco and texto_foco not in foco_filtrado:
+            foco_filtrado.append(texto_foco)
+    termo_busca = f"{banca} {cargo.strip() or 'concurso'} prova anterior"
+    busca_provas = f"https://www.google.com/search?q={quote(termo_busca, safe='')}"
+    detalhes = _detalhes_banca(banca, perfil)
+    analise = {
+        "descricao": perfil["descricao"],
+        "foco": foco_filtrado,
+        "estilo": detalhes["estilo"],
+        "como_cobra": detalhes["como_cobra"],
+        "formato": detalhes["formato"],
+        "armadilhas_banca": detalhes["armadilhas"],
+        "alertas": perfil["alertas"],
+        "limites": ["As matérias foram procuradas no trecho do cargo informado, não no edital inteiro.", "O edital confirma o conteúdo; ele não prova sozinho a frequência de cada tema.", "Percentuais e ranking só serão calculados quando houver questões/provas cadastradas.", "As tendências devem ser revisadas quando sair novo edital."],
+        "cargo_encontrado": cargo_encontrado,
+        "linha_cargo": linha_cargo,
+        "escopo": "Trecho específico do cargo" if cargo_encontrado else "Edital inteiro: o cargo não foi localizado no texto extraído",
+        "referencia_provas": busca_provas,
+        "texto_extraido": bool(texto.strip()),
+        "paginas": len(getattr(reader, "pages", [])) if texto else 0,
+    }
+    with Session(engine) as session:
+        # Mantém somente a análise atual por usuário, evitando crescimento indefinido.
+        antigas = session.exec(select(EstudoRaioXBanca).where(EstudoRaioXBanca.usuario_id == int(user_id))).all()
+        for antiga in antigas:
+            session.delete(antiga)
+        item = EstudoRaioXBanca(usuario_id=int(user_id), banca=banca, cargo=cargo.strip() or None, edital_nome=edital.filename, edital_texto=cargo_texto[:200000], materias_json=json.dumps(materias, ensure_ascii=False), analise_json=json.dumps(analise, ensure_ascii=False), fontes_json=json.dumps(perfil["fontes"] + [busca_provas], ensure_ascii=False))
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        item_id = item.id
+    return RedirectResponse(url=f"/estudos/raio-x?analise_id={item_id}", status_code=303)
+
+@app.post("/estudos/raio-x/excluir")
+async def excluir_raio_x_banca(request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login", status_code=303)
+    with Session(engine) as session:
+        analises = session.exec(select(EstudoRaioXBanca).where(EstudoRaioXBanca.usuario_id == int(user_id))).all()
+        for analise in analises:
+            session.delete(analise)
+        session.commit()
+    return RedirectResponse(url="/estudos/raio-x", status_code=303)
+
+@app.get("/estudos/grafico-semanal")
+async def estudos_grafico_semanal(request: Request, semana: str = None, assunto: str = None):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401)
+    try:
+        usuario_id = int(user_id)
+    except ValueError:
+        raise HTTPException(status_code=401)
+
+    hoje = datetime.now().date()
+    inicio_atual = hoje - timedelta(days=hoje.weekday())
+    try:
+        data_semana = datetime.strptime(semana, "%Y-%m-%d").date() if semana else inicio_atual
+    except ValueError:
+        data_semana = inicio_atual
+    semana_inicio = data_semana - timedelta(days=data_semana.weekday())
+    semana_fim = semana_inicio + timedelta(days=6)
+    filtro = (assunto or "").strip().lower()
+
+    with Session(engine) as session:
+        registros = session.exec(
+            select(EstudoSessao).where(
+                EstudoSessao.usuario_id == usuario_id,
+                EstudoSessao.data_estudo >= semana_inicio,
+                EstudoSessao.data_estudo <= semana_fim,
+            )
+        ).all()
+
+    if filtro:
+        registros = [r for r in registros if filtro in (r.assunto or "").lower()]
+    nomes_dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    dias = []
+    for indice, nome in enumerate(nomes_dias):
+        data = semana_inicio + timedelta(days=indice)
+        dias.append({
+            "dia": nome,
+            "data": data.isoformat(),
+            "questoes": sum((r.quantidade_questoes or 0) for r in registros if r.data_estudo == data),
+        })
+    return {
+        "inicio": semana_inicio.isoformat(),
+        "fim": semana_fim.isoformat(),
+        "semana_atual": inicio_atual.isoformat(),
+        "anterior": (semana_inicio - timedelta(days=7)).isoformat(),
+        "proxima": (semana_inicio + timedelta(days=7)).isoformat(),
+        "dias": dias,
+    }
+
+
+@app.get("/estudos/progresso")
+async def estudos_progresso(request: Request, data_progresso: str = None):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401)
+    try:
+        usuario_id = int(user_id)
+    except ValueError:
+        raise HTTPException(status_code=401)
+    hoje = datetime.now().date()
+    try:
+        data = datetime.strptime(data_progresso, "%Y-%m-%d").date() if data_progresso else hoje
+    except ValueError:
+        data = hoje
+    with Session(engine) as session:
+        registros = session.exec(select(EstudoSessao).where(
+            EstudoSessao.usuario_id == usuario_id,
+            EstudoSessao.data_estudo == data,
+        )).all()
+    por_materia = {}
+    for registro in registros:
+        materia = (registro.assunto or "Geral").strip()
+        item = por_materia.setdefault(materia, {"questoes": 0, "acertos": 0})
+        item["questoes"] += registro.quantidade_questoes or 0
+        item["acertos"] += registro.total_acertos or 0
+    itens = [{
+        "materia": materia,
+        "questoes": valores["questoes"],
+        "acertos": valores["acertos"],
+        "percentual": min(100, round((valores["acertos"] / valores["questoes"]) * 100, 1)) if valores["questoes"] else 0,
+    } for materia, valores in sorted(por_materia.items(), key=lambda item: item[1]["questoes"], reverse=True)]
+    return {"data": data.isoformat(), "label": "Hoje" if data == hoje else ("Ontem" if data == hoje - timedelta(days=1) else data.strftime("%d/%m/%Y")), "itens": itens}
+
+
 @app.get("/estudos", response_class=HTMLResponse)
 async def view_estudos(request: Request, success: str = None, assunto: str = None, data_inicio: str = None, data_fim: str = None, semana: str = None, editar_id: int = None, data_progresso: str = None):
     user_id = request.cookies.get("user_id")
@@ -1269,9 +1685,19 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         and (not filtro_data_fim or registro.data_estudo <= filtro_data_fim)
     ]
 
-    total_questoes = sum((r.quantidade_questoes or 0) for r in registros)
-    total_acertos = sum((r.total_acertos or 0) for r in registros)
-    total_erros = sum((r.total_erros or 0) for r in registros)
+    # Os cards principais representam o total geral de todos os estudos.
+    registros_calculo = registros
+    total_questoes = sum((r.quantidade_questoes or 0) for r in registros_calculo)
+    total_acertos = sum((r.total_acertos or 0) for r in registros_calculo)
+    total_erros = sum((r.total_erros or 0) for r in registros_calculo)
+    registros_simulados = [r for r in registros_calculo if getattr(r, "tipo_registro", "estudo") == "simulado"]
+    registros_estudos = [r for r in registros_calculo if getattr(r, "tipo_registro", "estudo") != "simulado"]
+    questoes_simulados = sum((r.quantidade_questoes or 0) for r in registros_simulados)
+    acertos_simulados = sum((r.total_acertos or 0) for r in registros_simulados)
+    questoes_estudos = sum((r.quantidade_questoes or 0) for r in registros_estudos)
+    acertos_estudos = sum((r.total_acertos or 0) for r in registros_estudos)
+    aproveitamento_simulados = min(100, round((acertos_simulados / questoes_simulados) * 100, 1)) if questoes_simulados else 0
+    aproveitamento_estudos = min(100, round((acertos_estudos / questoes_estudos) * 100, 1)) if questoes_estudos else 0
     def calc_segundos(r):
         if r.horario_inicio and r.horario_fim:
             try:
@@ -1332,7 +1758,7 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
             "materia": materia,
             "questoes": valores["questoes"],
             "acertos": valores["acertos"],
-            "percentual": min(100, int((valores["acertos"] / valores["questoes"]) * 100)) if valores["questoes"] else 0,
+            "percentual": min(100, round((valores["acertos"] / valores["questoes"]) * 100, 1)) if valores["questoes"] else 0,
         }
         for materia, valores in sorted(desempenho_materias.items(), key=lambda item: item[1]["questoes"], reverse=True)
     ][:8]
@@ -1349,7 +1775,7 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
             "materia": materia,
             "questoes": valores["questoes"],
             "acertos": valores["acertos"],
-            "percentual": min(100, int((valores["acertos"] / valores["questoes"]) * 100)) if valores["questoes"] else 0,
+            "percentual": min(100, round((valores["acertos"] / valores["questoes"]) * 100, 1)) if valores["questoes"] else 0,
         }
         for materia, valores in sorted(desempenho_materias_hoje.items(), key=lambda item: item[1]["questoes"], reverse=True)
     ]
@@ -1455,6 +1881,12 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
             "total_questoes": total_questoes,
             "total_acertos": total_acertos,
             "total_erros": total_erros,
+            "questoes_estudos": questoes_estudos,
+            "acertos_estudos": acertos_estudos,
+            "aproveitamento_estudos": aproveitamento_estudos,
+            "questoes_simulados": questoes_simulados,
+            "acertos_simulados": acertos_simulados,
+            "aproveitamento_simulados": aproveitamento_simulados,
             "horas_cronometro_total": horas_cronometro_total,
             "horas_cronometro_hoje": horas_cronometro_hoje,
             "success": success,
@@ -1967,7 +2399,9 @@ async def save_estudos(
     data_estudo: str = Form(...),
     horario_inicio: str = Form(""),
     horario_fim: str = Form(""),
-    assunto: str = Form(...),
+    assunto: str = Form(""),
+    tipo_registro: str = Form("estudo"),
+    nome_simulado: str = Form(""),
     quantidade_questoes: int = Form(0),
     total_acertos: int = Form(0),
     total_erros: int = Form(0),
@@ -1988,10 +2422,20 @@ async def save_estudos(
             sessao.data_estudo = datetime.strptime(data_estudo, "%Y-%m-%d").date()
             sessao.horario_inicio = horario_inicio or None
             sessao.horario_fim = horario_fim or None
-            sessao.assunto = assunto.strip() or "Estudo"
-            sessao.quantidade_questoes = max(0, quantidade_questoes)
-            sessao.total_acertos = max(0, total_acertos)
-            sessao.total_erros = max(0, total_erros)
+            sessao.tipo_registro = "simulado" if tipo_registro == "simulado" else "estudo"
+            assunto_limpo = (assunto or "").strip()
+            sessao.assunto = assunto_limpo or ("Geral" if sessao.tipo_registro == "simulado" else "Estudo")
+            sessao.nome_simulado = (nome_simulado.strip() or None) if sessao.tipo_registro == "simulado" else None
+            questoes = max(0, quantidade_questoes)
+            acertos = min(max(0, total_acertos), questoes)
+            erros = max(0, total_erros)
+            # Mantém o registro consistente: toda questão fica classificada
+            # como acerto ou erro, sem permitir que os totais ultrapassem o total.
+            if acertos + erros != questoes:
+                erros = max(0, questoes - acertos)
+            sessao.quantidade_questoes = questoes
+            sessao.total_acertos = acertos
+            sessao.total_erros = erros
             sessao.observacao = observacao.strip() or None
             sessao.status = status or "concluido"
             session.add(sessao)
@@ -2006,15 +2450,20 @@ async def delete_estudo(request: Request, registro_id: int = Form(...)):
     user_id = request.cookies.get("user_id")
     if not user_id:
         return RedirectResponse(url="/login")
+    materia_reaberta = ""
     try:
         with Session(engine) as session:
             sessao = session.get(EstudoSessao, registro_id)
             if sessao and sessao.usuario_id == int(user_id):
+                materia_reaberta = (sessao.assunto or "").strip()
                 session.delete(sessao)
                 session.commit()
     except (ValueError, TypeError):
         pass
-    return RedirectResponse(url="/estudos?success=excluido", status_code=303)
+    url = "/estudos?success=excluido"
+    if materia_reaberta:
+        url += f"&materia_reaberta={quote(materia_reaberta)}"
+    return RedirectResponse(url=url, status_code=303)
 
 @app.get("/cofre", response_class=HTMLResponse)
 async def view_cofre(request: Request):
@@ -2414,7 +2863,7 @@ async def view_executivo(request: Request):
 
 
 @app.get("/login", response_class=HTMLResponse)
-async def view_login(request: Request, intent: str = "suporte"):
+async def view_login(request: Request, intent: str = ""):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
@@ -2442,6 +2891,8 @@ def _can_access_atendimento(request: Request) -> bool:
     if get_signed_cookie(request, "user_role") == "admin":
         return True
     if get_signed_cookie(request, "user_role") in ("recepcao", "recepção", "recepcionista"):
+        return True
+    if get_signed_cookie(request, "auth_user_role") in ("recepcao", "recepção", "recepcionista"):
         return True
     try:
         raw_perms = get_signed_cookie(request, "user_perms", "[]") or "[]"
@@ -2516,6 +2967,9 @@ async def view_central_atendimento(request: Request):
             "atendimento_multiempresa_enabled": os.getenv("ATENDIMENTO_MULTIEMPRESA_ENABLED", "false").lower() in ("1", "true", "yes", "on"),
         }
     )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     if request.query_params.get("desktop") == "1":
         response.set_cookie("central_atendimento_tauri", "1", httponly=False, samesite="lax")
     return response
@@ -2540,7 +2994,7 @@ async def view_central_atendimento_dashboard(request: Request):
         chamados = session.exec(select(Chamado).where(Chamado.origem == "WhatsApp")).all()
         try:
             status_usuarios = session.connection().execute(text("SELECT status_conta, last_seen FROM usuarios")).fetchall()
-            online_cutoff = datetime.now() - timedelta(minutes=2)
+            online_cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
             usuarios_ativos = sum(1 for row in status_usuarios if row[1] and row[1] >= online_cutoff)
             usuarios_inativos = len(status_usuarios) - usuarios_ativos
             total_usuarios = len(status_usuarios)
@@ -2557,8 +3011,18 @@ async def view_central_atendimento_dashboard(request: Request):
         for item in chamados:
             if not str(item.whatsapp_cliente or "").lower().endswith("@g.us") and item.assigned_user and item.status != "Resolvido":
                 operator_counts[item.assigned_user] = operator_counts.get(item.assigned_user, 0) + 1
-        recent = sorted(atendimentos, key=lambda item: item.data_abertura or datetime.min, reverse=True)[:8]
-        agora = datetime.now()
+        def data_abertura_utc(item):
+            valor = item.data_abertura
+            if not valor:
+                return datetime.min.replace(tzinfo=timezone.utc)
+            return valor.replace(tzinfo=timezone.utc) if valor.tzinfo is None else valor.astimezone(timezone.utc)
+
+        recent = sorted(atendimentos, key=data_abertura_utc, reverse=True)[:8]
+        agora = datetime.now(timezone.utc)
+        def idade_em_minutos(item):
+            if not item.data_abertura:
+                return 0
+            return max(0, int((agora - data_abertura_utc(item)).total_seconds() // 60))
         # Grupos ficam abertos e não precisam ser assumidos; portanto não entram na triagem.
         triagem_aberta = [
             item for item in chamados
@@ -2566,10 +3030,10 @@ async def view_central_atendimento_dashboard(request: Request):
             and not item.assigned_user
             and not str(item.whatsapp_cliente or "").lower().endswith("@g.us")
         ]
-        tempos_triagem = [max(0, int((agora - item.data_abertura).total_seconds() // 60)) for item in triagem_aberta if item.data_abertura]
+        tempos_triagem = [idade_em_minutos(item) for item in triagem_aberta if item.data_abertura]
         triagem_urgente = sorted(
-            [item for item in triagem_aberta if item.data_abertura and (agora - item.data_abertura).total_seconds() >= 15 * 60],
-            key=lambda item: item.data_abertura,
+            [item for item in triagem_aberta if item.data_abertura and idade_em_minutos(item) >= 15],
+            key=data_abertura_utc,
         )[:5]
         metrics = {
             "total": len(atendimentos),
@@ -2585,7 +3049,7 @@ async def view_central_atendimento_dashboard(request: Request):
             "usuarios_ativos_percentual": round(usuarios_ativos / total_usuarios * 100) if total_usuarios else 0,
             "tempo_medio_espera": round(sum(tempos_triagem) / len(tempos_triagem)) if tempos_triagem else 0,
             "triagem_urgente": [
-                {"id": item.id, "name": item.usuario or "Sem nome", "minutes": max(0, int((agora - item.data_abertura).total_seconds() // 60))}
+                {"id": item.id, "name": item.usuario or "Sem nome", "minutes": idade_em_minutos(item)}
                 for item in triagem_urgente
             ],
             "operators": sorted(operator_counts.items(), key=lambda pair: pair[1], reverse=True),

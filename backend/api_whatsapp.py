@@ -5,7 +5,8 @@ import base64
 import re
 import uuid
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks, Body, UploadFile, File, Form
@@ -37,6 +38,14 @@ def serve_whatsapp_media(filename: str, request: Request):
 
 _whatsapp_columns_ready = False
 _connected_map_cache = {"expires_at": 0.0, "value": {}}
+DISPLAY_TIMEZONE = ZoneInfo("America/Porto_Velho")
+
+
+def _display_datetime(value: datetime) -> datetime:
+    """Converte timestamps UTC armazenados para o horário de Rondônia."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(DISPLAY_TIMEZONE)
 
 
 def _normalize_contact_number(value: str) -> Optional[str]:
@@ -1368,7 +1377,7 @@ def get_contact_details(ticket_id: Optional[int] = None, request: Request = None
                 "id": it.id,
                 "usuario": it.usuario,
                 "mensagem": it.mensagem,
-                "data_hora": it.data_hora.strftime("%d/%m/%Y %H:%M:%S")
+                "data_hora": _display_datetime(it.data_hora).strftime("%d/%m/%Y %H:%M:%S")
             })
 
         previous_tickets = []
@@ -1383,7 +1392,7 @@ def get_contact_details(ticket_id: Optional[int] = None, request: Request = None
                     "id": item.id,
                     "titulo": item.titulo,
                     "status": item.status,
-                    "data_abertura": item.data_abertura.strftime("%d/%m/%Y %H:%M"),
+            "data_abertura": _display_datetime(item.data_abertura).strftime("%d/%m/%Y %H:%M"),
                 }
                 for item in previous
             ]
@@ -1396,7 +1405,7 @@ def get_contact_details(ticket_id: Optional[int] = None, request: Request = None
             "status": chamado.status,
             "prioridade": chamado.prioridade,
             "categoria": chamado.categoria,
-            "data_abertura": chamado.data_abertura.strftime("%d/%m/%Y %H:%M:%S"),
+            "data_abertura": _display_datetime(chamado.data_abertura).strftime("%d/%m/%Y %H:%M:%S"),
             "assigned_user": chamado.assigned_user,
             "profile_picture": profile_picture,
             "nota_interna": chamado.nota_tecnica or "",
@@ -1901,6 +1910,7 @@ def get_whatsapp_chats(request: Request):
             except Exception:
                 is_connected = False
 
+            ultima_atividade = last_msg.data_hora if last_msg else c.data_abertura
             resultado.append({
                 "id": c.id,
                 "usuario": c.usuario or (f"Grupo WhatsApp · {str(c.whatsapp_cliente).split('@')[0]}" if is_group_chat else "Contato sem nome"),
@@ -1918,9 +1928,10 @@ def get_whatsapp_chats(request: Request):
                 # A fila Ã© compartilhada: todos os perfis autorizados precisam
                 # enxergar o contador de mensagens pendentes.
                 "unread_admin": c.unread_admin or 0,
-                "data_abertura": c.data_abertura.strftime("%d/%m/%Y %H:%M"),
+                "data_abertura": _display_datetime(c.data_abertura).strftime("%d/%m/%Y %H:%M"),
                 "ultima_mensagem": last_msg.mensagem if last_msg else c.descricao,
-                "data_ultima_mensagem": (last_msg.data_hora if last_msg else c.data_abertura).strftime("%d/%m %H:%M")
+                "data_ultima_mensagem": _display_datetime(ultima_atividade).strftime("%d/%m %H:%M"),
+                "data_ultima_mensagem_iso": ultima_atividade.isoformat(),
             })
             
         return resultado
@@ -2019,6 +2030,13 @@ def start_whatsapp_contact(payload: dict = Body(...), request: Request = None, b
                 session.add(chamado)
                 session.commit()
                 session.refresh(chamado)
+            else:
+                # Quem inicia uma conversa pela Lista de Contatos assume o atendimento.
+                chamado.assigned_user = user_name
+                if chamado.status == "Aberto":
+                    chamado.status = "Em Atendimento"
+                session.add(chamado)
+                session.commit()
 
             ticket_id = chamado.id
 
@@ -2654,7 +2672,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
                     whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
-                    data_hora=datetime.now()
+                    data_hora=datetime.now(timezone.utc)
                 )
                 session.add(interacao)
                 chamado.unread_admin = (chamado.unread_admin or 0) + 1
@@ -2677,7 +2695,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         "whatsapp_instance": instance_from_payload,
                         "usuario": customer_name,
                         "mensagem": msg_text,
-                        "data_hora": interacao.data_hora.strftime("%d/%m/%Y %H:%M:%S")
+                        "data_hora": _display_datetime(interacao.data_hora).strftime("%d/%m/%Y %H:%M:%S")
                     }
                 )
             else:
@@ -2712,7 +2730,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
                     whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
-                    data_hora=datetime.now()
+                    data_hora=datetime.now(timezone.utc)
                 )
                 session.add(interacao)
                 session.commit()
@@ -2726,7 +2744,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                         "usuario": customer_name,
                         "mensagem": msg_text,
                         "prioridade": chamado.prioridade,
-                        "data_hora": chamado.data_abertura.strftime("%d/%m/%Y %H:%M:%S")
+                        "data_hora": _display_datetime(chamado.data_abertura).strftime("%d/%m/%Y %H:%M:%S")
                     }
                 )
 

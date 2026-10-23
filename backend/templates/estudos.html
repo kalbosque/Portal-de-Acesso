@@ -4,6 +4,42 @@
 
 {% block content %}
 <style>
+    /* Aproxima o quadro de horários do resumo superior. */
+    .max-w-7xl > nav[aria-label] { margin-bottom: -1rem !important; }
+    .max-w-7xl > nav[aria-label] { width: calc(100% + 2rem) !important; margin-left: -1rem !important; margin-right: -1rem !important; }
+    .study-tabs-row + div[aria-label] > div:nth-child(-n+3) > div:first-child { text-align: center; }
+    .study-tabs-row + div[aria-label] > div { border-color: transparent !important; background-color: transparent !important; box-shadow: none !important; }
+    .study-tabs-row + div[aria-label] > div:nth-child(-n+3) > div:first-child,
+    .study-tabs-row + div[aria-label] > div:nth-child(n+4) > div:first-child > div:first-child { font-size: 9px !important; font-weight: 800 !important; letter-spacing: .1em !important; }
+    .study-tabs-row + div[aria-label] > div:nth-child(-n+3) > div:nth-child(2),
+    .study-tabs-row + div[aria-label] > div:nth-child(n+4) > div:first-child > div:nth-child(2) > div { font-size: 14px !important; }
+    #registro-layout, #historico-filtro, #desempenho, #desempenho-graficos {
+        content-visibility: auto;
+        contain-intrinsic-size: 900px;
+    }
+
+    /* Resumo superior: cada percentual precisa de seu próprio cartão. */
+    .study-tabs-row + div[aria-label] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: .25rem !important; }
+    @media (min-width: 640px) {
+        .study-tabs-row + div[aria-label] { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+    }
+    @media (min-width: 768px) {
+        .study-tabs-row + div[aria-label] { width: 430px !important; }
+    }
+
+    /* Botões padronizados; a aba ativa recebe o azul pelo JavaScript. */
+    .study-tabs-row { display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)); width: 100%; }
+    .study-tabs-row > * { width: 100%; min-width: 0; text-align: center; }
+    .study-tabs-row .study-tab,
+    .study-tabs-row .study-nav-link { display: flex; min-height: 40px; align-items: center; justify-content: center; padding-left: .35rem !important; padding-right: .35rem !important; font-size: 11px !important; font-weight: 800 !important; line-height: 1.15 !important; letter-spacing: .04em !important; white-space: normal; }
+
+    /* Evita mostrar o quadro de horários antes de a aba solicitada ser definida. */
+    html:not(.estudos-js-ready) #quadro,
+    html:not(.estudos-js-ready) #desempenho,
+    html:not(.estudos-js-ready) #desempenho-graficos,
+    html:not(.estudos-js-ready) #registro-layout,
+    html:not(.estudos-js-ready) #historico-filtro { display: none !important; }
+
     .study-schedule-date,
     .study-schedule-time,
     .study-history-date {
@@ -120,30 +156,42 @@
     <div class="hidden bg-sky-500 text-white shadow-lg shadow-sky-500/25"></div>
 
     <nav class="mb-6 flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-2 md:flex-row md:items-center md:justify-between" aria-label="Navegação dos estudos">
-        <div class="flex flex-wrap gap-1.5">
+        <div class="study-tabs-row flex flex-wrap gap-1.5">
             <button type="button" data-tab="quadro" aria-selected="true" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all bg-sky-500 text-white shadow-lg shadow-sky-500/25">Quadro de horários</button>
             <button type="button" data-tab="registro" aria-selected="false" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all text-slate-400 hover:bg-white/5 hover:text-slate-200">Registrar estudo</button>
             <button type="button" data-tab="historico" aria-selected="false" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all text-slate-400 hover:bg-white/5 hover:text-slate-200">Histórico</button>
             <button type="button" data-tab="desempenho" aria-selected="false" class="study-tab rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] transition-all text-slate-400 hover:bg-white/5 hover:text-slate-200">Desempenho</button>
+            <a href="/estudos/raio-x" class="study-nav-link rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-slate-400 transition-all hover:bg-white/5 hover:text-slate-200">Raio-X da banca</a>
         </div>
         <div class="grid w-full grid-cols-4 gap-2 md:w-[420px] md:shrink-0" aria-label="Resumo geral de questões">
             <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
                 <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Questões</div>
-                <div class="mt-0.5 text-lg font-black tabular-nums text-white">{{ total_questoes }}</div>
+                <div class="mx-auto mt-1 flex h-14 w-14 items-center justify-center rounded-full border-4 border-slate-600 bg-slate-900 text-[16px] font-black tabular-nums text-white">{{ total_questoes }}</div>
             </div>
             <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
                 <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Acertos</div>
-                <div class="mt-0.5 text-lg font-black tabular-nums text-emerald-400">{{ total_acertos }}</div>
+                <div class="mx-auto mt-1 flex h-14 w-14 items-center justify-center rounded-full border-4 border-emerald-500/70 bg-slate-900 text-[16px] font-black tabular-nums text-emerald-400">{{ total_acertos }}</div>
             </div>
             <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
                 <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">Erros</div>
-                <div class="mt-0.5 text-lg font-black tabular-nums text-rose-400">{{ total_erros }}</div>
+                <div class="mx-auto mt-1 flex h-14 w-14 items-center justify-center rounded-full border-4 border-rose-500/70 bg-slate-900 text-[16px] font-black tabular-nums text-rose-400">{{ total_erros }}</div>
             </div>
-            {% set total_respostas = total_acertos + total_erros %}
-            {% set aproveitamento_geral = (total_acertos / total_respostas * 100) | round(1) if total_respostas > 0 else 0 %}
-            <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2.5 py-1.5">
-                <div class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">% Geral</div>
-                <div class="mt-0.5 text-lg font-black tabular-nums text-amber-400">{{ '{:0.1f}'.format(aproveitamento_geral).replace('.0', '') }}%</div>
+            <div class="min-w-0 rounded-lg border border-slate-700 bg-slate-800/50 px-2 py-1.5">
+                <div class="flex flex-col items-center justify-center gap-1">
+                    <div class="text-[9px] font-bold uppercase tracking-[0.1em] text-sky-300">Geral</div>
+                    <div class="relative h-14 w-14 shrink-0 rounded-full p-1" style="background: conic-gradient(#38bdf8 {{ aproveitamento_estudos }}%, rgba(51, 65, 85, .7) 0);">
+                        <div class="flex h-full w-full items-center justify-center rounded-full bg-slate-900 text-[12px] font-black tabular-nums text-sky-300">{{ '{:0.1f}'.format(aproveitamento_estudos).replace('.0', '') }}%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="min-w-0 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2 py-1.5">
+                <div class="flex flex-col items-center justify-center gap-1">
+                    <div class="text-[9px] font-bold uppercase tracking-[0.1em] text-indigo-200">Simulado</div>
+                    <div class="relative h-14 w-14 shrink-0 rounded-full p-1" style="background: conic-gradient(#818cf8 {{ aproveitamento_simulados }}%, rgba(51, 65, 85, .7) 0);">
+                        <div class="flex h-full w-full items-center justify-center rounded-full bg-slate-900 text-[12px] font-black tabular-nums text-indigo-300">{{ '{:0.1f}'.format(aproveitamento_simulados).replace('.0', '') }}%</div>
+                    </div>
+                </div>
+                </div>
             </div>
         </div>
     </nav>
@@ -161,6 +209,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                <button id="btnProximasMaterias" type="button" class="hidden" aria-hidden="true">Próximas</button>
                 <select id="timerMateria" title="Escolha a matéria" class="w-36 sm:w-44 lg:w-48 max-w-[180px] rounded-xl border border-slate-700 bg-slate-800 px-2.5 sm:px-3 py-2 text-xs sm:text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer truncate shrink-0">
                     <option value="">Escolha a matéria</option>
                     {% for materia in materias_grade %}
@@ -180,6 +229,16 @@
                 <button id="timerFinish" type="button" class="timer-action-button shrink-0 rounded-xl border border-slate-700 bg-slate-800 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">Finalizar</button>
                 <button id="timerReset" type="button" class="timer-action-button shrink-0 rounded-xl border border-slate-700 bg-slate-800/80 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-400 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/30 transition-colors">Zerar</button>
             </div>
+        </div>
+        <div id="proximasMateriasPopover" class="fixed right-4 top-28 z-[100] hidden w-72 rounded-2xl border border-sky-500/30 bg-slate-950/95 p-4 shadow-2xl shadow-slate-950/50 backdrop-blur-md">
+            <div class="mb-3 flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-sky-300">Próximas matérias</p>
+                    <p class="mt-1 text-[10px] text-slate-500">Escolha 2 ou 3 para estudar hoje.</p>
+                </div>
+                <button id="btnFecharProximas" type="button" class="text-lg leading-none text-slate-500 hover:text-white" aria-label="Fechar">×</button>
+            </div>
+            <div id="listaProximasMaterias" class="space-y-2"></div>
         </div>
     </section>
 
@@ -338,17 +397,24 @@
                             Matéria da Vez no Ciclo
                         </div>
                         <h3 id="cicloMateriaAtual" class="mt-2 text-2xl sm:text-3xl font-black text-white">Carregando...</h3>
+                        <div class="mt-3 flex flex-wrap items-center gap-1.5 text-[10px]">
+                            <span class="mr-1 font-black uppercase tracking-wider text-slate-500">Hoje:</span>
+                            <div id="cicloPlanoHoje" class="flex flex-wrap gap-1.5"></div>
+                        </div>
                         <p id="cicloSubtitulo" class="mt-1 text-xs text-slate-400">Estude no seu ritmo, sem depender do dia da semana. Ao terminar, avance para a próxima.</p>
                     </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                        <button type="button" id="cicloBtnIniciar" class="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-950 shadow-lg shadow-emerald-500/25 transition-all hover:bg-emerald-400 hover:scale-[1.02] active:scale-95 cursor-pointer">
+                    <div class="flex items-center gap-2 md:flex-nowrap">
+                        <button type="button" id="cicloBtnIniciar" class="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-emerald-500 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-slate-950 shadow-lg shadow-emerald-500/25 transition-all hover:bg-emerald-400 hover:scale-[1.02] active:scale-95 cursor-pointer">
                             <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
                             Iniciar Estudo Agora
                         </button>
-                        <button type="button" id="cicloBtnAvancar" class="ciclo-btn-nav rounded-xl border border-white/10 bg-slate-800/80 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-200 transition-all hover:bg-slate-700 cursor-pointer">
+                        <button type="button" id="cicloBtnConcluir" class="hidden" aria-hidden="true">
+                            ✓ Marcar como estudada
+                        </button>
+                        <button type="button" id="cicloBtnAvancar" class="ciclo-btn-nav whitespace-nowrap rounded-xl border border-white/10 bg-slate-800/80 px-3.5 py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-slate-200 transition-all hover:bg-slate-700 cursor-pointer">
                             Próxima Matéria ❯
                         </button>
-                        <button type="button" id="cicloBtnVoltar" class="ciclo-btn-nav rounded-xl border border-white/10 bg-slate-800/80 px-3.5 py-3 text-xs font-black text-slate-400 transition-all hover:bg-slate-700 hover:text-white cursor-pointer" title="Voltar para a matéria anterior">
+                        <button type="button" id="cicloBtnVoltar" class="ciclo-btn-nav rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2.5 text-xs font-black text-slate-400 transition-all hover:bg-slate-700 hover:text-white cursor-pointer" title="Voltar para a matéria anterior">
                             ❮
                         </button>
                     </div>
@@ -363,6 +429,7 @@
                         <p class="text-xs text-slate-400">Clique em qualquer matéria para torná-la a atual ou use as setas para navegar.</p>
                     </div>
                     <div class="text-xs text-slate-400 font-bold">
+                        <span class="mr-3 hidden text-[10px] font-normal text-slate-500 sm:inline">Use ↑ e ↓ ou arraste para reordenar</span>
                         <span id="cicloContador" class="text-sky-300 font-black">0</span> matérias no ciclo
                     </div>
                 </div>
@@ -910,7 +977,7 @@
                     <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Ritmo semanal</p>
                     <h3 class="mt-2 text-lg font-black text-white">Questões por dia</h3>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
+                <div id="grafico-semanal-controles" class="flex flex-wrap items-center gap-2">
                     {% set filtro_semana = '&assunto=' ~ (assunto_filtro|urlencode) if assunto_filtro else '' %}
                     <button type="button" data-semana-nav="{{ semana_anterior.isoformat() }}" data-filtro="{{ filtro_semana }}" aria-label="Ver semana anterior" title="Semana anterior" class="rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">Anterior</button>
                     <span id="grafico-semana-label" class="text-xs tabular-nums text-slate-400">{{ semana_inicio.strftime('%d/%m/%Y') }} a {{ semana_fim.strftime('%d/%m/%Y') }}</span>
@@ -960,7 +1027,7 @@
         <div id="progresso" class="rounded-3xl border border-white/10 bg-slate-900/60 p-6 lg:col-span-2">
             <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Progresso de {{ label_progresso }}</p>
+                    <p id="progresso-label" class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Progresso de {{ label_progresso }}</p>
                     <h3 class="mt-2 text-lg font-black text-white">Desempenho por Matéria</h3>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -968,12 +1035,12 @@
                     <a href="/estudos?data_progresso={{ data_ontem.isoformat() }}#progresso" class="rounded-lg border {% if data_progresso_filtro == data_ontem.isoformat() %}border-emerald-500 bg-emerald-500/20 text-emerald-200{% else %}border-slate-700 bg-slate-800 text-slate-300{% endif %} px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] hover:bg-slate-700">Ontem</a>
                     <form method="get" action="/estudos#progresso" class="flex items-center gap-2">
                         <label for="dataProgresso" class="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Data</label>
-                        <input id="dataProgresso" type="date" name="data_progresso" value="{{ data_progresso_filtro }}" class="rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500">
+                        <input id="dataProgresso" type="date" name="data_progresso" value="{{ data_progresso_filtro }}" class="study-history-date rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500">
                         <button type="submit" class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-300 hover:bg-slate-700">Ver</button>
                     </form>
                 </div>
             </div>
-            <div class="mt-5 grid gap-4 md:grid-cols-2">
+            <div id="progresso-lista" class="mt-5 grid gap-4 md:grid-cols-2">
                 {% for item in grafico_materias_hoje %}
                 <div class="rounded-2xl border border-white/5 bg-slate-950/40 p-4">
                     <div class="mb-2 flex items-center justify-between gap-3 text-xs">
@@ -1048,12 +1115,28 @@
                 </div>
                 <div>
                     <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Assunto / matéria</label>
-                    <select id="registroAssunto" name="assunto" required class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    <select id="registroAssunto" name="assunto" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
                         <option value="">Escolha a matéria do quadro</option>
                         {% for materia in materias_grade %}
+                        {% if materia|lower not in ['simulado', 'simulados'] %}
                         <option value="{{ materia }}" {% if editar and editar.assunto == materia %}selected{% endif %}>{{ materia }}</option>
+                        {% endif %}
                         {% endfor %}
                     </select>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Tipo de registro</label>
+                        <select id="tipoRegistro" name="tipo_registro" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                            <option value="estudo" {% if not editar or editar.tipo_registro != 'simulado' %}selected{% endif %}>Estudo normal</option>
+                            <option value="simulado" {% if editar and editar.tipo_registro == 'simulado' %}selected{% endif %}>Simulado</option>
+                        </select>
+                    </div>
+                    <div id="nomeSimuladoWrap" class="{% if not editar or editar.tipo_registro != 'simulado' %}hidden{% endif %}">
+                        <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Nome do simulado</label>
+                        <input type="text" name="nome_simulado" value="{{ editar.nome_simulado if editar and editar.nome_simulado else '' }}" placeholder="Ex.: Simulado Prefeitura 01" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+                    </div>
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-3">
@@ -1107,6 +1190,9 @@
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0">
                             <div class="min-h-12 break-words text-base font-black text-white">{{ item.assunto }}</div>
+                            {% if item.tipo_registro == 'simulado' %}
+                            <div class="mt-1 text-[10px] font-black uppercase tracking-wider text-indigo-300">Simulado{% if item.nome_simulado %} · {{ item.nome_simulado }}{% endif %}</div>
+                            {% endif %}
                             <div class="mt-1 text-[10px] uppercase text-slate-400">{{ item.data_estudo.strftime('%d/%m/%Y') }} · {{ item.horario_inicio or '--' }} até {{ item.horario_fim or '--' }}</div>
                         </div>
                         <span class="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase text-emerald-300">
@@ -1115,7 +1201,7 @@
                     </div>
                     <div class="mt-2 flex flex-wrap gap-2">
                         <a href="/estudos?editar_id={{ item.id }}#registro" class="rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-[9px] font-black uppercase text-sky-300 hover:bg-sky-500 hover:text-slate-950">Editar</a>
-                        <form method="post" action="/estudos/excluir">
+                        <form method="post" action="/estudos/excluir" data-reabrir-materia="{{ item.assunto }}">
                             <input type="hidden" name="registro_id" value="{{ item.id }}">
                             <details class="study-delete-details">
                                 <summary class="cursor-pointer rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[9px] font-black uppercase text-rose-300 hover:bg-rose-500 hover:text-white">Excluir</summary>
@@ -1141,7 +1227,7 @@
                         </div>
                     </div>
                     {% if item.quantidade_questoes and item.quantidade_questoes > 0 %}
-                    {% set pct = ((item.total_acertos / item.quantidade_questoes) * 100) | int %}
+                    {% set pct = ((item.total_acertos / item.quantidade_questoes) * 100) | round(1) %}
                     <div class="mt-3">
                         <div class="mb-1 flex items-center justify-between text-[10px]">
                             <span class="font-bold uppercase tracking-[0.12em] text-slate-500">Aproveitamento</span>
@@ -1527,6 +1613,24 @@
     (() => {
         // Auto-preenche horario_inicio e horario_fim com hora atual ao salvar,
         // caso os campos estejam vazios e o cronômetro não tenha preenchido.
+        const tipoRegistro = document.getElementById('tipoRegistro');
+        const nomeSimuladoWrap = document.getElementById('nomeSimuladoWrap');
+        const registroAssunto = document.getElementById('registroAssunto');
+        const atualizarObrigatoriedadeMateria = () => {
+            if (!registroAssunto || !tipoRegistro) return;
+            registroAssunto.required = tipoRegistro.value !== 'simulado';
+            if (tipoRegistro.value === 'simulado' && !registroAssunto.value) {
+                registroAssunto.title = 'Opcional para simulados; será registrado como Geral.';
+            } else {
+                registroAssunto.removeAttribute('title');
+            }
+        };
+        tipoRegistro?.addEventListener('change', () => {
+            nomeSimuladoWrap?.classList.toggle('hidden', tipoRegistro.value !== 'simulado');
+            atualizarObrigatoriedadeMateria();
+        });
+        atualizarObrigatoriedadeMateria();
+
         const form = document.querySelector('form[action="/estudos"]');
         if (form) {
             form.addEventListener('submit', () => {
@@ -1600,6 +1704,11 @@
             if (tabName === 'registro') sincronizarFormularioComCronometro();
         }));
 
+        // A matéria é um filtro direto; as datas continuam dependendo do botão.
+        const historicoAssunto = document.getElementById('historicoAssunto');
+        const historicoFiltro = historicoAssunto?.closest('form');
+        historicoAssunto?.addEventListener('change', () => historicoFiltro?.submit());
+
         // Lê o hash e a URL para determinar a aba ativa (Padrão: SEMPRE 'quadro')
         const hash = window.location.hash;
         const searchParams = new URLSearchParams(window.location.search);
@@ -1616,6 +1725,7 @@
         }
 
         showView(initialView);
+        document.documentElement.classList.add('estudos-js-ready');
         // Se abriu direto na aba de registro (ex: reload ao editar), sincroniza com cronômetro
         if (initialView === 'registro') sincronizarFormularioComCronometro();
 
@@ -1668,14 +1778,14 @@
 <script>
     // Delegação de eventos no document para funcionar mesmo após substituição do card via AJAX
     document.addEventListener('click', async (e) => {
-        const btn = e.target.closest('[data-semana-nav]');
+        const btn = e.target.closest('[data-semana-nav], [data-semana-nav-url]');
         if (!btn) return;
 
         const semana = btn.dataset.semanaNav;
         const filtro = btn.dataset.filtro || '';
         const url = semana === 'atual'
-            ? `/estudos${filtro}`
-            : `/estudos?semana=${semana}${filtro}`;
+            ? `/estudos/grafico-semanal${filtro}`
+            : `/estudos/grafico-semanal?semana=${semana}${filtro}`;
 
         const card = document.getElementById('grafico-semanal-card');
         if (!card) return;
@@ -1686,18 +1796,31 @@
 
         try {
             const res = await fetch(url, { credentials: 'same-origin' });
-            const html = await res.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
+            if (!res.ok) throw new Error('Falha ao carregar o gráfico semanal');
+            const dados = await res.json();
+            const max = Math.max(...dados.dias.map(item => Number(item.questoes) || 0), 1);
+            const barras = card.querySelector('#grafico-barras');
+            if (barras) barras.innerHTML = dados.dias.map(item => {
+                const questoes = Number(item.questoes) || 0;
+                const altura = questoes ? Math.max(8, Math.round((questoes / max) * 100)) : 2;
+                return `<div class="flex h-full flex-1 flex-col items-center justify-end gap-2"><span class="text-[10px] font-black text-slate-300">${questoes}</span><div class="w-full max-w-10 rounded-t-lg bg-sky-500/80" style="height:${altura}%;min-height:${questoes ? 8 : 2}px"></div><span class="text-[10px] font-black uppercase text-slate-500">${item.dia}</span></div>`;
+            }).join('');
+            const formatDate = value => value.split('-').reverse().join('/');
+            const controles = card.querySelector('#grafico-semanal-controles');
+            if (controles) {
+                const next = dados.inicio < dados.semana_atual
+                    ? `<button type="button" data-semana-nav="${dados.proxima}" data-filtro="${filtro}" class="rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">Próxima</button>`
+                    : '<span class="rounded-lg border border-white/5 px-3 py-2 text-xs font-bold text-slate-600">Próxima</span>';
+                controles.innerHTML = `<button type="button" data-semana-nav="${dados.anterior}" data-filtro="${filtro}" class="rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">Anterior</button><span id="grafico-semana-label" class="text-xs tabular-nums text-slate-400">${formatDate(dados.inicio)} a ${formatDate(dados.fim)}</span>${next}`;
+            }
 
             // Substitui o card pelo novo — o listener no document continua ativo
-            const novoCard = doc.getElementById('grafico-semanal-card');
-            if (novoCard) {
-                card.replaceWith(novoCard);
-            }
         } catch (err) {
             // Fallback: navega normalmente se o fetch falhar
-            window.location.href = url;
+            window.location.href = `/estudos${semana === 'atual' ? filtro : `?semana=${semana}${filtro}`}#desempenho`;
+        } finally {
+            card.style.opacity = '';
+            card.style.pointerEvents = '';
         }
     });
 </script>
@@ -1712,15 +1835,23 @@
             card.style.pointerEvents = 'none';
 
             try {
-                const response = await fetch(url, { credentials: 'same-origin' });
+                const destinoDados = new URL(url, window.location.href);
+                destinoDados.pathname = '/estudos/progresso';
+                const response = await fetch(destinoDados.toString(), { credentials: 'same-origin' });
                 if (!response.ok) throw new Error('Falha ao carregar o progresso');
 
-                const html = await response.text();
-                const documento = new DOMParser().parseFromString(html, 'text/html');
-                const novoCard = documento.getElementById('progresso');
+                const dados = await response.json();
+                const novoCard = true;
                 if (!novoCard) throw new Error('Card de progresso não encontrado');
 
-                card.replaceWith(novoCard);
+                const label = card.querySelector('#progresso-label');
+                if (label) label.textContent = `Progresso de ${dados.label}`;
+                const lista = card.querySelector('#progresso-lista');
+                if (lista) lista.innerHTML = dados.itens.length ? dados.itens.map(item => {
+                    const percentual = Number(item.percentual) || 0;
+                    const cor = percentual >= 70 ? 'bg-emerald-500' : (percentual >= 50 ? 'bg-amber-400' : 'bg-rose-500');
+                    return `<div class="rounded-2xl border border-white/5 bg-slate-950/40 p-4"><div class="mb-2 flex items-center justify-between gap-3 text-xs"><span class="truncate font-bold text-slate-300">${item.materia}</span><span class="font-black text-emerald-300">${percentual}% (${item.acertos}/${item.questoes})</span></div><div class="h-2 overflow-hidden rounded-full bg-slate-800"><div class="h-full rounded-full ${cor}" style="width:${percentual}%"></div></div></div>`;
+                }).join('') : '<div class="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500 md:col-span-2">Registre questões para visualizar este aproveitamento.</div>';
                 if (atualizarHistorico) {
                     const destino = new URL(url, window.location.href);
                     destino.hash = 'progresso';
@@ -1728,6 +1859,9 @@
                 }
             } catch (error) {
                 window.location.href = url;
+            } finally {
+                card.style.opacity = '';
+                card.style.pointerEvents = '';
             }
         }
 
@@ -1828,9 +1962,95 @@
         if (btnSemanal) btnSemanal.addEventListener('click', () => aplicarModo('semanal'));
         if (btnCiclo) btnCiclo.addEventListener('click', () => aplicarModo('ciclo'));
 
+        const KEY_PLANO_HOJE = 'estudos_plano_hoje';
+        function dataHoje() {
+            const agora = new Date();
+            return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
+        }
+        function getPlanoHoje(materias, idx) {
+            let plano = null;
+            try { plano = JSON.parse(localStorage.getItem(KEY_PLANO_HOJE) || 'null'); } catch (e) {}
+            const ordemAtual = materias.join('\u0001');
+            const precisaSincronizar = !plano
+                || plano.data !== dataHoje()
+                || !Array.isArray(plano.itens)
+                || plano.ordem !== ordemAtual
+                || plano.indice !== idx;
+            if (precisaSincronizar) {
+                const estadosAnteriores = new Map(
+                    Array.isArray(plano?.itens)
+                        ? plano.itens.map(item => [String(item.materia || '').trim().toLowerCase(), !!item.concluida])
+                        : []
+                );
+                const itens = materias.length ? [materias[idx]] : [];
+                if (materias.length > 1) itens.push(materias[(idx + 1) % materias.length]);
+                plano = {
+                    data: dataHoje(),
+                    ordem: ordemAtual,
+                    indice: idx,
+                    itens: itens.map(materia => ({
+                        materia,
+                        concluida: estadosAnteriores.get(String(materia).trim().toLowerCase()) || false
+                    }))
+                };
+                salvarPlanoHoje(plano);
+            }
+            return plano;
+        }
+        function salvarPlanoHoje(plano) {
+            localStorage.setItem(KEY_PLANO_HOJE, JSON.stringify(plano));
+        }
+        function adicionarAoPlanoHoje(materia) {
+            const materias = getMateriasCiclo();
+            const plano = getPlanoHoje(materias, getIndexAtual(materias.length));
+            if (materia && !plano.itens.some(item => item.materia === materia)) {
+                plano.itens.push({ materia, concluida: false });
+                salvarPlanoHoje(plano);
+            }
+        }
+        function reabrirMateriaNoCiclo(materia) {
+            const nome = (materia || '').trim();
+            if (!nome) return;
+            const materias = getMateriasCiclo();
+            const normalizarMateria = valor => String(valor || '').trim().toLocaleLowerCase();
+            const nomeNormalizado = normalizarMateria(nome);
+            const indice = materias.findIndex(item => normalizarMateria(item) === nomeNormalizado);
+            if (indice < 0) return;
+
+            const plano = getPlanoHoje(materias, getIndexAtual(materias.length));
+            // Remove qualquer cópia antiga (inclusive uma que esteja marcada como concluída)
+            // e recria a matéria como uma nova tarefa pendente.
+            plano.itens = plano.itens.filter(entry => normalizarMateria(entry.materia) !== nomeNormalizado);
+            plano.itens.unshift({ materia: materias[indice], concluida: false });
+            salvarPlanoHoje(plano);
+            salvarIndexAtual(indice);
+            renderizarCiclo();
+        }
+        function renderizarProximasMaterias(materias, idx) {
+            const lista = document.getElementById('cicloPlanoHoje');
+            if (!lista) return;
+            const plano = getPlanoHoje(materias, idx);
+            if (!plano.itens.length) {
+                lista.innerHTML = '<p class="py-2 text-xs text-slate-500">Nenhuma matéria no ciclo.</p>';
+                return;
+            }
+
+            const quantidade = Math.min(3, plano.itens.length);
+            lista.innerHTML = Array.from({ length: quantidade }, (_, posicao) => {
+                const item = plano.itens[posicao];
+                const materiaIndex = materias.indexOf(item.materia);
+                return `<button type="button" data-proxima-materia-index="${materiaIndex}" class="inline-flex max-w-[180px] items-center gap-1.5 rounded-lg border border-white/10 bg-slate-900/70 px-2 py-1 text-left hover:border-sky-400/50 hover:bg-sky-500/10">
+                    <span class="font-black text-sky-300">${item.concluida ? '✓' : `${posicao + 1}.`}</span>
+                    <span class="truncate text-[10px] font-bold text-slate-300" title="${materias[materiaIndex]}">${materias[materiaIndex]}</span>
+                </button>`;
+            }).join('');
+        }
+
         function renderizarCiclo() {
             const materias = getMateriasCiclo();
             let idx = getIndexAtual(materias.length);
+
+            renderizarProximasMaterias(materias, idx);
 
             const elAtual = document.getElementById('cicloMateriaAtual');
             const elContador = document.getElementById('cicloContador');
@@ -1854,7 +2074,7 @@
                     const cor = cores[i % cores.length];
 
                     return `
-                        <div class="ciclo-item-card relative flex flex-col justify-between rounded-xl border p-4 transition-all ${
+                        <div draggable="true" data-ciclo-drag-index="${i}" class="ciclo-item-card relative flex flex-col justify-between rounded-xl border p-4 transition-all cursor-grab active:cursor-grabbing ${
                             isAtiva 
                                 ? 'is-active border-sky-400 bg-sky-500/10 shadow-lg shadow-sky-500/10 ring-1 ring-sky-400' 
                                 : 'border-white/10 bg-slate-900/60 hover:border-white/20 hover:bg-slate-900/90'
@@ -1875,9 +2095,13 @@
                                 <button type="button" data-ciclo-estudar="${encodeURIComponent(mat)}" class="font-black text-sky-400 hover:text-sky-300 uppercase cursor-pointer">
                                     Estudar ❯
                                 </button>
-                                <button type="button" data-ciclo-remover="${i}" class="font-bold text-slate-500 hover:text-rose-400 cursor-pointer" title="Remover do ciclo">
+                                <div class="flex items-center gap-2">
+                                    <button type="button" data-ciclo-mover="up" data-ciclo-index="${i}" class="rounded-md border border-white/10 px-1.5 py-0.5 font-black text-slate-400 hover:border-sky-400 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-30" title="Mover para cima" ${i === 0 ? 'disabled' : ''}>↑</button>
+                                    <button type="button" data-ciclo-mover="down" data-ciclo-index="${i}" class="rounded-md border border-white/10 px-1.5 py-0.5 font-black text-slate-400 hover:border-sky-400 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-30" title="Mover para baixo" ${i === materias.length - 1 ? 'disabled' : ''}>↓</button>
+                                    <button type="button" data-ciclo-remover="${i}" class="font-bold text-slate-500 hover:text-rose-400 cursor-pointer" title="Remover do ciclo">
                                     ✕
-                                </button>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -1885,9 +2109,30 @@
             }
         }
 
+        function moverMateriaCiclo(origem, destino) {
+            const materias = getMateriasCiclo();
+            if (origem < 0 || destino < 0 || origem >= materias.length || destino >= materias.length || origem === destino) return;
+
+            const atualAntes = getIndexAtual(materias.length);
+            const [materia] = materias.splice(origem, 1);
+            materias.splice(destino, 0, materia);
+
+            // Mantém a matéria atual selecionada após a troca de posição.
+            let novoAtual = atualAntes;
+            if (atualAntes === origem) novoAtual = destino;
+            else if (origem < atualAntes && destino >= atualAntes) novoAtual--;
+            else if (origem > atualAntes && destino <= atualAntes) novoAtual++;
+
+            localStorage.setItem(KEY_CUSTOM, 'true');
+            salvarMateriasCiclo(materias);
+            salvarIndexAtual(novoAtual);
+            renderizarCiclo();
+        }
+
         const btnAvancar = document.getElementById('cicloBtnAvancar');
         const btnVoltar = document.getElementById('cicloBtnVoltar');
         const btnIniciar = document.getElementById('cicloBtnIniciar');
+        const btnConcluir = document.getElementById('cicloBtnConcluir');
 
         if (btnAvancar) {
             btnAvancar.addEventListener('click', () => {
@@ -1929,6 +2174,16 @@
             if (btnStart) btnStart.click();
         }
 
+        function estudarMateriaDoCiclo(indice) {
+            const materias = getMateriasCiclo();
+            const materia = materias[indice];
+            if (!materia) return;
+            adicionarAoPlanoHoje(materia);
+            salvarIndexAtual(indice);
+            renderizarCiclo();
+            iniciarEstudoMateria(materia);
+        }
+
         if (btnIniciar) {
             btnIniciar.addEventListener('click', () => {
                 const materias = getMateriasCiclo();
@@ -1937,9 +2192,131 @@
             });
         }
 
+        if (btnConcluir) {
+            btnConcluir.addEventListener('click', () => {
+                const materias = getMateriasCiclo();
+                if (!materias.length) return;
+                const idx = (getIndexAtual(materias.length) + 1) % materias.length;
+                salvarIndexAtual(idx);
+                renderizarCiclo();
+            });
+        }
+
+        const btnProximas = document.getElementById('btnProximasMaterias');
+        const popoverProximas = document.getElementById('proximasMateriasPopover');
+        const btnFecharProximas = document.getElementById('btnFecharProximas');
+        const listaProximas = document.getElementById('cicloPlanoHoje');
+
+        const registroFormHoje = document.querySelector('form[action="/estudos"]');
+        if (registroFormHoje) {
+            registroFormHoje.addEventListener('submit', () => {
+                const registroMateriaHoje = document.getElementById('registroAssunto');
+                const materia = registroMateriaHoje && registroMateriaHoje.value.trim();
+                if (!materia) return;
+                const materias = getMateriasCiclo();
+                const plano = getPlanoHoje(materias, getIndexAtual(materias.length));
+                const item = plano.itens.find(entry => entry.materia === materia);
+                if (item) item.concluida = true;
+                salvarPlanoHoje(plano);
+                const indice = materias.indexOf(materia);
+                if (indice >= 0 && indice === getIndexAtual(materias.length)) {
+                    salvarIndexAtual((indice + 1) % materias.length);
+                }
+            });
+        }
+
+        const KEY_REABRIR_MATERIA = 'estudos_materia_reabrir';
+        document.querySelectorAll('form[data-reabrir-materia]').forEach(form => {
+            form.addEventListener('submit', () => {
+                const materia = (form.dataset.reabrirMateria || '').trim();
+                if (materia) localStorage.setItem(KEY_REABRIR_MATERIA, materia);
+            });
+        });
+
+        const parametrosPagina = new URLSearchParams(window.location.search);
+        const materiaReaberta = parametrosPagina.get('materia_reaberta') || localStorage.getItem(KEY_REABRIR_MATERIA);
+        if (materiaReaberta) {
+            reabrirMateriaNoCiclo(materiaReaberta);
+            localStorage.removeItem(KEY_REABRIR_MATERIA);
+            window.history.replaceState(null, '', `${window.location.pathname}#quadro`);
+        }
+
+        if (btnProximas && popoverProximas) {
+            btnProximas.addEventListener('click', () => {
+                popoverProximas.classList.toggle('hidden');
+                renderizarProximasMaterias(getMateriasCiclo(), getIndexAtual(getMateriasCiclo().length));
+            });
+        }
+
+        if (btnFecharProximas && popoverProximas) {
+            btnFecharProximas.addEventListener('click', () => popoverProximas.classList.add('hidden'));
+        }
+
+        if (listaProximas) {
+            listaProximas.addEventListener('click', (e) => {
+                const btnMateria = e.target.closest('[data-proxima-materia-index]');
+                if (!btnMateria) return;
+                const indice = parseInt(btnMateria.dataset.proximaMateriaIndex, 10);
+                estudarMateriaDoCiclo(indice);
+                if (popoverProximas) popoverProximas.classList.add('hidden');
+            });
+        }
+
         const elLista = document.getElementById('cicloLista');
+        let indiceArrastado = null;
         if (elLista) {
+            elLista.addEventListener('dragstart', (e) => {
+                const card = e.target.closest('[data-ciclo-drag-index]');
+                if (!card) return;
+                indiceArrastado = parseInt(card.dataset.cicloDragIndex, 10);
+                card.classList.add('opacity-50');
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', String(indiceArrastado));
+                }
+            });
+
+            elLista.addEventListener('dragover', (e) => {
+                const card = e.target.closest('[data-ciclo-drag-index]');
+                if (!card || indiceArrastado === null) return;
+                e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                card.classList.add('ring-2', 'ring-amber-300');
+            });
+
+            elLista.addEventListener('dragleave', (e) => {
+                const card = e.target.closest('[data-ciclo-drag-index]');
+                if (card && !card.contains(e.relatedTarget)) {
+                    card.classList.remove('ring-2', 'ring-amber-300');
+                }
+            });
+
+            elLista.addEventListener('drop', (e) => {
+                const card = e.target.closest('[data-ciclo-drag-index]');
+                if (!card || indiceArrastado === null) return;
+                e.preventDefault();
+                const destino = parseInt(card.dataset.cicloDragIndex, 10);
+                card.classList.remove('ring-2', 'ring-amber-300');
+                moverMateriaCiclo(indiceArrastado, destino);
+                indiceArrastado = null;
+            });
+
+            elLista.addEventListener('dragend', () => {
+                indiceArrastado = null;
+                elLista.querySelectorAll('[data-ciclo-drag-index]').forEach((card) => {
+                    card.classList.remove('opacity-50', 'ring-2', 'ring-amber-300');
+                });
+            });
+
             elLista.addEventListener('click', (e) => {
+                const btnMover = e.target.closest('[data-ciclo-mover]');
+                if (btnMover) {
+                    const origem = parseInt(btnMover.dataset.cicloIndex, 10);
+                    const direcao = btnMover.dataset.cicloMover === 'up' ? -1 : 1;
+                    moverMateriaCiclo(origem, origem + direcao);
+                    return;
+                }
+
                 const btnSet = e.target.closest('[data-ciclo-set]');
                 if (btnSet) {
                     const idx = parseInt(btnSet.dataset.cicloSet, 10);
@@ -1951,7 +2328,9 @@
                 const btnEstudar = e.target.closest('[data-ciclo-estudar]');
                 if (btnEstudar) {
                     const mat = decodeURIComponent(btnEstudar.dataset.cicloEstudar);
-                    iniciarEstudoMateria(mat);
+                    const materias = getMateriasCiclo();
+                    const indice = materias.indexOf(mat);
+                    if (indice >= 0) estudarMateriaDoCiclo(indice);
                     return;
                 }
 

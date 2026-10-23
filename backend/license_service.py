@@ -32,13 +32,13 @@ def _build_database_url() -> str:
             )
             conn.close()
             print(f"[LICENSE_DB] Conectando em {host}")
-            return f"postgresql://{DB_USER}:{DB_PASS}@{host}/{DB_NAME}"
+            return f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{host}/{DB_NAME}"
         except Exception as exc:
             print(f"[LICENSE_DB] Host indisponivel ({host}): {exc}")
 
     fallback = DB_HOST or "db"
     print(f"[LICENSE_DB] Nenhum host respondeu. Usando fallback {fallback}")
-    return f"postgresql://{DB_USER}:{DB_PASS}@{fallback}/{DB_NAME}"
+    return f"postgresql+psycopg2://{DB_USER}:{DB_PASS}@{fallback}/{DB_NAME}"
 
 
 DATABASE_URL = _build_database_url()
