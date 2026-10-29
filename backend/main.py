@@ -2880,10 +2880,11 @@ async def view_estudos_login(request: Request):
 
 @app.get("/atendimento/login", response_class=HTMLResponse)
 async def view_atendimento_login(request: Request):
+    desktop_mode = request.query_params.get("desktop") == "1" or request.cookies.get("central_atendimento_tauri") == "1"
     return templates.TemplateResponse(
         request=request,
         name="atendimento_login.html",
-        context={"config": APP_CONFIG}
+        context={"config": APP_CONFIG, "desktop_mode": desktop_mode}
     )
 
 def _can_access_atendimento(request: Request) -> bool:

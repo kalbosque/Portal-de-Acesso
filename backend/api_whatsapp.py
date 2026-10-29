@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
 @router.get("/media/{filename:path}")
 def serve_whatsapp_media(filename: str, request: Request):
-    """Serve anexos da conversa sem permitir que o Tauri reutilize cache antigo."""
+    """Serve anexos da conversa com suporte a Content-Type correto e Range requests (streaming de audio/video)."""
     _require_atendimento_access(request)
     safe_name = os.path.basename(str(filename or "").strip())
     if not safe_name or safe_name != str(filename or "").strip().split("/")[-1]:
@@ -34,7 +34,33 @@ def serve_whatsapp_media(filename: str, request: Request):
     media_path = os.path.join(_BASE_DIR, "public_html", "uploads", "whatsapp_media", safe_name)
     if not os.path.isfile(media_path):
         raise HTTPException(status_code=404, detail="Mídia não encontrada")
-    return FileResponse(media_path, headers={"Cache-Control": "no-store, max-age=0"})
+
+    ext = safe_name.split(".")[-1].lower() if "." in safe_name else ""
+    mime_map = {
+        "ogg": "audio/ogg",
+        "oga": "audio/ogg",
+        "opus": "audio/ogg",
+        "mp3": "audio/mpeg",
+        "wav": "audio/wav",
+        "m4a": "audio/mp4",
+        "mp4": "video/mp4",
+        "webm": "video/webm",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp",
+        "gif": "image/gif",
+    }
+    media_type = mime_map.get(ext) or "application/octet-stream"
+
+    return FileResponse(
+        media_path,
+        media_type=media_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=86400",
+        }
+    )
 
 _whatsapp_columns_ready = False
 _connected_map_cache = {"expires_at": 0.0, "value": {}}
@@ -74,24 +100,32 @@ def _real_contact_number(item: dict) -> Optional[str]:
     return None
 
 
+_PROFILE_PIC_CACHE = {}  # {key: (url, timestamp)}
+
 def _fetch_profile_picture_url(base_url: str, token: str, instance: str, number: str) -> Optional[str]:
-    """Busca a foto quando findContacts não a fornece diretamente."""
+    """Busca a foto quando findContacts nÃ£o a fornece diretamente, com cache em memÃ³ria de 10 min."""
     raw_number = str(number or "").strip()
     is_group = raw_number.lower().endswith("@g.us")
     normalized = raw_number if is_group else _normalize_contact_number(raw_number)
     if not base_url or not normalized:
-        # O WhatsApp pode entregar o contato como @lid. Primeiro resolve o
-        # LID no catálogo da Evolution para obter o telefone real e/ou a foto.
         if not base_url or is_group or "@lid" not in raw_number.lower():
             return None
         normalized = raw_number
+
+    cache_key = f"{instance}:{normalized}"
+    now = time.time()
+    if cache_key in _PROFILE_PIC_CACHE:
+        cached_url, cached_at = _PROFILE_PIC_CACHE[cache_key]
+        if now - cached_at < 600:  # 10 minutos
+            return cached_url
+
     try:
         if is_group:
             group_response = requests.get(
                 f"{base_url}/group/findGroupInfos/{instance}",
                 headers={"apikey": token or ""},
                 params={"groupJid": normalized},
-                timeout=8,
+                timeout=4,
             )
             if group_response.ok:
                 group_payload = group_response.json()
@@ -99,15 +133,17 @@ def _fetch_profile_picture_url(base_url: str, token: str, instance: str, number:
                 for item in candidates:
                     picture = item.get("pictureUrl") or item.get("profilePictureUrl") or item.get("profilePicUrl") or item.get("picture")
                     if picture:
+                        _PROFILE_PIC_CACHE[cache_key] = (picture, now)
                         return picture
+            _PROFILE_PIC_CACHE[cache_key] = (None, now)
             return None
 
         if "@lid" in raw_number.lower():
             contacts_response = requests.post(
                 f"{base_url}/chat/findContacts/{instance}",
                 headers={"apikey": token or "", "Content-Type": "application/json"},
-                json={"where": {}, "take": 1000, "skip": 0, "orderBy": {}},
-                timeout=8,
+                json={"where": {}, "take": 500, "skip": 0, "orderBy": {}},
+                timeout=4,
             )
             contacts_payload = contacts_response.json() if contacts_response.ok else []
             if isinstance(contacts_payload, dict):
@@ -118,23 +154,29 @@ def _fetch_profile_picture_url(base_url: str, token: str, instance: str, number:
                 if match:
                     picture = match.get("profilePictureUrl") or match.get("profilePicUrl") or match.get("profile_picture")
                     if picture:
+                        _PROFILE_PIC_CACHE[cache_key] = (picture, now)
                         return picture
                     normalized = _real_contact_number(match)
             if not normalized or "@lid" in str(normalized).lower():
+                _PROFILE_PIC_CACHE[cache_key] = (None, now)
                 return None
         response = requests.post(
             f"{base_url}/chat/fetchProfilePictureUrl/{instance}",
             headers={"apikey": token or "", "Content-Type": "application/json"},
             json={"number": normalized},
-            timeout=8,
+            timeout=4,
         )
         if not response.ok:
+            _PROFILE_PIC_CACHE[cache_key] = (None, now)
             return None
         payload = response.json()
         if isinstance(payload, dict):
-            return payload.get("profilePictureUrl") or payload.get("profilePicUrl") or payload.get("picture")
+            pic = payload.get("profilePictureUrl") or payload.get("profilePicUrl") or payload.get("picture")
+            _PROFILE_PIC_CACHE[cache_key] = (pic, now)
+            return pic
     except Exception:
         pass
+    _PROFILE_PIC_CACHE[cache_key] = (None, now)
     return None
 
 # Caminho absoluto relativo ao diretório do script — garante leitura do config correto
@@ -806,40 +848,47 @@ def send_whatsapp_media(number: str, media_base64: str, media_type: str, mime_ty
     return False
 
 
-def _is_probably_thumbnail(candidate: str) -> bool:
+def _is_probably_thumbnail(candidate: str, media_kind: str = "") -> bool:
     if not isinstance(candidate, str):
         return False
     if candidate.startswith("http"):
         return "/thumbnail" in candidate.lower() or "/thumb" in candidate.lower() or "?size=" in candidate.lower()
+    # Áudios curtos ou arquivos pequenos legítimos têm poucos KB em base64 e NÃO são thumbnails!
+    if media_kind in ("audio", "document", "sticker"):
+        return len(candidate) < 16
     if candidate.startswith("data:"):
         return len(candidate) < 20000
     return len(candidate) < 20000
 
 
-def _find_base64(value):
+def _find_base64(value, media_kind: str = ""):
     if isinstance(value, dict):
+        # Se vier explicitamente o campo 'base64' (como na resposta do getBase64FromMediaMessage)
+        if "base64" in value and isinstance(value["base64"], str) and len(value["base64"]) >= 16:
+            return value["base64"]
+
         priority_keys = ("base64", "data", "fileBase64", "imageData", "binaryData", "url", "directPath", "mediaUrl", "imageUrl")
         fallback_keys = ("preview", "thumbnail", "jpegThumbnail")
 
         for key in priority_keys:
             candidate = value.get(key)
-            if isinstance(candidate, str) and (candidate.startswith("data:") or candidate.startswith("http") or len(candidate) >= 32):
-                if not _is_probably_thumbnail(candidate):
+            if isinstance(candidate, str) and (candidate.startswith("data:") or candidate.startswith("http") or len(candidate) >= 16):
+                if not _is_probably_thumbnail(candidate, media_kind):
                     return candidate
 
         for key in fallback_keys:
             candidate = value.get(key)
-            if isinstance(candidate, str) and (candidate.startswith("data:") or candidate.startswith("http") or len(candidate) >= 32):
-                if not _is_probably_thumbnail(candidate):
+            if isinstance(candidate, str) and (candidate.startswith("data:") or candidate.startswith("http") or len(candidate) >= 16):
+                if not _is_probably_thumbnail(candidate, media_kind):
                     return candidate
 
         for child in value.values():
-            found = _find_base64(child)
+            found = _find_base64(child, media_kind)
             if found:
                 return found
     elif isinstance(value, list):
         for child in value:
-            found = _find_base64(child)
+            found = _find_base64(child, media_kind)
             if found:
                 return found
     return None
@@ -860,7 +909,7 @@ def _save_incoming_media(message_obj: dict, message_key: dict, instance: str, me
     media_node = message_obj.get(f"{media_kind}Message", {}) or {}
     if not media_node and media_kind == "gif":
         media_node = message_obj.get("videoMessage", {}) or message_obj.get("imageMessage", {}) or {}
-    raw_media = _find_base64(media_node) or _find_base64(message_obj)
+    raw_media = _find_base64(media_node, media_kind) or _find_base64(message_obj, media_kind)
     direct_url = None
     if raw_media and raw_media.startswith(("http://", "https://")):
         direct_url = raw_media
@@ -881,29 +930,36 @@ def _save_incoming_media(message_obj: dict, message_key: dict, instance: str, me
                         "message": message_obj
                     }
                 }
+                # No Evolution API v2, getBase64FromMediaMessage é o endpoint padrão e mais confiável
                 response = requests.post(
-                    f"{base_url}/chat/downloadMediaMessage/{resolved}",
+                    f"{base_url}/chat/getBase64FromMediaMessage/{resolved}",
                     headers={"apikey": wa_token, "Content-Type": "application/json"},
                     json=payload,
                     timeout=20,
                 )
                 if response.ok:
-                    try:
-                        json_payload = response.json()
-                        raw_media = _find_base64(json_payload)
-                    except Exception:
-                        content_type = response.headers.get("content-type", "image/jpeg")
-                        if response.content:
-                            raw_media = f"data:{content_type};base64,{base64.b64encode(response.content).decode('utf-8')}"
+                    res_json = response.json() if response.content else {}
+                    if isinstance(res_json, dict) and res_json.get("base64"):
+                        raw_media = res_json["base64"]
+                    else:
+                        raw_media = _find_base64(res_json, media_kind)
+
+                # Fallback para downloadMediaMessage caso getBase64 não resolva
                 if not raw_media:
-                    response = requests.post(
-                        f"{base_url}/chat/getBase64FromMediaMessage/{resolved}",
+                    response_down = requests.post(
+                        f"{base_url}/chat/downloadMediaMessage/{resolved}",
                         headers={"apikey": wa_token, "Content-Type": "application/json"},
                         json=payload,
                         timeout=15,
                     )
-                    if response.ok:
-                        raw_media = _find_base64(response.json())
+                    if response_down.ok:
+                        try:
+                            json_payload = response_down.json()
+                            raw_media = _find_base64(json_payload, media_kind)
+                        except Exception:
+                            content_type = response_down.headers.get("content-type", "image/jpeg")
+                            if response_down.content:
+                                raw_media = f"data:{content_type};base64,{base64.b64encode(response_down.content).decode('utf-8')}"
             except Exception as exc:
                 print(f"[Webhook] Falha ao obter mídia {media_kind}: {exc}")
 

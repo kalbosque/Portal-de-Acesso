@@ -112,9 +112,15 @@
         async function sairDaCentral(event) {
             event?.stopPropagation();
             try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+            document.cookie = 'user_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            document.cookie = 'user_role=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            document.cookie = 'user_name=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            document.cookie = 'username=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+            document.cookie = 'user_perms=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             const isDesktopApp = document.body.classList.contains('desktop-focus') || new URLSearchParams(window.location.search).get('desktop') === '1';
             window.location.href = isDesktopApp ? '/atendimento/login?desktop=1' : '/atendimento/login';
         }
+        window.sairDaCentral = sairDaCentral;
         document.addEventListener('click', function(event) {
             const menu = document.querySelector('.attendance-nav');
             const toggle = document.querySelector('.attendance-menu-toggle');

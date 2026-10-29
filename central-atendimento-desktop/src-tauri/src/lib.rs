@@ -55,7 +55,7 @@ fn trigger_message_alert(app: tauri::AppHandle, sender: String, preview: String)
     } else {
         preview.chars().take(240).collect::<String>()
     };
-    let app_title = "Central de Atendimento v0.1.7";
+    let app_title = "Central de Atendimento v0.1.9";
 
     // Pisca a barra de tarefas sem forçar foco (forçar foco suprime o toast do Windows)
     if let Some(window) = app.get_webview_window("main") {
@@ -96,6 +96,11 @@ fn request_native_notification_permission(app: tauri::AppHandle) -> Result<Strin
     Ok(format!("{permission:?}"))
 }
 
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -118,7 +123,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             trigger_message_alert,
-            request_native_notification_permission
+            request_native_notification_permission,
+            exit_app
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar a Central de Atendimento");

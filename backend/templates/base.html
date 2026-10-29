@@ -20,6 +20,9 @@
         h1, h2, h3, h4, .font-premium { font-family: 'Outfit', sans-serif; }
         .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
         .glass-input { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.1); color: #f8fafc; outline: none; transition: all 0.3s ease;}
+        /* Modais de conta: evita blur de tela inteira durante a digitação. */
+        .account-modal-overlay { background: rgba(2, 6, 23, 0.88) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+        .account-modal-panel { background: rgba(30, 41, 59, 0.98) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
         .gradient-text { background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
         /* === High Contrast & Modern Premium Light/Dark Mode Customizations === */
@@ -364,6 +367,12 @@
                         </div>
                     </div>
 
+                    <!-- Sair visível -->
+                    <button type="button" onclick="handleLogout()" aria-label="Sair do sistema" title="Sair do sistema" class="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-rose-300 transition-all hover:border-rose-400/40 hover:bg-rose-500 hover:text-white">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        <span>Sair</span>
+                    </button>
+
                     <!-- Mobile: Botão Hamburger -->
                     <button onclick="toggleMobileMenu()" class="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white border border-white/5">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -476,8 +485,8 @@
     </footer>
 
     <!-- Modal Editar Perfil -->
-    <div id="modal-perfil" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden animate-fade-in">
-        <div class="glass-panel w-full max-w-md rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
+    <div id="modal-perfil" class="account-modal-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden animate-fade-in">
+        <div class="account-modal-panel glass-panel w-full max-w-md rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
             <div class="p-8 border-b border-white/5 bg-white/5 flex justify-between items-center">
                 <h3 class="text-xl font-black text-white uppercase italic tracking-tighter">Editar Perfil</h3>
                 <button onclick="closeModal('modal-perfil')" class="text-slate-500 hover:text-white transition-colors">
@@ -495,8 +504,8 @@
     </div>
 
     <!-- Modal Alterar Senha -->
-    <div id="modal-senha" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden animate-fade-in">
-        <div class="glass-panel w-full max-w-md rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
+    <div id="modal-senha" class="account-modal-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden animate-fade-in">
+        <div class="account-modal-panel glass-panel w-full max-w-md rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
             <div class="p-8 border-b border-white/5 bg-white/5 flex justify-between items-center">
                 <h3 class="text-xl font-black text-white uppercase italic tracking-tighter">Alterar Senha</h3>
                 <button onclick="closeModal('modal-senha')" class="text-slate-500 hover:text-white transition-colors">
@@ -506,11 +515,21 @@
             <form onsubmit="handleChangePassword(event)" class="p-8 space-y-6">
                 <div>
                     <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Nova Senha</label>
-                    <input type="password" name="password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all" required minlength="6">
+                    <div class="relative">
+                        <input id="new-password" type="password" name="password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-12 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors" required minlength="6">
+                        <button type="button" onclick="togglePasswordVisibility('new-password', this)" aria-label="Mostrar nova senha" class="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-500 hover:text-white">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        </button>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Confirmar Senha</label>
-                    <input type="password" name="confirm_password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all" required>
+                    <div class="relative">
+                        <input id="confirm-password" type="password" name="confirm_password" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-12 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors" required>
+                        <button type="button" onclick="togglePasswordVisibility('confirm-password', this)" aria-label="Mostrar confirmação da senha" class="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-500 hover:text-white">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        </button>
+                    </div>
                 </div>
                 <button type="submit" class="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-95 transition-all">Atualizar Senha</button>
             </form>
@@ -530,6 +549,13 @@
 
         function closeModal(id) {
             document.getElementById(id).classList.add('hidden');
+        }
+
+        function togglePasswordVisibility(inputId, button) {
+            const input = document.getElementById(inputId);
+            const visible = input.type === 'text';
+            input.type = visible ? 'password' : 'text';
+            button.setAttribute('aria-label', visible ? 'Mostrar senha' : 'Ocultar senha');
         }
 
         // Fecha dropdown ao clicar fora
@@ -644,6 +670,7 @@
         // ── REAL-TIME WebSocket (substitui polling) ──────────────────────
         let ws = null;
         let wsReconnectTimer = null;
+        let wsPingTimer = null;
         let latestMsgId = 0;
         let lastAbertosCount = null;
 
@@ -779,7 +806,8 @@
                 console.log('[WS] Conectado ao servidor em tempo real');
                 clearInterval(wsReconnectTimer);
                 // Ping periódico para manter conexão ativa
-                setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 30000);
+                clearInterval(wsPingTimer);
+                wsPingTimer = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 30000);
             };
 
             ws.onmessage = handleWsEvent;

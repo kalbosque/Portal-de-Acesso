@@ -28,13 +28,17 @@
       const SERVER_KEY = 'central_atendimento_server_url';
       // Mantém o comportamento anterior: abre automaticamente no servidor
       // atual quando ainda não existe uma configuração salva.
-      // Túnel público temporário do Atual, usado para acesso fora da rede local.
-      const DEFAULT_SERVER = 'https://parks-trio-nutritional-contemporary.trycloudflare.com';
+      // Servidor padrão da Central de Atendimento
+      const DEFAULT_SERVER = 'https://portaldoacessos.taildbf5af.ts.net:8443';
       let redirectTimer;
 
       function getSavedServer() {
         const stored = localStorage.getItem(SERVER_KEY);
-        if (stored && /ngrok-free\.dev|crust-backroom-jolt|locked-allowed-telescope-vinyl\.trycloudflare\.com|progress-spectacular-habitat-honest\.trycloudflare\.com|servidor-xml\.taildbf5af\.ts\.net|portaldoacessos\.taildbf5af\.ts\.net/i.test(stored)) {
+        if (
+          stored &&
+          (/trycloudflare\.com|ngrok-free\.dev|crust-backroom-jolt|servidor-xml\.taildbf5af\.ts\.net/i.test(stored) ||
+           (stored.includes('portaldoacessos.taildbf5af.ts.net') && !stored.includes(':8443')))
+        ) {
           localStorage.setItem(SERVER_KEY, DEFAULT_SERVER);
           return DEFAULT_SERVER;
         }
@@ -43,7 +47,7 @@
 
       function normalizeServer(value) {
         let server = String(value || '').trim().replace(/\/+$/, '');
-        server = server.replace(/\/central-atendimento(\/.*)?$/i, '');
+        server = server.replace(/\/(central-atendimento|atendimento)(\/.*)?$/i, '');
         return server;
       }
 

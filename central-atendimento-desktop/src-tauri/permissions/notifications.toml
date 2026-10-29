@@ -2,3 +2,9 @@
 identifier = "allow-trigger-message-alert"
 description = "Permite que a Central exiba alertas nativos para novas mensagens."
 commands.allow = ["trigger_message_alert"]
+
+[[permission]]
+identifier = "allow-exit-app"
+description = "Permite fechar o aplicativo da Central."
+commands.allow = ["exit_app"]
+

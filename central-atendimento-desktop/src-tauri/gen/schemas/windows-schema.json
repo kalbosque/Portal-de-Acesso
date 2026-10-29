@@ -345,6 +345,12 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Permite fechar o aplicativo da Central.",
+          "type": "string",
+          "const": "allow-exit-app",
+          "markdownDescription": "Permite fechar o aplicativo da Central."
+        },
+        {
           "description": "Permite que a Central exiba alertas nativos para novas mensagens.",
           "type": "string",
           "const": "allow-trigger-message-alert",

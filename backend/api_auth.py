@@ -241,11 +241,12 @@ async def update_profile(request: Request, nome: str = Form(...)):
             return JSONResponse({"success": False, "detail": "Usuario nao encontrado"}, status_code=404)
 
         user.nome = nome.strip() or user.nome
+        updated_name = user.nome or user.username
         session.add(user)
         session.commit()
 
     response = JSONResponse({"success": True, "message": "Perfil atualizado"})
-    response.set_cookie("user_name", user.nome or user.username, path="/", httponly=False, samesite="Lax")
+    response.set_cookie("user_name", updated_name, path="/", httponly=False, samesite="Lax")
     return response
 
 

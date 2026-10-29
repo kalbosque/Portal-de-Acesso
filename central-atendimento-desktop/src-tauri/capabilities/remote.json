@@ -8,6 +8,8 @@
       "http://192.168.1.230:3001/**",
       "http://localhost:3001/**",
       "http://127.0.0.1:3001/**",
+      "https://portaldoacessos.taildbf5af.ts.net:8443/**",
+      "https://portaldoacessos.taildbf5af.ts.net/**",
       "https://parks-trio-nutritional-contemporary.trycloudflare.com/**"
     ]
   },
@@ -21,6 +23,9 @@
     "core:window:allow-is-focused",
     "core:window:allow-is-minimized",
     "allow-trigger-message-alert",
+    "allow-exit-app",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
     "notification:default",
     "notification:allow-notify",
     "notification:allow-request-permission",

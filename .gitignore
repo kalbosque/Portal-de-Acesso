@@ -61,3 +61,8 @@ backend/public_html/uploads/
 # Node e Tauri
 central-atendimento-desktop/node_modules/
 central-atendimento-desktop/src-tauri/target/
+.dotnet-home/
+.nuget-packages/
+backups/
+backend/static/downloads/*.exe
+!backend/static/downloads/Central-de-Atendimento-Operador-latest.exe
