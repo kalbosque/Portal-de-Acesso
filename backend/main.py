@@ -1374,6 +1374,120 @@ def _detalhes_banca(banca: str, perfil: dict) -> dict:
 def _normalizar_raio_x(valor: str) -> str:
     return unicodedata.normalize("NFKD", (valor or "")).encode("ascii", "ignore").decode("ascii").casefold()
 
+def _extrair_nome_concurso(texto: str) -> str | None:
+    """Identifica um nome curto do concurso no início do edital."""
+    inicio = (texto or "")[:30000]
+    padroes = (
+        r"EDITAL\s+DE\s+CONCURSO\s+P[ÚU]BLICO\s*(?:N[º°o]\s*)?([^\n]+)",
+        r"EDITAL\s+DE\s+CONCURSO\s+P[ÚU]BLICO\s*([^\n]+)",
+    )
+    for padrao in padroes:
+        encontrado = re.search(padrao, inicio, flags=re.IGNORECASE)
+        if not encontrado:
+            continue
+        trecho = re.sub(r"\s+", " ", encontrado.group(1)).strip(" .;:-")
+        trecho = re.sub(r",?\s*\d{1,2}\s+de\s+[A-Za-zÀ-ÿ]+\s+de\s+\d{4}.*$", "", trecho, flags=re.IGNORECASE)
+        trecho = re.sub(r"\s+", " ", trecho).strip(" .;:-")
+        if trecho:
+            return f"Concurso Público – {trecho}"[:180]
+    return None
+
+def _nome_concurso_e_placeholder(nome: str | None) -> bool:
+    return _normalizar_raio_x(nome or "") in {"", "concurso atual", "novo concurso", "concurso"}
+
+def _eh_analista_contabilidade(cargo: str) -> bool:
+    cargo_normalizado = re.sub(r"[^a-z0-9]+", " ", _normalizar_raio_x(cargo)).strip()
+    return (
+        "analista autarquico" in cargo_normalizado
+        and ("contabilidade" in cargo_normalizado or "ciencias contabeis" in cargo_normalizado)
+    )
+
+def _materias_analista_contabilidade() -> dict:
+    """Disciplinas do bloco de nível superior do edital do IPAM para A08."""
+    gerais = [
+        "Língua Portuguesa",
+        "Raciocínio Lógico e Matemático",
+        "Informática Básica",
+        "Administração Pública, Governança e Ética",
+        "Noções de Direito Administrativo, Constitucional e Previdenciário",
+        "Redação / Prova Discursiva",
+    ]
+    especificas = ["Conhecimentos Específicos de Contabilidade"]
+    return {"gerais": gerais, "especificas": especificas, "todas": gerais + especificas}
+
+def _eh_edital_ipam_contabilidade(cargo: str, texto: str) -> bool:
+    return _eh_analista_contabilidade(cargo) and "ipam" in _normalizar_raio_x(texto)
+
+def _eh_tecnico_informatica(cargo: str) -> bool:
+    cargo_normalizado = re.sub(r"[^a-z0-9]+", " ", _normalizar_raio_x(cargo)).strip()
+    return "tecnico autarquico" in cargo_normalizado and "informatica" in cargo_normalizado
+
+def _materias_tecnico_informatica() -> dict:
+    """Disciplinas do nível médio do edital do IPAM para T02."""
+    gerais = [
+        "Língua Portuguesa",
+        "Raciocínio Lógico e Matemático",
+        "Informática Básica",
+        "Noções de Administração Pública, Atendimento e Ética",
+        "Noções de Legislação Institucional, Previdenciária e de Assistência à Saúde",
+    ]
+    especificas = ["Conhecimentos Específicos de Informática"]
+    return {"gerais": gerais, "especificas": especificas, "todas": gerais + especificas}
+
+def _eh_edital_ipam_tecnico_informatica(cargo: str, texto: str) -> bool:
+    return _eh_tecnico_informatica(cargo) and "ipam" in _normalizar_raio_x(texto)
+
+def _materias_ipam_por_cargo(cargo: str) -> dict | None:
+    """Monta somente o bloco comum e o específico do cargo escolhido no IPAM."""
+    cargo_normalizado = _normalizar_raio_x(cargo)
+    if "analista autarquico" in cargo_normalizado:
+        gerais = [
+            "Língua Portuguesa",
+            "Raciocínio Lógico e Matemático",
+            "Informática Básica",
+            "Administração Pública, Governança e Ética",
+            "Noções de Direito Administrativo, Constitucional e Previdenciário",
+            "Redação / Prova Discursiva",
+        ]
+        if "contabilidade" in cargo_normalizado or "ciencias contabeis" in cargo_normalizado:
+            especifica = "Conhecimentos Específicos de Contabilidade"
+        elif "tecnologia da informacao" in cargo_normalizado or "informatica" in cargo_normalizado:
+            especifica = "Conhecimentos Específicos de Tecnologia da Informação"
+        else:
+            nome_cargo_normalizado = re.sub(r"^.*?analista autarquico", "", cargo_normalizado).strip(" -")
+            rotulos = {
+                "ciencias atuariais": "Ciências Atuariais",
+                "administracao": "Administração",
+                "administrativo": "Administrativo",
+                "auditor controle interno": "Auditoria e Controle Interno",
+                "auditor enfermeiro": "Auditoria de Enfermagem",
+                "auditor medico": "Auditoria Médica",
+                "auditor odontologico": "Auditoria Odontológica",
+                "direito": "Direito",
+                "gestao financeira": "Gestão Financeira",
+                "medico perito": "Medicina Pericial",
+                "servico social": "Serviço Social",
+            }
+            nome_cargo = rotulos.get(nome_cargo_normalizado, nome_cargo_normalizado.title())
+            especifica = f"Conhecimentos Específicos de {nome_cargo or 'do cargo'}"
+        return {"gerais": gerais, "especificas": [especifica], "todas": gerais + [especifica]}
+    if "tecnico autarquico" in cargo_normalizado:
+        gerais = [
+            "Língua Portuguesa",
+            "Raciocínio Lógico e Matemático",
+            "Informática Básica",
+            "Noções de Administração Pública, Atendimento e Ética",
+            "Noções de Legislação Institucional, Previdenciária e de Assistência à Saúde",
+        ]
+        nome_cargo_normalizado = re.sub(r"^.*?tecnico autarquico", "", cargo_normalizado).strip(" -")
+        nome_cargo = {"administrativa": "Administrativa", "informatica": "Informática"}.get(nome_cargo_normalizado, nome_cargo_normalizado.title())
+        if "informatica" in cargo_normalizado:
+            especifica = "Conhecimentos Específicos de Informática"
+        else:
+            especifica = f"Conhecimentos Específicos de {nome_cargo or 'do cargo'}"
+        return {"gerais": gerais, "especificas": [especifica], "todas": gerais + [especifica]}
+    return None
+
 def _prioridades_raio_x(materias: dict) -> list[dict]:
     """Cria uma ordem inicial de estudo sem inventar pesos de prova."""
     gerais = materias.get("gerais", []) or []
@@ -1424,19 +1538,37 @@ def _extrair_contexto_cargo(texto: str, cargo: str) -> tuple[str, bool, str]:
     # Primeiro tenta a expressão completa, evitando confundir cargos que
     # possuem somente uma palavra em comum, como Farmácia e Endemias.
     for indice in indices_busca:
-        linha = linhas[indice]
+        # Alguns PDFs quebram o cargo em duas linhas, principalmente quando
+        # existe uma barra, como "Contabilidade/Ciências Contábeis".
+        linha = " ".join(linhas[indice:min(fim_conteudo, indice + 3)])
         normalizada = re.sub(r"[-–—]+", " ", _normalizar_raio_x(linha))
         normalizada = re.sub(r"\s+", " ", normalizada).strip()
-        normalizada = re.sub(r"[^a-z0-9]+", " ", _normalizar_raio_x(linha)).strip()
+        normalizada = re.sub(r"[^a-z0-9]+", " ", normalizada).strip()
         if cargo_normalizado in normalizada:
             melhor = indice
             maior = len(tokens)
             # O cargo costuma aparecer primeiro na tabela de vagas e depois
             # novamente no anexo de conteÃºdo programÃ¡tico. MantÃ©m a Ãºltima
             # ocorrÃªncia exata para tentar capturar as matÃ©rias especÃ­ficas.
+    if _eh_analista_contabilidade(cargo):
+        # Prioriza o título real do Anexo III sobre ocorrências genéricas de
+        # "analista" encontradas em outras partes do edital.
+        for indice in indices_busca:
+            linha_candidata = _normalizar_raio_x(linhas[indice])
+            if "analista autarquico" in linha_candidata and "ciencias contabeis" in linha_candidata:
+                melhor = indice
+                maior = len(tokens)
+                break
+        if melhor is None:
+            for indice in indices_busca:
+                janela = _normalizar_raio_x(" ".join(linhas[indice:min(fim_conteudo, indice + 3)]))
+                if "analista autarquico" in janela and "ciencias contabeis" in janela:
+                    melhor = indice
+                    maior = len(tokens)
+                    break
     # Fallback para abreviações presentes no edital (ex.: ACE).
     for indice in indices_busca:
-        linha = linhas[indice]
+        linha = " ".join(linhas[indice:min(fim_conteudo, indice + 3)])
         if melhor is not None:
             break
         normalizada = _normalizar_raio_x(linha)
@@ -1448,6 +1580,16 @@ def _extrair_contexto_cargo(texto: str, cargo: str) -> tuple[str, bool, str]:
     # e nÃ£o representar o cargo. Para cargos com mais de um termo, exige a
     # combinaÃ§Ã£o de pelo menos dois termos antes de recortar o edital.
     minimo_tokens = 2 if len(tokens) >= 2 else 1
+    if (melhor is None or maior < minimo_tokens) and _eh_analista_contabilidade(cargo):
+        # No edital do IPAM o cargo aparece como "Ciências Contábeis" no
+        # Anexo III, embora o campo do usuário possa vir como
+        # "Contabilidade/Ciências Contábeis".
+        for indice in indices_busca:
+            janela = _normalizar_raio_x(" ".join(linhas[indice:min(fim_conteudo, indice + 3)]))
+            if "analista autarquico" in janela and "ciencias contabeis" in janela:
+                melhor = indice
+                maior = len(tokens)
+                break
     if melhor is None or maior < minimo_tokens:
         # Sem localizar o cargo com seguranÃ§a, nunca usa o edital inteiro
         # como conteÃºdo especÃ­fico, pois isso mistura outros cargos.
@@ -1479,11 +1621,14 @@ def _extrair_contexto_geral(texto: str) -> str:
 def _extrair_materias_edital(texto: str) -> dict:
     """Extrai matérias somente do trecho selecionado do cargo."""
     padroes = [
-        ("RedaÃ§Ã£o", "geral"),
-        ("NoÃ§Ãµes de AdministraÃ§Ã£o PÃºblica, Atendimento e Ã‰tica", "geral"),
-        ("NoÃ§Ãµes de LegislaÃ§Ã£o Institucional, PrevidenciÃ¡ria e de AssistÃªncia Ã  SaÃºde", "geral"),
+        ("Redação", "geral"),
+        ("Noções de Administração Pública, Atendimento e Ética", "geral"),
+        ("Noções de Legislação Institucional, Previdenciária e de Assistência à Saúde", "geral"),
         ("Língua Portuguesa", "geral"), ("Raciocínio Lógico", "geral"), ("Matemática", "geral"),
-        ("Informática", "geral"), ("Atualidades", "geral"), ("Conhecimentos Gerais", "geral"),
+        ("Raciocínio Lógico e Matemático", "geral"), ("Informática", "geral"), ("Informática Básica", "geral"),
+        ("Atualidades", "geral"), ("Conhecimentos Gerais", "geral"),
+        ("Administração Pública, Governança e Ética", "geral"),
+        ("Noções de Direito Administrativo, Constitucional e Previdenciário", "geral"),
         ("Direito Constitucional", "especifica"), ("Direito Administrativo", "especifica"),
         ("Direito Penal", "especifica"), ("Direito Processual Penal", "especifica"), ("Direito Civil", "especifica"),
         ("Administração Pública", "especifica"), ("Legislação", "especifica"),
@@ -1491,10 +1636,10 @@ def _extrair_materias_edital(texto: str) -> dict:
         ("Redação Oficial", "geral"), ("Arquivologia", "especifica"), ("Contabilidade", "especifica"),
         ("Economia", "especifica"), ("Administração Financeira e Orçamentária", "especifica"),
         ("Direitos Humanos", "especifica"), ("Medicina Legal", "especifica"),
-        ("SaÃºde", "especifica"), ("SaÃºde Coletiva", "especifica"), ("PolÃ­ticas PÃºblicas", "especifica"),
-        ("AdministraÃ§Ã£o", "especifica"), ("GestÃ£o PÃºblica", "especifica"), ("LegislaÃ§Ã£o Municipal", "especifica"),
-        ("LegislaÃ§Ã£o Estadual", "especifica"), ("HistÃ³ria", "geral"), ("Geografia", "geral"),
-        ("Conhecimentos sobre o MunicÃ­pio", "geral"), ("Conhecimentos sobre o Estado", "geral"),
+        ("Saúde", "especifica"), ("Saúde Coletiva", "especifica"), ("Políticas Públicas", "especifica"),
+        ("Administração", "especifica"), ("Gestão Pública", "especifica"), ("Legislação Municipal", "especifica"),
+        ("Legislação Estadual", "especifica"), ("História", "geral"), ("Geografia", "geral"),
+        ("Conhecimentos sobre o Município", "geral"), ("Conhecimentos sobre o Estado", "geral"),
         ("Saúde Pública", "especifica"), ("Sistema Único de Saúde (SUS)", "especifica"),
         ("Vigilância Epidemiológica", "especifica"), ("Endemias", "especifica"), ("Dengue", "especifica"),
         ("Zoonoses", "especifica"), ("Educação em Saúde", "especifica"), ("Leishmaniose", "especifica"),
@@ -1506,8 +1651,8 @@ def _extrair_materias_edital(texto: str) -> dict:
             (gerais if grupo == "geral" else especificas).append(materia)
     # "Redação Oficial" contém a palavra redação, mas não significa prova
     # discursiva. Evita exibir duas matérias para cargos de nível médio.
-    if "RedaÃ§Ã£o" in gerais and "RedaÃ§Ã£o Oficial" in gerais:
-        gerais.remove("RedaÃ§Ã£o")
+    if "Redação" in gerais and "Redação Oficial" in gerais:
+        gerais.remove("Redação")
     return {"gerais": gerais, "especificas": especificas, "todas": gerais + especificas}
 
 def get_active_study_contest(session: Session, usuario_id: int) -> EstudoConcurso:
@@ -1545,7 +1690,7 @@ async def estudos_concursos(request: Request):
 
 
 @app.post("/estudos/concursos")
-async def criar_estudo_concurso(request: Request, nome: str = Form(...), cargo: str = Form(""), banca: str = Form(""), data_prova: str = Form("")):
+async def criar_estudo_concurso(request: Request, nome: str = Form(""), cargo: str = Form(""), banca: str = Form(""), data_prova: str = Form("")):
     user_id = request.cookies.get("user_id")
     if not user_id:
         return RedirectResponse(url="/estudos/login", status_code=303)
@@ -1553,7 +1698,7 @@ async def criar_estudo_concurso(request: Request, nome: str = Form(...), cargo: 
         usuario_id = int(user_id)
         nome_limpo = nome.strip()
         if not nome_limpo:
-            raise ValueError
+            nome_limpo = "Concurso atual"
         data = datetime.strptime(data_prova, "%Y-%m-%d").date() if data_prova else None
         with Session(engine) as session:
             for item in session.exec(select(EstudoConcurso).where(EstudoConcurso.usuario_id == usuario_id)).all():
@@ -1579,6 +1724,37 @@ async def selecionar_estudo_concurso(request: Request, concurso_id: int = Form(.
             item.ativo = item.id == concurso_id
         session.commit()
     return RedirectResponse(url="/estudos", status_code=303)
+
+@app.post("/estudos/concursos/excluir")
+async def excluir_estudo_concurso(request: Request, concurso_id: int = Form(...)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login", status_code=303)
+    try:
+        usuario_id = int(user_id)
+        with Session(engine) as session:
+            concurso = session.get(EstudoConcurso, concurso_id)
+            if not concurso or concurso.usuario_id != usuario_id:
+                return RedirectResponse(url="/estudos/concursos?mensagem=erro", status_code=303)
+            era_ativo = bool(concurso.ativo)
+            for plano in session.exec(select(EstudoPlano).where(EstudoPlano.concurso_id == concurso_id)).all():
+                session.delete(plano)
+            for registro in session.exec(select(EstudoSessao).where(EstudoSessao.concurso_id == concurso_id)).all():
+                session.delete(registro)
+            session.delete(concurso)
+            session.flush()
+            if era_ativo:
+                proximo = session.exec(
+                    select(EstudoConcurso)
+                    .where(EstudoConcurso.usuario_id == usuario_id)
+                    .order_by(desc(EstudoConcurso.criado_em))
+                ).first()
+                if proximo:
+                    proximo.ativo = True
+            session.commit()
+        return RedirectResponse(url="/estudos/concursos?mensagem=excluido", status_code=303)
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/estudos/concursos?mensagem=erro", status_code=303)
 
 
 @app.post("/estudos/concursos/editar")
@@ -1624,6 +1800,8 @@ async def view_raio_x_banca(request: Request, analise_id: int = None):
             materias_salvas = {"gerais": materias_salvas, "especificas": [], "todas": materias_salvas}
         linha_salva = _normalizar_raio_x(json.loads(analise.analise_json or "{}").get("linha_cargo", ""))
         cargo_salvo = _normalizar_raio_x(analise.cargo or "")
+        if _eh_edital_ipam_contabilidade(analise.cargo or linha_salva, analise.edital_texto or ""):
+            materias_salvas = _materias_analista_contabilidade()
         if ("analista autarquico" in cargo_salvo or "analista autarquico" in linha_salva) and ("informatica" in cargo_salvo or "tecnologia da informacao" in linha_salva):
             materias_salvas["gerais"] = ["L\u00edngua Portuguesa", "Racioc\u00ednio L\u00f3gico e Matem\u00e1tico", "Inform\u00e1tica B\u00e1sica", "Administra\u00e7\u00e3o P\u00fablica, Governan\u00e7a e \u00c9tica", "No\u00e7\u00f5es de Direito Administrativo, Constitucional e Previdenci\u00e1rio", "Reda\u00e7\u00e3o / Prova Discursiva"]
             materias_salvas["especificas"] = ["Conhecimentos Espec\u00edficos de Tecnologia da Informa\u00e7\u00e3o"]
@@ -1636,6 +1814,12 @@ async def view_raio_x_banca(request: Request, analise_id: int = None):
             if "Conhecimentos Específicos de Informática" not in materias_salvas.get("especificas", []):
                 materias_salvas.setdefault("especificas", []).append("Conhecimentos Específicos de Informática")
             materias_salvas["todas"] = materias_salvas["gerais"] + materias_salvas["especificas"]
+        if _eh_edital_ipam_tecnico_informatica(analise.cargo or linha_salva, analise.edital_texto or ""):
+            materias_salvas = _materias_tecnico_informatica()
+        if "ipam" in _normalizar_raio_x(analise.edital_texto or ""):
+            materias_ipam = _materias_ipam_por_cargo(analise.cargo or linha_salva)
+            if materias_ipam:
+                materias_salvas = materias_ipam
         for grupo in ("gerais", "especificas"):
             unicas = []
             vistas = set()
@@ -1685,10 +1869,6 @@ async def criar_raio_x_banca(request: Request, banca: str = Form(...), cargo: st
     # gerais em um anexo separado da tabela de cargos. Complementa somente
     # as matérias gerais com o PDF inteiro; as especÃ­ficas ficam restritas
     # ao cargo escolhido para nÃ£o misturar Analista com TÃ©cnico.
-    materias_edital = _extrair_materias_edital(texto)
-    for materia in materias_edital.get("gerais", []):
-        if materia not in materias["gerais"]:
-            materias["gerais"].append(materia)
     cargo_normalizado = _normalizar_raio_x(cargo)
     if "analista autarquico" in cargo_normalizado and "informatica" in cargo_normalizado:
         cargo_normalizado = cargo_normalizado.replace("informatica", "tecnologia da informacao")
@@ -1720,6 +1900,14 @@ async def criar_raio_x_banca(request: Request, banca: str = Form(...), cargo: st
     for materia in ("Língua Portuguesa", "Raciocínio Lógico"):
         if materia in materias_gerais_texto and materia not in materias["gerais"]:
             materias["gerais"].append(materia)
+    if _eh_edital_ipam_contabilidade(cargo, texto):
+        materias = _materias_analista_contabilidade()
+    if _eh_edital_ipam_tecnico_informatica(cargo, texto):
+        materias = _materias_tecnico_informatica()
+    if "ipam" in _normalizar_raio_x(texto):
+        materias_ipam = _materias_ipam_por_cargo(cargo)
+        if materias_ipam:
+            materias = materias_ipam
     materias["todas"] = materias["gerais"] + materias["especificas"]
     materias_normalizadas = {_normalizar_raio_x(materia) for materia in materias["todas"]}
     foco_filtrado = []
@@ -1765,6 +1953,10 @@ async def criar_raio_x_banca(request: Request, banca: str = Form(...), cargo: st
     analise["prioridades"] = _prioridades_raio_x(materias)
     with Session(engine) as session:
         # Mantém somente a análise atual por usuário, evitando crescimento indefinido.
+        concurso_detectado = _extrair_nome_concurso(texto)
+        concurso_ativo = get_active_study_contest(session, int(user_id))
+        if concurso_detectado and _nome_concurso_e_placeholder(concurso_ativo.nome):
+            concurso_ativo.nome = concurso_detectado
         antigas = session.exec(select(EstudoRaioXBanca).where(EstudoRaioXBanca.usuario_id == int(user_id))).all()
         for antiga in antigas:
             session.delete(antiga)
