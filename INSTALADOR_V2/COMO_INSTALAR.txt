@@ -1,0 +1,39 @@
+=====================================================
+       GUIA DE INSTALACAO - PRINTDASH v2.4.2
+=====================================================
+
+CONTEUDO DA PASTA:
+  - agent_2.0.exe   Agente de monitoramento
+  - INSTALAR.bat    Instalador automatico
+  - DESINSTALAR.bat Removedor automatico
+
+COMO INSTALAR:
+
+1. Copie toda esta pasta para a maquina do usuario.
+2. Execute INSTALAR.bat.
+3. Se o Windows pedir permissao, clique em Sim.
+4. Aguarde a mensagem INSTALACAO CONCLUIDA COM SUCESSO.
+
+O instalador automaticamente:
+  - pausa e remove tarefas antigas;
+  - encerra o agente antigo;
+  - instala a versao nova;
+  - configura o inicio automatico;
+  - inicia o agente em segundo plano;
+  - confirma se o agente iniciou corretamente.
+
+Durante a instalacao, mantenha a janela aberta. Ao aparecer a mensagem
+de conclusao, pressione qualquer tecla para fechar.
+
+O agente roda em segundo plano e nao abre janela durante o uso.
+Impressao em PDF e registrada como Digital, sem custo.
+
+PARA REMOVER:
+  Execute DESINSTALAR.bat como administrador.
+
+LOG:
+  C:\AgentImpressao\agent.log
+
+SERVIDOR:
+  http://192.168.1.230:3001
+=====================================================

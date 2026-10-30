@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+psycopg2-binary
+python-dotenv
+python-multipart
+jinja2
+pysnmp-lextudio
+passlib[bcrypt]
+schedule
+slowapi
+cryptography
+openpyxl
+xlrd
+pypdf
