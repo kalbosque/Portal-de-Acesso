@@ -275,7 +275,7 @@
     .col-actions > div > h3 { display: none; }
     .header-transfer { display: flex; align-items: center; gap: .35rem; margin-top: .35rem; }
     .header-transfer select { max-width: 145px; }
-    .chat-transfer-bar { position: relative; z-index: 5; min-height: 48px; display: flex; align-items: center; justify-content: flex-end; gap: .5rem; padding: .45rem .85rem; background: #162630; border-bottom: 1px solid rgba(52,211,153,.22); }
+    .chat-transfer-bar { position: relative; z-index: 5; min-height: 48px; display: flex; align-items: center; justify-content: flex-start; gap: .5rem; padding: .45rem .85rem; background: #162630; border-bottom: 1px solid rgba(52,211,153,.22); }
     .chat-transfer-bar.hidden { display: none !important; }
     .chat-transfer-bar > span { color: #a7f3d0 !important; }
     .chat-transfer-bar select { min-width: 170px; background: #243642; color: #f8fafc; border-color: rgba(148,163,184,.35); }
@@ -382,6 +382,13 @@
 
     /* Tab styles */
     .atend-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        min-width: 0;
+        white-space: nowrap;
+        line-height: 1;
         font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
@@ -389,6 +396,11 @@
         transition: all 0.2s ease;
         border-bottom: 2px solid transparent;
         border-radius: 0;
+    }
+    .atend-tab > span {
+        flex: 0 0 auto;
+        margin-left: 0 !important;
+        line-height: 1;
     }
     .atend-tab.active {
         color: #00a884;
@@ -437,7 +449,8 @@
         border-color: rgba(255,255,255,.09);
     }
     #no-chat-screen {
-        background: radial-gradient(circle at center, rgba(30,41,59,.24), rgba(2,6,23,.72) 68%);
+        background-color: #111827;
+        background-image: radial-gradient(circle at center, rgba(30,41,59,.24), rgba(2,6,23,.72) 68%);
     }
     #no-chat-screen .empty-chat-icon {
         box-shadow: 0 0 0 12px rgba(99,102,241,.04), 0 18px 45px rgba(0,0,0,.24);
@@ -627,7 +640,7 @@
     <div class="col-chat glass-panel rounded-[2.5rem] border border-white/5 bg-slate-900/40 overflow-hidden">
         
         <!-- Tela de Sem Chat Aberto -->
-        <div id="no-chat-screen" class="absolute inset-x-0 top-[88px] bottom-[76px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/20 z-10 transition-all duration-300">
+        <div id="no-chat-screen" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-slate-950/20 z-10 transition-all duration-300">
             <div class="empty-chat-icon w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 border border-indigo-500/20 mb-5">
                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
             </div>
@@ -663,7 +676,7 @@
         </div>
 
         <div id="chat-transfer-bar" class="chat-transfer-bar hidden">
-            <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Trocar atendente</span>
+            <span class="text-[9px] font-black uppercase tracking-widest text-emerald-200">Ações do atendimento</span>
             <select id="transfer-operator" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-[10px] font-bold text-slate-300" disabled>
                 <option value="">Selecione uma conversa</option>
             </select>
@@ -755,7 +768,7 @@
         </div>
 
         <div class="mobile-transfer-panel detail-section space-y-2">
-            <span class="block text-[9px] font-black uppercase tracking-widest text-indigo-300">Trocar atendente</span>
+            <span class="block text-[9px] font-black uppercase tracking-widest text-indigo-300">Ações do atendimento</span>
             <div class="flex gap-2">
                 <select id="transfer-operator-mobile" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-[10px] font-bold text-slate-300" disabled>
                     <option value="">Selecione uma conversa</option>
@@ -1305,6 +1318,7 @@
         playNotificationSound();
         const name = data.usuario || 'Cliente';
         const rawPreview = data.preview || data.mensagem || 'Nova mensagem recebida';
+        const isTauriApp = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
         const preview = formatMessagePreview(rawPreview);
         let mediaTitle = isNewChat ? 'Novo atendimento' : 'Nova mensagem';
         let isMediaPreview = false;
@@ -1317,13 +1331,17 @@
         if (!isMediaPreview) {
             try { isMediaPreview = Boolean(JSON.parse(rawPreview)?.__wa_media__); } catch (_) {}
         }
-        mostrarToast(`${name}: ${preview}`, mediaTitle);
+        // O Tauri possui alerta nativo próprio; não exibir o toast dentro da
+        // janela, pois ele cobre a fila de atendimentos. No navegador web,
+        // o toast continua disponível normalmente.
+        if (!isTauriApp) {
+            mostrarToast(`${name}: ${preview}`, mediaTitle);
+        }
 
         // Título piscante sempre (mesmo com o app em foco mas sem olhar a fila)
         startTitleBlink(mediaTitle);
 
         // Notificação nativa do Windows via Tauri (funciona mesmo com app minimizado)
-        const isTauriApp = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
         if (isTauriApp) {
             // Evita que o Windows coalesça várias fotos idênticas do mesmo álbum.
             const nativePreview = isMediaPreview ? `${preview}\u200b${++nativeAlertSequence}` : preview;
@@ -1785,7 +1803,6 @@
     }
     window.sairDaCentral = sairDaCentral;
 
-
     function clearActiveConversation() {
         activeTicketId = null;
         remoteTyping = false;
@@ -1863,7 +1880,7 @@
 
     // --- Abertura do Chat e Detalhes ---
 
-    async function openChat(ticketId) {
+    async function openChatInternal(ticketId) {
         activeTicketId = ticketId;
         remoteTyping = false;
         clearTimeout(remoteTypingTimeout);
@@ -2002,6 +2019,32 @@
         markAsRead(ticketId);
     }
 
+    // Evita que o clique manual e a abertura automática do Tauri carreguem
+    // o mesmo atendimento duas vezes ao mesmo tempo.
+    let activeOpenPromise = null;
+    let activeOpenTicketId = null;
+    function openChat(ticketId) {
+        if (activeOpenPromise && sameTicket(activeOpenTicketId, ticketId)) {
+            return activeOpenPromise;
+        }
+
+        activeOpenTicketId = ticketId;
+        const promise = openChatInternal(ticketId);
+        activeOpenPromise = promise;
+        promise.then(() => {
+            if (activeOpenPromise === promise) {
+                activeOpenPromise = null;
+                activeOpenTicketId = null;
+            }
+        }, () => {
+            if (activeOpenPromise === promise) {
+                activeOpenPromise = null;
+                activeOpenTicketId = null;
+            }
+        });
+        return promise;
+    }
+
     async function promoverChamado(ticketId) {
         try {
             const res = await fetch(`/api/whatsapp/promover/${ticketId}`, {method: 'POST'});
@@ -2054,6 +2097,31 @@
         const show = awayFromBottom > 100;
         button.classList.toggle('hidden', !show);
         button.classList.toggle('flex', show);
+    }
+
+    function isTauriDesktopApp() {
+        return !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+    }
+
+    async function focarAtendimentoRecebidoNoTauri(ticketId) {
+        if (!isTauriDesktopApp() || !ticketId) return;
+
+        if (sameTicket(ticketId, activeTicketId)) {
+            scrollToLatestMessage();
+            return;
+        }
+
+        // A fila pode estar sendo atualizada pelo próprio evento. Aguarda o
+        // atendimento entrar em chatsData antes de abri-lo.
+        for (let tentativa = 0; tentativa < 20; tentativa++) {
+            const chat = chatsData.find(item => sameTicket(item.id, ticketId));
+            if (chat) {
+                await openChat(ticketId);
+                return;
+            }
+            if (!chatsLoading) await loadChats();
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
     }
 
     function scrollToLatestMessage() {
@@ -3217,12 +3285,17 @@
                         if (tId) notificationSnapshot.set(String(tId), 1);
                         loadChats();
                     }
+
+                    if (!data.is_me && data.usuario !== currentUser) {
+                        void focarAtendimentoRecebidoNoTauri(tId);
+                    }
                 } 
                 else if (data.event === "new_whatsapp_chat") {
                     if (data.whatsapp_instance && !chatsData.some(x => x.id === data.ticket_id)) return;
                     notifyIncomingMessage(data, true);
                     if (data.ticket_id) notificationSnapshot.set(String(data.ticket_id), 1);
                     loadChats();
+                    if (data.ticket_id) void focarAtendimentoRecebidoNoTauri(data.ticket_id);
                 } 
                 else if (data.event === "whatsapp_chat_assigned") {
                     loadChats();

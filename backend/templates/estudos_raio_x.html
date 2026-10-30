@@ -48,6 +48,10 @@
                     <span class="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-300">{{ dados.analise.paginas }} página(s) lida(s)</span>
                 </div>
                 <p class="mt-5 rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm leading-6 text-slate-300">{{ dados.analise.descricao }}</p>
+                <form method="post" action="/estudos/raio-x/aplicar-quadro" class="mt-4" onsubmit="return confirm('Montar automaticamente o quadro desta semana com estas matérias? O quadro atual desta semana será substituído.');">
+                    <input type="hidden" name="analise_id" value="{{ analise.id }}">
+                    <button class="rounded-xl bg-emerald-500 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-950 hover:bg-emerald-400">Montar quadro de estudos automaticamente</button>
+                </form>
             </div>
 
             <div class="grid gap-6 md:grid-cols-2">
@@ -77,6 +81,11 @@
                         <div class="mb-2 mt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Conhecimentos específicos</div>
                         <div class="flex flex-wrap gap-2">{% for materia in dados.materias.especificas %}<span class="rounded-full bg-sky-500/15 px-3 py-2 text-xs font-bold text-sky-200">{{ materia }}</span>{% else %}<span class="text-xs text-slate-500">Nenhuma matéria específica identificada neste trecho.</span>{% endfor %}</div>
                     </div>
+                </div>
+                <div class="rounded-3xl border border-amber-500/20 bg-slate-900/70 p-6 md:col-span-2">
+                    <h3 class="text-lg font-black text-white">Prioridade inicial de estudo</h3>
+                    <p class="mt-2 text-xs text-slate-500">Sugestão baseada nas matérias encontradas. Confirme os pesos e o número de questões no edital.</p>
+                    <div class="mt-4 grid gap-2 sm:grid-cols-2">{% for item in dados.analise.prioridades %}<div class="flex items-center justify-between rounded-xl border border-white/10 bg-slate-950/40 px-3 py-3"><div><p class="text-sm font-bold text-white">{{ item.materia }}</p><p class="mt-1 text-[11px] text-slate-500">{{ item.motivo }}</p></div><span class="rounded-full {% if item.prioridade == 'Alta' %}bg-rose-500/15 text-rose-200{% else %}bg-amber-500/15 text-amber-200{% endif %} px-2 py-1 text-[10px] font-black uppercase">{{ item.prioridade }}</span></div>{% else %}<p class="text-sm text-slate-500">Nenhuma matéria suficiente para sugerir prioridades.</p>{% endfor %}</div>
                 </div>
                 <div class="rounded-3xl border border-amber-500/20 bg-slate-900/70 p-6">
                     <h3 class="text-lg font-black text-white">Foco orientativo da banca</h3>

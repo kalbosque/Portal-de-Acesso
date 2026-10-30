@@ -1,12 +1,14 @@
 import json
+import hashlib
+import hmac
 import os
 import re
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import bcrypt
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, Request, Response
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 from sqlalchemy import text
@@ -18,12 +20,17 @@ from utils_email import send_email_async
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 STUDY_ALLOWED_EMAIL = os.environ.get("STUDY_ALLOWED_EMAIL", "").strip().casefold()
+STUDY_ADMIN_EMAILS = {item.strip().casefold() for item in os.environ.get("STUDY_ADMIN_EMAILS", "").split(",") if item.strip()}
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def _is_study_account_allowed(user: Usuario) -> bool:
     email_allowed = bool(STUDY_ALLOWED_EMAIL) and (user.email or "").strip().casefold() == STUDY_ALLOWED_EMAIL
     return user.role == "estudante" or email_allowed
+
+
+def _is_study_admin(user: Usuario) -> bool:
+    return (user.email or "").strip().casefold() in STUDY_ADMIN_EMAILS
 
 
 def hash_password(password: str) -> str:
@@ -41,7 +48,42 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def _set_session_cookies(response: JSONResponse, user: Usuario) -> None:
+SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 dias
+ESTUDO_CODIGO_EXPIRA_MINUTOS = 10
+ESTUDO_CODIGO_MAX_TENTATIVAS = 5
+
+
+def _novo_codigo_estudos() -> str:
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def _digest_codigo_estudos(codigo: str) -> str:
+    return hashlib.sha256(codigo.encode("utf-8")).hexdigest()
+
+
+def _email_codigo_estudos(nome: str, codigo: str) -> str:
+    return f"""
+    <div style=\"font-family:Arial,sans-serif;max-width:560px;padding:24px;color:#172033\">
+      <h2 style=\"color:#4f46e5\">Confirmação do cadastro de Estudos</h2>
+      <p>Olá, <b>{nome}</b>! Use o código abaixo para confirmar seu acesso:</p>
+      <div style=\"margin:24px 0;padding:18px;text-align:center;border-radius:12px;background:#eef2ff;color:#3730a3;font-size:32px;font-weight:800;letter-spacing:8px\">{codigo}</div>
+      <p>O código expira em {ESTUDO_CODIGO_EXPIRA_MINUTOS} minutos e pode ser usado até 5 vezes.</p>
+    </div>
+    """
+
+
+def _email_codigo_recuperacao_estudos(nome: str, codigo: str) -> str:
+    return f"""
+    <div style=\"font-family:Arial,sans-serif;max-width:560px;padding:24px;color:#172033\">
+      <h2 style=\"color:#4f46e5\">Alteração de senha da Área de Estudos</h2>
+      <p>Olá, <b>{nome}</b>! Use o código abaixo para criar uma nova senha:</p>
+      <div style=\"margin:24px 0;padding:18px;text-align:center;border-radius:12px;background:#eef2ff;color:#3730a3;font-size:32px;font-weight:800;letter-spacing:8px\">{codigo}</div>
+      <p>O código expira em {ESTUDO_CODIGO_EXPIRA_MINUTOS} minutos.</p>
+    </div>
+    """
+
+
+def _set_session_cookies(response: Response, user: Usuario) -> None:
     try:
         raw_perms = json.loads(user.permissoes or "[]")
         perms = normalize_permissions(raw_perms if isinstance(raw_perms, list) else [])
@@ -52,6 +94,7 @@ def _set_session_cookies(response: JSONResponse, user: Usuario) -> None:
         "path": "/",
         "httponly": False,
         "samesite": "Lax",
+        "max_age": SESSION_COOKIE_MAX_AGE,
     }
     response.set_cookie("user_id", str(user.id), **cookie_kwargs)
     response.set_cookie("user_name", user.nome or user.username, **cookie_kwargs)
@@ -147,8 +190,8 @@ async def login(
                 response.set_cookie(
                     "study_access",
                     study_token,
-                    path="/estudos",
-                    max_age=86400,
+                    path="/",
+                    max_age=SESSION_COOKIE_MAX_AGE,
                     httponly=True,
                     secure=forwarded_proto == "https",
                     samesite="lax",
@@ -274,22 +317,182 @@ async def change_password(request: Request, password: str = Form(...), confirm_p
     return JSONResponse({"success": True, "message": "Senha alterada com sucesso!"})
 
 
-@router.post("/heartbeat")
+@router.post("/estudos/cadastrar")
+async def cadastrar_estudos(
+    nome: str = Form(...),
+    email: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    nome = nome.strip()
+    email = email.strip().casefold()
+    username = username.strip()
+    if not nome or not EMAIL_PATTERN.match(email) or len(username) < 3:
+        return JSONResponse({"success": False, "detail": "Preencha nome, e-mail e usuário corretamente."}, status_code=400)
+    if len(password) < 6:
+        return JSONResponse({"success": False, "detail": "A senha precisa ter pelo menos 6 caracteres."}, status_code=400)
+    if password != confirm_password:
+        return JSONResponse({"success": False, "detail": "As senhas não coincidem."}, status_code=400)
+
+    with Session(engine) as session:
+        if session.exec(select(Usuario).where((Usuario.email.ilike(email)) | (Usuario.username.ilike(username)))).first():
+            return JSONResponse({"success": False, "email_exists": True, "detail": "Este e-mail já está cadastrado. Você pode solicitar um código para alterar a senha."}, status_code=409)
+
+    codigo = _novo_codigo_estudos()
+    agora = datetime.now(timezone.utc)
+    expira = agora + timedelta(minutes=ESTUDO_CODIGO_EXPIRA_MINUTOS)
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM estudos_cadastros_confirmacao WHERE lower(email) = :email OR lower(username) = :username"), {"email": email, "username": username.casefold()})
+        conn.execute(text("""INSERT INTO estudos_cadastros_confirmacao
+            (nome, email, username, password_hash, codigo_hash, codigo_digest, expira_em, tentativas, usado)
+            VALUES (:nome, :email, :username, :password_hash, :codigo_hash, :codigo_digest, :expira_em, 0, FALSE)"""), {
+                "nome": nome[:180], "email": email[:255], "username": username[:120],
+                "password_hash": hash_password(password), "codigo_hash": hash_password(codigo), "codigo_digest": _digest_codigo_estudos(codigo), "expira_em": expira,
+            })
+
+    if not send_email_async(email, "Confirme seu cadastro na Área de Estudos", _email_codigo_estudos(nome, codigo)):
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM estudos_cadastros_confirmacao WHERE lower(email) = :email AND usado = FALSE"), {"email": email})
+        return JSONResponse({"success": False, "detail": "Não foi possível enviar o e-mail. Configure o SMTP e tente novamente."}, status_code=503)
+    return JSONResponse({"success": True, "message": "Código enviado para seu e-mail."})
+
+
+@router.post("/estudos/confirmar-codigo")
+async def confirmar_codigo_estudos(email: str = Form(...), codigo: str = Form(...)):
+    email = email.strip().casefold()
+    codigo = re.sub(r"\D", "", codigo)
+    if len(codigo) != 6:
+        return JSONResponse({"success": False, "detail": "Informe o código de 6 números."}, status_code=400)
+    with engine.begin() as conn:
+        row = conn.execute(text("""SELECT * FROM estudos_cadastros_confirmacao
+            WHERE lower(email) = :email AND usado = FALSE ORDER BY id DESC LIMIT 1"""), {"email": email}).mappings().first()
+        if not row:
+            return JSONResponse({"success": False, "detail": "Cadastro não encontrado ou já confirmado."}, status_code=404)
+        if row["expira_em"] < datetime.now(timezone.utc):
+            return JSONResponse({"success": False, "detail": "O código expirou. Solicite um novo código."}, status_code=410)
+        if row["tentativas"] >= ESTUDO_CODIGO_MAX_TENTATIVAS:
+            return JSONResponse({"success": False, "detail": "Limite de tentativas atingido. Solicite um novo código."}, status_code=429)
+        codigo_valido = bool(row.get("codigo_digest")) and hmac.compare_digest(_digest_codigo_estudos(codigo), row["codigo_digest"])
+        if not codigo_valido and not verify_password(codigo, row["codigo_hash"]):
+            conn.execute(text("UPDATE estudos_cadastros_confirmacao SET tentativas = tentativas + 1 WHERE id = :id"), {"id": row["id"]})
+            return JSONResponse({"success": False, "detail": "Código inválido."}, status_code=400)
+
+        existing = conn.execute(text("SELECT id FROM usuarios WHERE lower(email) = :email OR lower(username) = :username LIMIT 1"), {"email": email, "username": row["username"].casefold()}).first()
+        if existing:
+            return JSONResponse({"success": False, "detail": "Este e-mail ou usuário já foi utilizado."}, status_code=409)
+        conn.execute(text("""INSERT INTO usuarios (nome, email, username, password_hash, role, status_conta, permissoes)
+            VALUES (:nome, :email, :username, :password_hash, 'estudante', 'ativo', '[]')"""), {
+                "nome": row["nome"], "email": row["email"], "username": row["username"], "password_hash": row["password_hash"]
+            })
+        conn.execute(text("UPDATE estudos_cadastros_confirmacao SET usado = TRUE WHERE id = :id"), {"id": row["id"]})
+    return JSONResponse({"success": True, "message": "Cadastro confirmado. Você já pode entrar."})
+
+
+@router.post("/estudos/reenviar-codigo")
+async def reenviar_codigo_estudos(email: str = Form(...)):
+    email = email.strip().casefold()
+    with engine.begin() as conn:
+        row = conn.execute(text("SELECT * FROM estudos_cadastros_confirmacao WHERE lower(email) = :email AND usado = FALSE ORDER BY id DESC LIMIT 1"), {"email": email}).mappings().first()
+        if not row:
+            return JSONResponse({"success": False, "detail": "Cadastro pendente não encontrado."}, status_code=404)
+        codigo = _novo_codigo_estudos()
+        conn.execute(text("UPDATE estudos_cadastros_confirmacao SET codigo_hash = :codigo_hash, codigo_digest = :codigo_digest, expira_em = :expira_em, tentativas = 0 WHERE id = :id"), {"codigo_hash": hash_password(codigo), "codigo_digest": _digest_codigo_estudos(codigo), "expira_em": datetime.now(timezone.utc) + timedelta(minutes=ESTUDO_CODIGO_EXPIRA_MINUTOS), "id": row["id"]})
+    if not send_email_async(email, "Novo código de confirmação da Área de Estudos", _email_codigo_estudos(row["nome"], codigo)):
+        return JSONResponse({"success": False, "detail": "Não foi possível enviar o e-mail."}, status_code=503)
+    return JSONResponse({"success": True, "message": "Novo código enviado."})
+
+
+@router.post("/estudos/solicitar-recuperacao")
+async def solicitar_recuperacao_estudos(email: str = Form(...)):
+    email = email.strip().casefold()
+    with Session(engine) as session:
+        user = session.exec(select(Usuario).where(Usuario.email.ilike(email))).first()
+        if not user or not _is_study_account_allowed(user):
+            return JSONResponse({"success": False, "detail": "Não encontramos uma conta de Estudos com este e-mail."}, status_code=404)
+        user_id = user.id
+        nome = user.nome or user.username
+
+    codigo = _novo_codigo_estudos()
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE estudos_recuperacao_codigos SET usado = TRUE WHERE usuario_id = :usuario_id AND usado = FALSE"), {"usuario_id": user_id})
+        conn.execute(text("""INSERT INTO estudos_recuperacao_codigos
+            (usuario_id, email, codigo_digest, expira_em, tentativas, usado)
+            VALUES (:usuario_id, :email, :codigo_digest, :expira_em, 0, FALSE)"""), {
+                "usuario_id": user_id, "email": email, "codigo_digest": _digest_codigo_estudos(codigo),
+                "expira_em": datetime.now(timezone.utc) + timedelta(minutes=ESTUDO_CODIGO_EXPIRA_MINUTOS),
+            })
+    if not send_email_async(email, "Código para alterar sua senha nos Estudos", _email_codigo_recuperacao_estudos(nome, codigo)):
+        return JSONResponse({"success": False, "detail": "Não foi possível enviar o código para o e-mail."}, status_code=503)
+    return JSONResponse({"success": True, "message": "Código de alteração de senha enviado para seu e-mail."})
+
+
+@router.post("/estudos/alterar-senha-codigo")
+async def alterar_senha_codigo_estudos(
+    email: str = Form(...),
+    codigo: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    email = email.strip().casefold()
+    codigo = re.sub(r"\D", "", codigo)
+    if len(codigo) != 6:
+        return JSONResponse({"success": False, "detail": "Informe o código de 6 números."}, status_code=400)
+    if len(password) < 6:
+        return JSONResponse({"success": False, "detail": "A nova senha precisa ter pelo menos 6 caracteres."}, status_code=400)
+    if password != confirm_password:
+        return JSONResponse({"success": False, "detail": "As senhas não coincidem."}, status_code=400)
+    with engine.begin() as conn:
+        row = conn.execute(text("""SELECT * FROM estudos_recuperacao_codigos
+            WHERE lower(email) = :email AND usado = FALSE ORDER BY id DESC LIMIT 1"""), {"email": email}).mappings().first()
+        if not row:
+            return JSONResponse({"success": False, "detail": "Solicitação de alteração não encontrada."}, status_code=404)
+        if row["expira_em"] < datetime.now(timezone.utc):
+            return JSONResponse({"success": False, "detail": "O código expirou. Solicite outro."}, status_code=410)
+        if row["tentativas"] >= ESTUDO_CODIGO_MAX_TENTATIVAS:
+            return JSONResponse({"success": False, "detail": "Limite de tentativas atingido. Solicite outro código."}, status_code=429)
+        if not hmac.compare_digest(_digest_codigo_estudos(codigo), row["codigo_digest"]):
+            conn.execute(text("UPDATE estudos_recuperacao_codigos SET tentativas = tentativas + 1 WHERE id = :id"), {"id": row["id"]})
+            return JSONResponse({"success": False, "detail": "Código inválido."}, status_code=400)
+        conn.execute(text("UPDATE usuarios SET password_hash = :password_hash, senha_temp = NULL WHERE id = :usuario_id"), {"password_hash": hash_password(password), "usuario_id": row["usuario_id"]})
+        conn.execute(text("UPDATE estudos_recuperacao_codigos SET usado = TRUE WHERE id = :id"), {"id": row["id"]})
+    return JSONResponse({"success": True, "message": "Senha alterada com sucesso. Você já pode entrar."})
+
+
+@router.api_route("/heartbeat", methods=["GET", "POST"])
 async def heartbeat(request: Request):
-    user_id = get_signed_cookie(request, "user_id")
+    user_id = request.cookies.get("user_id") or get_signed_cookie(request, "user_id")
+    response = JSONResponse({"success": True})
     if user_id:
         try:
             with Session(engine) as session:
-                session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(), "user_id": int(user_id)})
-                session.commit()
+                user = session.get(Usuario, int(user_id))
+                if user:
+                    session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(), "user_id": user.id})
+                    session.commit()
+                    # Renova os cookies da sessão por mais 30 dias
+                    _set_session_cookies(response, user)
+                    if _is_study_account_allowed(user):
+                        new_study_token = create_study_access_token(str(user.id))
+                        if new_study_token:
+                            forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip()
+                            response.set_cookie(
+                                "study_access",
+                                new_study_token,
+                                path="/",
+                                max_age=SESSION_COOKIE_MAX_AGE,
+                                httponly=True,
+                                secure=forwarded_proto == "https",
+                                samesite="lax",
+                            )
         except Exception as exc:
             print(f"[HEARTBEAT] Nao foi possivel atualizar presenca: {exc}")
-    return JSONResponse({"success": True})
+    return response
 
 
 @router.post("/logout")
 async def logout(request: Request):
-    user_id = get_signed_cookie(request, "user_id")
+    user_id = request.cookies.get("user_id") or get_signed_cookie(request, "user_id")
     if user_id:
         try:
             with Session(engine) as session:
@@ -298,6 +501,7 @@ async def logout(request: Request):
         except Exception as exc:
             print(f"[LOGOUT] Nao foi possivel limpar presenca: {exc}")
     response = JSONResponse({"success": True})
-    for key in ("user_id", "user_name", "username", "user_role", "user_perms"):
+    for key in ("user_id", "user_name", "username", "user_role", "user_perms", "study_access"):
         response.delete_cookie(key, path="/")
+    response.delete_cookie("study_access", path="/estudos")
     return response

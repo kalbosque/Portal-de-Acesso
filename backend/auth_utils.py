@@ -35,7 +35,7 @@ def get_signed_cookie(request: Request, key: str, default: str = None) -> str:
     return val if val is not None else default
 
 
-def create_study_access_token(user_id: str, max_age: int = 86400) -> str | None:
+def create_study_access_token(user_id: str, max_age: int = 86400 * 30) -> str | None:
     secret = os.environ.get("STUDY_ACCESS_SECRET") or os.environ.get("JWT_SECRET") or os.environ.get("DB_PASS")
     if not secret:
         return None

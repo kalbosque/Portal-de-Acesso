@@ -214,6 +214,7 @@ class EstudoSessao(SQLModel, table=True):
     __tablename__ = "estudos_sessoes"
     id: Optional[int] = Field(default=None, primary_key=True)
     usuario_id: Optional[int] = Field(default=None, foreign_key="usuarios.id", index=True)
+    concurso_id: Optional[int] = Field(default=None, foreign_key="estudos_concursos.id", index=True)
     data_estudo: date = Field(default_factory=date.today, index=True)
     horario_inicio: Optional[str] = None
     horario_fim: Optional[str] = None
@@ -231,6 +232,7 @@ class EstudoPlano(SQLModel, table=True):
     __tablename__ = "estudos_planos"
     id: Optional[int] = Field(default=None, primary_key=True)
     usuario_id: Optional[int] = Field(default=None, foreign_key="usuarios.id", index=True)
+    concurso_id: Optional[int] = Field(default=None, foreign_key="estudos_concursos.id", index=True)
     semana_inicio: date = Field(default_factory=date.today, index=True)
     materia: str = Field(index=True)
     dias_semana: str = Field(default="Segunda")
@@ -249,6 +251,17 @@ class EstudoCronometro(SQLModel, table=True):
     materia: Optional[str] = None
     duracao_segundos: int
     concluido_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+class EstudoConcurso(SQLModel, table=True):
+    __tablename__ = "estudos_concursos"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    usuario_id: int = Field(foreign_key="usuarios.id", index=True)
+    nome: str = Field(max_length=180)
+    cargo: Optional[str] = Field(default=None, max_length=180)
+    banca: Optional[str] = Field(default=None, max_length=120)
+    data_prova: Optional[date] = None
+    ativo: bool = Field(default=False, index=True)
+    criado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 class EstudoRaioXBanca(SQLModel, table=True):
     """Análise de edital e perfil de uma banca para o módulo Estudos."""

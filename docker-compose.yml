@@ -63,6 +63,7 @@ services:
       - TZ=America/Porto_Velho
       - AGENT_API_KEY=${AGENT_API_KEY:?Defina AGENT_API_KEY no arquivo .env}
       - STUDY_ALLOWED_EMAIL=jkalbosque@gmail.com
+      - STUDY_ADMIN_EMAILS=${STUDY_ADMIN_EMAILS:-jkalbosque@gmail.com}
       - STUDY_ACCESS_SECRET=${STUDY_ACCESS_SECRET:-}
       - ATENDIMENTO_MULTIEMPRESA_ENABLED=${ATENDIMENTO_MULTIEMPRESA_ENABLED:-false}
       - SMTP_SERVER=${SMTP_SERVER:-}

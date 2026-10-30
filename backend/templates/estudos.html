@@ -144,7 +144,7 @@
     try { localStorage.removeItem('estudos_aba_ativa'); } catch(e) {}
 })();
 </script>
-<!-- Ambient glowing aurora background -->
+    <!-- Ambient glowing aurora background -->
 <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
     <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-sky-500/10 blur-[100px] animate-pulse" style="animation-duration: 9s;"></div>
     <div class="absolute top-1/3 -right-32 w-[420px] h-[420px] rounded-full bg-indigo-500/10 blur-[120px] animate-pulse" style="animation-duration: 14s;"></div>
@@ -1179,7 +1179,7 @@
             <div class="mb-3 flex items-center justify-between gap-4">
                 <h2 class="text-lg font-black text-white">Histórico</h2>
                 <span class="rounded-full border border-slate-700 bg-slate-950/80 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
-                    {{ registros|length }} registros
+                    {% if historico_mostrando_limite %}últimos {{ registros|length }} de {{ total_registros_historico }}{% else %}{{ registros|length }}{% endif %} registros
                 </span>
             </div>
 
@@ -1193,7 +1193,7 @@
                             {% if item.tipo_registro == 'simulado' %}
                             <div class="mt-1 text-[10px] font-black uppercase tracking-wider text-indigo-300">Simulado{% if item.nome_simulado %} · {{ item.nome_simulado }}{% endif %}</div>
                             {% endif %}
-                            <div class="mt-1 text-[10px] uppercase text-slate-400">{{ item.data_estudo.strftime('%d/%m/%Y') }} · {{ item.horario_inicio or '--' }} até {{ item.horario_fim or '--' }}</div>
+                            <div class="mt-1 text-[10px] uppercase text-slate-400">{{ dias_semana_pt[item.data_estudo.weekday()] }}, {{ item.data_estudo.strftime('%d/%m/%Y') }} · {{ item.horario_inicio or '--' }} até {{ item.horario_fim or '--' }}</div>
                         </div>
                         <span class="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase text-emerald-300">
                             {{ item.status }}
@@ -1633,7 +1633,65 @@
 
         const form = document.querySelector('form[action="/estudos"]');
         if (form) {
+            const DRAFT_KEY = 'estudos_form_draft_v1';
+            const editIdInput = form.querySelector('input[name="registro_id"]');
+            const isEditing = editIdInput && editIdInput.value.trim() !== '';
+
+            const draftFields = [
+                'data_estudo', 'horario_inicio', 'horario_fim', 'assunto',
+                'tipo_registro', 'nome_simulado', 'quantidade_questoes',
+                'total_acertos', 'total_erros', 'status', 'observacao'
+            ];
+
+            function salvarRascunho() {
+                if (isEditing) return;
+                const draft = {};
+                let temConteudo = false;
+                draftFields.forEach(name => {
+                    const el = form.querySelector(`[name="${name}"]`);
+                    if (el) {
+                        draft[name] = el.value;
+                        if ((name === 'assunto' || name === 'observacao' || name === 'nome_simulado') && el.value.trim()) temConteudo = true;
+                        if ((name === 'quantidade_questoes' || name === 'total_acertos' || name === 'total_erros') && Number(el.value) > 0) temConteudo = true;
+                    }
+                });
+                if (temConteudo) {
+                    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch(_) {}
+                }
+            }
+
+            function restaurarRascunho() {
+                if (isEditing) return;
+                try {
+                    const raw = localStorage.getItem(DRAFT_KEY);
+                    if (!raw) return;
+                    const draft = JSON.parse(raw);
+                    draftFields.forEach(name => {
+                        if (draft[name] !== undefined) {
+                            const el = form.querySelector(`[name="${name}"]`);
+                            if (el && (!el.value || el.value === '0' || name === 'observacao' || name === 'assunto' || name === 'quantidade_questoes')) {
+                                el.value = draft[name];
+                                el.dispatchEvent(new Event('change'));
+                            }
+                        }
+                    });
+                } catch(_) {}
+            }
+
+            // Salva rascunho enquanto o usuário digita
+            form.addEventListener('input', salvarRascunho);
+            form.addEventListener('change', salvarRascunho);
+
+            // Se a requisição veio com sucesso, limpa o rascunho
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('success') === 'ok') {
+                try { localStorage.removeItem(DRAFT_KEY); } catch(_) {}
+            } else {
+                restaurarRascunho();
+            }
+
             form.addEventListener('submit', () => {
+                salvarRascunho();
                 const inicio = document.getElementById('registroHorarioInicio');
                 const fim = document.getElementById('registroHorarioFim');
                 const now = new Date().toTimeString().slice(0, 5);
@@ -1647,6 +1705,23 @@
                 }
             });
         }
+
+        // ── Keep-Alive / Manter Sessão Sempre Ativa ────────────────────────
+        function manterSessaoAtiva() {
+            fetch('/api/auth/heartbeat', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Accept': 'application/json' }
+            }).catch(() => {});
+        }
+        // Dispara a cada 5 minutos, ao focar na janela ou alternar abas
+        setInterval(manterSessaoAtiva, 5 * 60 * 1000);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                manterSessaoAtiva();
+            }
+        });
+        window.addEventListener('focus', manterSessaoAtiva);
     })();
 </script>
 <script>

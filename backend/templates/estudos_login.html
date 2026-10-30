@@ -174,16 +174,51 @@
                 <button class="w-full rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 hover:from-blue-600 hover:to-indigo-700 transition-all duration-300">Acessar Plataforma</button>
             </form>
 
+            <p class="mt-4 text-center text-xs text-slate-400">Ainda não possui uma conta? <button type="button" id="linkCadastrarEstudos" class="font-bold text-sky-300 transition hover:text-sky-200 hover:underline">Criar cadastro</button></p>
+
+            <form id="formCadastrarEstudos" class="mt-5 hidden space-y-3 rounded-xl border border-sky-500/20 bg-sky-500/10 p-4">
+                <p class="text-xs leading-relaxed text-sky-200">Cadastre-se para liberar seu acesso aos Estudos.</p>
+                <p class="text-[11px] leading-relaxed text-slate-400">Após o cadastro, enviaremos um código de confirmação para o seu e-mail.</p>
+                <input name="nome" required maxlength="180" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Nome completo">
+                <input name="email" required type="email" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Seu e-mail">
+                <input name="username" required minlength="3" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Nome de usuário">
+                <input name="password" required minlength="6" type="password" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Senha (mínimo 6 caracteres)">
+                <input name="confirm_password" required minlength="6" type="password" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Confirme sua senha">
+                <button class="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 px-3 py-3 text-xs font-bold text-white shadow-lg shadow-sky-500/20 transition hover:from-sky-400 hover:to-indigo-400">Criar minha conta</button>
+                <button type="button" id="cancelarCadastroEstudos" class="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5">Voltar ao login</button>
+            </form>
+
+            <form id="formConfirmarEstudos" class="mt-5 hidden space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                <p class="text-xs leading-relaxed text-emerald-200">Digite o código de 6 números enviado para seu e-mail.</p>
+                <input name="email" required type="email" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Seu e-mail">
+                <input name="codigo" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="glass-input w-full rounded-lg px-3 py-2.5 text-center text-lg font-black tracking-[.5em] text-white placeholder-slate-500" placeholder="000000">
+                <button class="w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-emerald-500">Confirmar cadastro</button>
+                <button type="button" id="reenviarCodigoEstudos" class="w-full rounded-lg border border-emerald-400/20 px-3 py-2 text-xs text-emerald-200 transition hover:bg-emerald-400/10">Reenviar código</button>
+            </form>
+
+            <button type="button" id="irLoginAposConfirmacao" class="mt-4 hidden w-full rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:from-blue-600 hover:to-indigo-700">Ir para o login</button>
+
             <form id="formRecuperarSenha" class="mt-5 hidden space-y-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4">
-                <p class="text-xs leading-relaxed text-indigo-200">Informe seu usuário ou e-mail para gerar uma senha temporária.</p>
-                <input name="login_id" required class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Usuário ou e-mail">
-                <button type="submit" class="w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500">Gerar senha temporária</button>
-                    <button type="button" id="cancelarRecuperacao" class="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5">Voltar ao login</button>
+                <p class="text-xs leading-relaxed text-indigo-200">Este e-mail já possui cadastro. Enviaremos um código para você criar uma nova senha.</p>
+                <input name="email" required type="email" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Seu e-mail">
+                <input name="codigo" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="glass-input w-full rounded-lg px-3 py-2.5 text-center text-lg font-black tracking-[.5em] text-white placeholder-slate-500" placeholder="Código de 6 números">
+                <input name="password" required minlength="6" type="password" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Nova senha (mínimo 6 caracteres)">
+                <input name="confirm_password" required minlength="6" type="password" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Confirme a nova senha">
+                <button type="submit" class="w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500">Alterar senha</button>
+                <button type="button" id="solicitarCodigoRecuperacao" class="w-full rounded-lg border border-indigo-400/20 px-3 py-2 text-xs text-indigo-200 transition hover:bg-indigo-400/10">Enviar código para este e-mail</button>
+                <button type="button" id="cancelarRecuperacao" class="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:bg-white/5">Voltar ao login</button>
             </form>
 
             <div id="mensagem" class="mt-4 hidden rounded-xl border px-4 py-3 text-sm"></div>
         </section>
     </main>
+
+    <div id="notificacaoCodigoEstudos" class="pointer-events-none fixed inset-x-4 top-1/2 z-50 hidden -translate-y-1/2 justify-center">
+        <div class="rounded-2xl border border-emerald-400/30 bg-slate-900/95 px-6 py-5 text-center shadow-2xl shadow-black/40 backdrop-blur-xl">
+            <div class="mb-1 text-sm font-black text-emerald-300">Novo código enviado!</div>
+            <div class="text-xs text-slate-300">Confira seu e-mail para continuar o cadastro.</div>
+        </div>
+    </div>
 
     <script>
         // ===== MOSTRAR / OCULTAR SENHA =====
@@ -219,13 +254,106 @@
         const linkRecuperarSenha = document.getElementById('linkRecuperarSenha');
         const formRecuperarSenha = document.getElementById('formRecuperarSenha');
         const cancelarRecuperacao = document.getElementById('cancelarRecuperacao');
+        const solicitarCodigoRecuperacao = document.getElementById('solicitarCodigoRecuperacao');
+        const linkCadastrarEstudos = document.getElementById('linkCadastrarEstudos');
+        const formCadastrarEstudos = document.getElementById('formCadastrarEstudos');
+        const formConfirmarEstudos = document.getElementById('formConfirmarEstudos');
+        const cancelarCadastroEstudos = document.getElementById('cancelarCadastroEstudos');
+        const reenviarCodigoEstudos = document.getElementById('reenviarCodigoEstudos');
+        const irLoginAposConfirmacao = document.getElementById('irLoginAposConfirmacao');
+        const notificacaoCodigoEstudos = document.getElementById('notificacaoCodigoEstudos');
+        let notificacaoCodigoTimer;
+
+        function mostrarNotificacaoCodigo() {
+            clearTimeout(notificacaoCodigoTimer);
+            notificacaoCodigoEstudos.classList.remove('hidden');
+            notificacaoCodigoEstudos.classList.add('flex');
+            notificacaoCodigoTimer = setTimeout(() => {
+                notificacaoCodigoEstudos.classList.add('hidden');
+                notificacaoCodigoEstudos.classList.remove('flex');
+            }, 3500);
+        }
+
+        function mostrarMensagemEstudos(texto, sucesso = false) {
+            mensagem.className = sucesso
+                ? 'mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300'
+                : 'mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300';
+            mensagem.textContent = texto;
+        }
+
+        linkCadastrarEstudos.addEventListener('click', () => {
+            formEntrar.classList.add('hidden');
+            formRecuperarSenha.classList.add('hidden');
+            linkCadastrarEstudos.classList.add('hidden');
+            formCadastrarEstudos.classList.remove('hidden');
+            mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
+        });
+        cancelarCadastroEstudos.addEventListener('click', () => {
+            formCadastrarEstudos.classList.add('hidden');
+            formConfirmarEstudos.classList.add('hidden');
+            formEntrar.classList.remove('hidden');
+            linkCadastrarEstudos.classList.remove('hidden');
+            mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
+        });
+        irLoginAposConfirmacao.addEventListener('click', () => {
+            irLoginAposConfirmacao.classList.add('hidden');
+            formEntrar.classList.remove('hidden');
+            linkCadastrarEstudos.classList.remove('hidden');
+            mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
+            mensagem.textContent = '';
+            formEntrar.elements.login_id.focus();
+        });
+        formCadastrarEstudos.onsubmit = async (event) => {
+            event.preventDefault();
+            try {
+                const resposta = await fetch('/api/auth/estudos/cadastrar', { method: 'POST', body: new FormData(formCadastrarEstudos) });
+                const dados = await resposta.json();
+                if (dados.email_exists) {
+                    formCadastrarEstudos.classList.add('hidden');
+                    formRecuperarSenha.classList.remove('hidden');
+                    formRecuperarSenha.elements.email.value = formCadastrarEstudos.elements.email.value;
+                    mostrarMensagemEstudos('Este e-mail já está cadastrado. Envie um código para alterar sua senha.', false);
+                    return;
+                }
+                if (!resposta.ok || !dados.success) return mostrarMensagemEstudos(dados.detail || 'Não foi possível iniciar o cadastro.');
+                formCadastrarEstudos.classList.add('hidden');
+                formConfirmarEstudos.classList.remove('hidden');
+                formConfirmarEstudos.elements.email.value = formCadastrarEstudos.elements.email.value;
+                mostrarMensagemEstudos(dados.message || 'Código enviado para seu e-mail.', true);
+                formConfirmarEstudos.elements.codigo.focus();
+            } catch { mostrarMensagemEstudos('Não foi possível conectar ao servidor.'); }
+        };
+        formConfirmarEstudos.onsubmit = async (event) => {
+            event.preventDefault();
+            try {
+                const resposta = await fetch('/api/auth/estudos/confirmar-codigo', { method: 'POST', body: new FormData(formConfirmarEstudos) });
+                const dados = await resposta.json();
+                if (!resposta.ok || !dados.success) return mostrarMensagemEstudos(dados.detail || 'Código inválido.');
+                formConfirmarEstudos.classList.add('hidden');
+                formEntrar.classList.add('hidden');
+                linkCadastrarEstudos.classList.add('hidden');
+                irLoginAposConfirmacao.classList.remove('hidden');
+                mensagem.className = 'mt-4 whitespace-pre-line rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300';
+                mensagem.textContent = 'Cadastro confirmado com sucesso!\n\nSua conta foi ativada. Agora você já pode acessar a Área de Estudos.';
+            } catch { mostrarMensagemEstudos('Não foi possível conectar ao servidor.'); }
+        };
+        reenviarCodigoEstudos.addEventListener('click', async () => {
+            const body = new FormData();
+            body.append('email', formConfirmarEstudos.elements.email.value);
+            try {
+                const resposta = await fetch('/api/auth/estudos/reenviar-codigo', { method: 'POST', body });
+                const dados = await resposta.json();
+                mostrarMensagemEstudos(dados.message || dados.detail || 'Não foi possível reenviar o código.', resposta.ok && dados.success);
+                if (resposta.ok && dados.success) mostrarNotificacaoCodigo();
+            } catch { mostrarMensagemEstudos('Não foi possível conectar ao servidor.'); }
+        });
 
         linkRecuperarSenha.addEventListener('click', (event) => {
             event.preventDefault();
             formEntrar.classList.add('hidden');
             formRecuperarSenha.classList.remove('hidden');
-            formRecuperarSenha.querySelector('input[name="login_id"]').value = formEntrar.elements.login_id.value;
-            formRecuperarSenha.querySelector('input[name="login_id"]').focus();
+            formRecuperarSenha.elements.email.value = formEntrar.elements.login_id.value.includes('@') ? formEntrar.elements.login_id.value : '';
+            formRecuperarSenha.elements.email.focus();
         });
 
         cancelarRecuperacao.addEventListener('click', () => {
@@ -235,11 +363,22 @@
             mensagem.textContent = '';
         });
 
+        solicitarCodigoRecuperacao.addEventListener('click', async () => {
+            const body = new FormData();
+            body.append('email', formRecuperarSenha.elements.email.value);
+            try {
+                const resposta = await fetch('/api/auth/estudos/solicitar-recuperacao', { method: 'POST', body });
+                const dados = await resposta.json();
+                mostrarMensagemEstudos(dados.message || dados.detail || 'Não foi possível enviar o código.', resposta.ok && dados.success);
+                if (resposta.ok && dados.success) mostrarNotificacaoCodigo();
+            } catch { mostrarMensagemEstudos('Não foi possível conectar ao servidor.'); }
+        });
+
         formRecuperarSenha.onsubmit = async (event) => {
             event.preventDefault();
             mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
             try {
-                const resposta = await fetch('/api/auth/reset_senha', { method: 'POST', body: new FormData(formRecuperarSenha) });
+                const resposta = await fetch('/api/auth/estudos/alterar-senha-codigo', { method: 'POST', body: new FormData(formRecuperarSenha) });
                 const dados = await resposta.json();
                 mensagem.className = resposta.ok && dados.success
                     ? 'mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300'

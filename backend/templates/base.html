@@ -196,9 +196,70 @@
         body.student-mode #guardiao-assistant {
             display: none !important;
         }
+        /* O assistente flutuante pertence ao atendimento e não deve aparecer
+           na Área de Estudos, inclusive dentro do Tauri. */
+        {% if request.url.path.startswith('/estudos') %}
+        #guardiao-assistant,
+        #guardiao-assistant * {
+            display: none !important;
+            pointer-events: none !important;
+        }
+        {% endif %}
+        {% if request.url.path.startswith('/estudos') %}
+        #estudos-page-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            z-index: 9999;
+            overflow: hidden;
+            background: transparent;
+            opacity: 1;
+            visibility: visible;
+            transition: opacity .25s ease, visibility .25s ease;
+        }
+        #estudos-page-loader.is-ready {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        #estudos-page-loader::after {
+            content: '';
+            display: block;
+            width: 35%;
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #38bdf8, #6366f1, #c084fc);
+            box-shadow: 0 0 14px rgba(56, 189, 248, .75);
+            animation: estudos-loader-progress 2.4s ease-in-out infinite;
+        }
+        @keyframes estudos-loader-progress {
+            0% { transform: translateX(-110%); }
+            100% { transform: translateX(310%); }
+        }
+        {% endif %}
     </style>
 </head>
 <body class="min-h-screen flex flex-col relative overflow-x-hidden{% if request.cookies.get('user_role') == 'estudante' %} student-mode{% endif %}">
+    {% if request.url.path.startswith('/estudos') %}
+    <div id="estudos-page-loader" aria-live="polite" aria-label="Carregando Estudos">
+    </div>
+    <script>
+        (() => {
+            const inicioCarregamentoEstudos = performance.now();
+            const esconderLoaderEstudos = () => {
+                const loader = document.getElementById('estudos-page-loader');
+                if (loader) loader.classList.add('is-ready');
+            };
+            window.addEventListener('load', () => {
+                const tempoDecorrido = performance.now() - inicioCarregamentoEstudos;
+                setTimeout(esconderLoaderEstudos, Math.max(180, 650 - tempoDecorrido));
+            }, { once: true });
+            setTimeout(esconderLoaderEstudos, 8000);
+        })();
+    </script>
+    {% endif %}
     <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
         <div class="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-indigo-600/10 blur-[120px]"></div>
         <div class="absolute bottom-[10%] -right-[10%] w-[40%] h-[40%] rounded-full bg-fuchsia-600/10 blur-[120px]"></div>
@@ -231,6 +292,16 @@
                         {% endif %}
                     </div>
                 </a>
+
+                {% if request.url.path == '/estudos' and concurso_ativo|default(None) %}
+                <div class="hidden min-w-0 flex-1 justify-center px-6 md:flex">
+                    <div class="flex min-w-0 max-w-[520px] items-center gap-2 rounded-xl border border-sky-400/20 bg-sky-400/5 px-4 py-2">
+                        <span class="shrink-0 text-[10px] font-black uppercase tracking-widest text-sky-300">Concurso:</span>
+                        <span class="truncate text-sm font-black text-white" title="{{ concurso_ativo.nome }}">{{ concurso_ativo.nome }}</span>
+                        <a href="/estudos/concursos" class="shrink-0 rounded-lg border border-sky-400/30 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-sky-200 hover:bg-sky-400 hover:text-slate-950">Trocar</a>
+                    </div>
+                </div>
+                {% endif %}
 
                 <!-- Menu Desktop -->
                 {% set perms = request.cookies.get("user_perms")|from_json if request.cookies.get("user_perms") else [] %}
@@ -354,6 +425,16 @@
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
                                     Editar Perfil
                                 </a>
+                                <a href="/estudos/concursos" class="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-400 hover:text-white hover:bg-indigo-600 transition-all uppercase tracking-widest">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"></path></svg>
+                                    Meus Concursos
+                                </a>
+                                {% if estudos_admin|default(false) %}
+                                <a href="/estudos/admin" class="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-amber-300 hover:text-white hover:bg-amber-600 transition-all uppercase tracking-widest">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4"/></svg>
+                                    Administração dos Estudos
+                                </a>
+                                {% endif %}
                                 <a href="javascript:void(0)" onclick="openModal('modal-senha')" class="flex items-center gap-3 px-4 py-2.5 text-[10px] font-bold text-slate-400 hover:text-white hover:bg-indigo-600 transition-all uppercase tracking-widest">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                                     Alterar Senha

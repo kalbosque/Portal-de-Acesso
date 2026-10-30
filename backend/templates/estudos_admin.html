@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Administração dos Estudos | {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-6xl px-4 py-8">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <p class="text-xs font-black uppercase tracking-[.22em] text-sky-300">Área restrita</p>
+            <h1 class="mt-2 text-3xl font-black text-white">Administração dos Estudos</h1>
+            <p class="mt-2 text-sm text-slate-400">Gerencie o acesso dos estudantes e bloqueie contas com mensalidade pendente.</p>
+        </div>
+        <a href="/estudos" class="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-widest text-slate-300 hover:bg-white/5">Voltar aos Estudos</a>
+    </div>
+
+    {% if mensagem %}<div class="mb-5 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{{ mensagem }}</div>{% endif %}
+
+    <section class="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60">
+        <div class="border-b border-white/10 px-5 py-4"><h2 class="font-black text-white">Contas de estudantes</h2><p class="mt-1 text-xs text-slate-400">{{ usuarios|length }} conta(s) cadastrada(s).</p></div>
+        <div class="divide-y divide-white/5">
+        {% for usuario in usuarios %}
+            <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+                <div class="min-w-0"><div class="font-bold text-white">{{ usuario.nome or usuario.username }}</div><div class="mt-1 text-xs text-slate-400">{{ usuario.email }} · @{{ usuario.username }}</div></div>
+                <div class="flex items-center gap-3">
+                    <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase {% if usuario.status_conta == 'bloqueado' %}bg-rose-500/15 text-rose-300{% else %}bg-emerald-500/15 text-emerald-300{% endif %}">{{ 'Bloqueado' if usuario.status_conta == 'bloqueado' else 'Ativo' }}</span>
+                    <form method="post" action="/estudos/admin/usuario-status"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><input type="hidden" name="status" value="{{ 'ativo' if usuario.status_conta == 'bloqueado' else 'bloqueado' }}"><button class="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/5">{{ 'Liberar acesso' if usuario.status_conta == 'bloqueado' else 'Bloquear acesso' }}</button></form>
+                    <form method="post" action="/estudos/admin/usuario-excluir" onsubmit="return confirm('Excluir definitivamente esta conta e todos os dados de Estudos? Esta ação não pode ser desfeita.');"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><button class="rounded-lg border border-rose-400/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-500 hover:text-white">Excluir conta</button></form>
+                </div>
+            </div>
+        {% else %}<div class="px-5 py-10 text-center text-sm text-slate-500">Nenhum estudante cadastrado.</div>{% endfor %}
+        </div>
+    </section>
+</div>
+{% endblock %}

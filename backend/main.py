@@ -15,7 +15,7 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, create_engine, select, func, SQLModel, desc
-from models import Usuario, Impressora, Impressao, Licenca, Chamado, ChamadoInteracao, TipoProblema, EquipamentoTI, MarmitaCardapio, MarmitaPedido, EstudoSessao, EstudoPlano, EstudoCronometro, EstudoRaioXBanca
+from models import Usuario, Impressora, Impressao, Licenca, Chamado, ChamadoInteracao, TipoProblema, EquipamentoTI, MarmitaCardapio, MarmitaPedido, EstudoSessao, EstudoPlano, EstudoCronometro, EstudoRaioXBanca, EstudoConcurso
 import license_service
 import api_printers
 import api_reports
@@ -35,7 +35,7 @@ import api_tenants
 from database import engine
 from dotenv import load_dotenv
 from websocket_manager import manager
-from auth_utils import get_signed_cookie, normalize_permissions, verify_study_access_token
+from auth_utils import get_signed_cookie, normalize_permissions, verify_study_access_token, create_study_access_token
 from atendimento_tenant_context import resolve_context
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -73,9 +73,39 @@ async def restrict_study_accounts(request: Request, call_next):
     """Keep study-only accounts inside the independent study area."""
     path = request.url.path
     if path.startswith("/estudos") and path != "/estudos/login":
-        study_user_id = verify_study_access_token(request.cookies.get("study_access"))
-        if not study_user_id or request.cookies.get("user_id") != study_user_id:
-            return RedirectResponse(url="/estudos/login", status_code=303)
+        user_id = request.cookies.get("user_id")
+        study_token = request.cookies.get("study_access")
+        study_user_id = verify_study_access_token(study_token) if study_token else None
+
+        need_renew = False
+        if not study_user_id or user_id != study_user_id:
+            # Se não tem study_access válido mas tem user_id válido e autorizado, renova automaticamente
+            if user_id:
+                try:
+                    with Session(engine) as session:
+                        u = session.get(Usuario, int(user_id))
+                        if u and api_auth._is_study_account_allowed(u):
+                            need_renew = True
+                except Exception:
+                    pass
+            if not need_renew:
+                return RedirectResponse(url="/estudos/login", status_code=303)
+
+        response = await call_next(request)
+        if need_renew and user_id:
+            new_study_token = create_study_access_token(str(user_id))
+            if new_study_token:
+                forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip()
+                response.set_cookie(
+                    "study_access",
+                    new_study_token,
+                    path="/",
+                    max_age=60 * 60 * 24 * 30,
+                    httponly=True,
+                    secure=forwarded_proto == "https",
+                    samesite="lax",
+                )
+        return response
 
     if request.cookies.get("user_role") == "estudante":
         allowed = (
@@ -171,6 +201,36 @@ def ensure_schema_compatibility():
         "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS horario_fim VARCHAR(10)",
         "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS tipo_registro VARCHAR(20) DEFAULT 'estudo'",
         "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS nome_simulado VARCHAR(255)",
+        "CREATE TABLE IF NOT EXISTS estudos_concursos (id SERIAL PRIMARY KEY, usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, nome VARCHAR(180) NOT NULL, cargo VARCHAR(180), banca VARCHAR(120), data_prova DATE, ativo BOOLEAN NOT NULL DEFAULT FALSE, criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS concurso_id INTEGER REFERENCES estudos_concursos(id)",
+        "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS concurso_id INTEGER REFERENCES estudos_concursos(id)",
+        "CREATE INDEX IF NOT EXISTS ix_estudos_sessoes_usuario_data ON estudos_sessoes (usuario_id, data_estudo DESC, criado_em DESC)",
+        "CREATE INDEX IF NOT EXISTS ix_estudos_planos_usuario_semana ON estudos_planos (usuario_id, semana_inicio, materia)",
+        """CREATE TABLE IF NOT EXISTS estudos_cadastros_confirmacao (
+            id SERIAL PRIMARY KEY,
+            nome VARCHAR(180) NOT NULL,
+            email VARCHAR(255) NOT NULL,
+            username VARCHAR(120) NOT NULL,
+            password_hash TEXT NOT NULL,
+            codigo_hash TEXT NOT NULL,
+            expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+            tentativas INTEGER NOT NULL DEFAULT 0,
+            usado BOOLEAN NOT NULL DEFAULT FALSE,
+            criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_estudos_cadastros_confirmacao_email ON estudos_cadastros_confirmacao (lower(email), usado)",
+        "ALTER TABLE estudos_cadastros_confirmacao ADD COLUMN IF NOT EXISTS codigo_digest VARCHAR(64)",
+        """CREATE TABLE IF NOT EXISTS estudos_recuperacao_codigos (
+            id SERIAL PRIMARY KEY,
+            usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+            email VARCHAR(255) NOT NULL,
+            codigo_digest VARCHAR(64) NOT NULL,
+            expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+            tentativas INTEGER NOT NULL DEFAULT 0,
+            usado BOOLEAN NOT NULL DEFAULT FALSE,
+            criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_estudos_recuperacao_email ON estudos_recuperacao_codigos (lower(email), usado)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS visivel_suporte BOOLEAN DEFAULT TRUE",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_status VARCHAR(20) DEFAULT 'sent'",
         "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS limite_usuarios_custom INTEGER",
@@ -1273,6 +1333,7 @@ RAIO_X_BANCAS = {
     "Instituto ACCESS": {"descricao": "Perfil objetivo, com foco no conteúdo expressamente previsto no edital.", "foco": ["específicos", "legislação", "português", "informática"], "alertas": ["lei seca", "termos técnicos", "comandos negativos"], "fontes": ["https://concursos.access.org.br/"]},
     "IBGP": {"descricao": "Banca com cobrança objetiva e forte relação com o conteúdo programático, a legislação indicada e os conhecimentos específicos do cargo.", "foco": ["conhecimentos específicos", "legislação do edital", "língua portuguesa", "informática e raciocínio lógico quando previstos"], "alertas": ["detalhes da legislação", "competências e atribuições", "alternativas com conceitos próximos"], "fontes": ["https://www.ibgpconcursos.com.br/", "https://www.planalto.gov.br/"]},
     "Outra banca": {"descricao": "A banca será analisada a partir do edital enviado e das fontes indicadas pelo usuário.", "foco": ["conteúdo do edital", "legislação aplicável", "provas anteriores", "perfil das questões"], "alertas": ["confirmar a fonte oficial", "verificar a data do edital", "não confundir tendência com regra"], "fontes": ["https://www.gov.br/pt-br/servicos/consultar-concursos-publicos"]},
+    "IBADE": {"descricao": "Banca com cobrança objetiva e foco no conteúdo previsto no edital, especialmente conhecimentos específicos e legislação aplicada ao cargo.", "foco": ["conteúdo específico", "legislação do edital", "língua portuguesa", "raciocínio lógico quando previsto"], "alertas": ["detalhes do edital", "prazos e competências", "conceitos semelhantes", "comando exato da questão"], "fontes": ["https://portal.ibade.selecao.site/"]},
 }
 
 RAIO_X_DETALHES = {
@@ -1313,38 +1374,88 @@ def _detalhes_banca(banca: str, perfil: dict) -> dict:
 def _normalizar_raio_x(valor: str) -> str:
     return unicodedata.normalize("NFKD", (valor or "")).encode("ascii", "ignore").decode("ascii").casefold()
 
+def _prioridades_raio_x(materias: dict) -> list[dict]:
+    """Cria uma ordem inicial de estudo sem inventar pesos de prova."""
+    gerais = materias.get("gerais", []) or []
+    especificas = materias.get("especificas", []) or []
+    resultado = []
+    for materia in especificas:
+        resultado.append({"materia": materia, "prioridade": "Alta", "motivo": "Conhecimento específico do cargo"})
+    for materia in gerais:
+        resultado.append({"materia": materia, "prioridade": "Média", "motivo": "Base geral prevista no edital"})
+    return resultado
+
+def _prioridades_raio_x(materias: dict) -> list[dict]:
+    gerais = materias.get("gerais", []) or []
+    especificas = materias.get("especificas", []) or []
+    resultado = [{"materia": materia, "prioridade": "Alta", "motivo": "Conhecimento espec\u00edfico do cargo"} for materia in especificas]
+    resultado.extend({"materia": materia, "prioridade": "M\u00e9dia", "motivo": "Base geral prevista no edital"} for materia in gerais)
+    return resultado
+
 def _extrair_contexto_cargo(texto: str, cargo: str) -> tuple[str, bool, str]:
     """Limita a leitura ao trecho do cargo, em vez de pesquisar o edital inteiro."""
     linhas = [linha.strip() for linha in (texto or "").splitlines() if linha.strip()]
     if not linhas or not cargo.strip():
-        return texto or "", False, ""
-    cargo_normalizado = re.sub(r"\s+", " ", _normalizar_raio_x(cargo)).strip()
+        return "", False, ""
+    cargo_normalizado = re.sub(r"[-–—]+", " ", _normalizar_raio_x(cargo))
+    cargo_normalizado = re.sub(r"\s+", " ", cargo_normalizado).strip()
+    cargo_normalizado = re.sub(r"[^a-z0-9]+", " ", _normalizar_raio_x(cargo)).strip()
+    if "analista autarquico" in cargo_normalizado and "informatica" in cargo_normalizado:
+        cargo_normalizado = cargo_normalizado.replace("informatica", "tecnologia da informacao")
     tokens = [token for token in re.findall(r"[a-z0-9]+", cargo_normalizado) if len(token) > 2 and token not in {"de", "da", "do", "das", "dos"}]
     if not tokens:
         return texto or "", False, ""
     melhor = None
     maior = 0
+    # Restringe a busca ao Anexo III, onde ficam as matérias. O mesmo cargo
+    # também aparece na tabela de vagas e no Anexo IV, mas esses trechos não
+    # contêm o conteúdo programático.
+    inicio_conteudo = 0
+    fim_conteudo = len(linhas)
+    for indice, linha in enumerate(linhas):
+        marcador = _normalizar_raio_x(linha)
+        if "anexo iii" in marcador and "conteudo programatico" in marcador:
+            inicio_conteudo = indice
+    for indice in range(inicio_conteudo + 1, len(linhas)):
+        if "anexo iv" in _normalizar_raio_x(linhas[indice]) and "atribuicoes" in _normalizar_raio_x(linhas[indice]):
+            fim_conteudo = indice
+            break
+    indices_busca = range(inicio_conteudo, fim_conteudo)
     # Primeiro tenta a expressão completa, evitando confundir cargos que
     # possuem somente uma palavra em comum, como Farmácia e Endemias.
-    for indice, linha in enumerate(linhas):
-        normalizada = re.sub(r"\s+", " ", _normalizar_raio_x(linha)).strip()
+    for indice in indices_busca:
+        linha = linhas[indice]
+        normalizada = re.sub(r"[-–—]+", " ", _normalizar_raio_x(linha))
+        normalizada = re.sub(r"\s+", " ", normalizada).strip()
+        normalizada = re.sub(r"[^a-z0-9]+", " ", _normalizar_raio_x(linha)).strip()
         if cargo_normalizado in normalizada:
             melhor = indice
             maior = len(tokens)
-            break
+            # O cargo costuma aparecer primeiro na tabela de vagas e depois
+            # novamente no anexo de conteÃºdo programÃ¡tico. MantÃ©m a Ãºltima
+            # ocorrÃªncia exata para tentar capturar as matÃ©rias especÃ­ficas.
     # Fallback para abreviações presentes no edital (ex.: ACE).
-    for indice, linha in enumerate(linhas):
+    for indice in indices_busca:
+        linha = linhas[indice]
         if melhor is not None:
             break
         normalizada = _normalizar_raio_x(linha)
-        pontuacao = sum(1 for token in tokens if token in normalizada)
+        pontuacao = sum(1 for token in tokens if re.search(rf"\b{re.escape(token)}\b", normalizada))
         if pontuacao > maior:
             maior = pontuacao
             melhor = indice
-    if melhor is None or maior < max(1, int(len(tokens) * 0.6)):
-        return texto or "", False, ""
+    # Uma palavra solta pode aparecer em regras, documentos ou atribuiÃ§Ãµes
+    # e nÃ£o representar o cargo. Para cargos com mais de um termo, exige a
+    # combinaÃ§Ã£o de pelo menos dois termos antes de recortar o edital.
+    minimo_tokens = 2 if len(tokens) >= 2 else 1
+    if melhor is None or maior < minimo_tokens:
+        # Sem localizar o cargo com seguranÃ§a, nunca usa o edital inteiro
+        # como conteÃºdo especÃ­fico, pois isso mistura outros cargos.
+        return "", False, ""
     inicio = max(0, melhor - 5)
-    fim = min(len(linhas), melhor + 90)
+    # Alguns editais listam as disciplinas e os conteúdos programáticos em
+    # várias páginas. O limite anterior de 90 linhas cortava matérias válidas.
+    fim = min(fim_conteudo, melhor + 300)
     # Não atravessa o começo de outro cargo/área do conteúdo programático.
     for indice in range(melhor + 8, fim):
         linha_original = linhas[indice]
@@ -1362,12 +1473,15 @@ def _extrair_contexto_geral(texto: str) -> str:
     for indice, linha in enumerate(linhas):
         normalizada = _normalizar_raio_x(linha)
         if any(_normalizar_raio_x(marcador) in normalizada for marcador in marcadores):
-            trechos.extend(linhas[max(0, indice - 2):min(len(linhas), indice + 90)])
+            trechos.extend(linhas[max(0, indice - 2):min(len(linhas), indice + 180)])
     return "\n".join(dict.fromkeys(trechos))
 
 def _extrair_materias_edital(texto: str) -> dict:
     """Extrai matérias somente do trecho selecionado do cargo."""
     padroes = [
+        ("RedaÃ§Ã£o", "geral"),
+        ("NoÃ§Ãµes de AdministraÃ§Ã£o PÃºblica, Atendimento e Ã‰tica", "geral"),
+        ("NoÃ§Ãµes de LegislaÃ§Ã£o Institucional, PrevidenciÃ¡ria e de AssistÃªncia Ã  SaÃºde", "geral"),
         ("Língua Portuguesa", "geral"), ("Raciocínio Lógico", "geral"), ("Matemática", "geral"),
         ("Informática", "geral"), ("Atualidades", "geral"), ("Conhecimentos Gerais", "geral"),
         ("Direito Constitucional", "especifica"), ("Direito Administrativo", "especifica"),
@@ -1377,6 +1491,10 @@ def _extrair_materias_edital(texto: str) -> dict:
         ("Redação Oficial", "geral"), ("Arquivologia", "especifica"), ("Contabilidade", "especifica"),
         ("Economia", "especifica"), ("Administração Financeira e Orçamentária", "especifica"),
         ("Direitos Humanos", "especifica"), ("Medicina Legal", "especifica"),
+        ("SaÃºde", "especifica"), ("SaÃºde Coletiva", "especifica"), ("PolÃ­ticas PÃºblicas", "especifica"),
+        ("AdministraÃ§Ã£o", "especifica"), ("GestÃ£o PÃºblica", "especifica"), ("LegislaÃ§Ã£o Municipal", "especifica"),
+        ("LegislaÃ§Ã£o Estadual", "especifica"), ("HistÃ³ria", "geral"), ("Geografia", "geral"),
+        ("Conhecimentos sobre o MunicÃ­pio", "geral"), ("Conhecimentos sobre o Estado", "geral"),
         ("Saúde Pública", "especifica"), ("Sistema Único de Saúde (SUS)", "especifica"),
         ("Vigilância Epidemiológica", "especifica"), ("Endemias", "especifica"), ("Dengue", "especifica"),
         ("Zoonoses", "especifica"), ("Educação em Saúde", "especifica"), ("Leishmaniose", "especifica"),
@@ -1386,7 +1504,107 @@ def _extrair_materias_edital(texto: str) -> dict:
     for materia, grupo in padroes:
         if _normalizar_raio_x(materia) in normalizado:
             (gerais if grupo == "geral" else especificas).append(materia)
+    # "Redação Oficial" contém a palavra redação, mas não significa prova
+    # discursiva. Evita exibir duas matérias para cargos de nível médio.
+    if "RedaÃ§Ã£o" in gerais and "RedaÃ§Ã£o Oficial" in gerais:
+        gerais.remove("RedaÃ§Ã£o")
     return {"gerais": gerais, "especificas": especificas, "todas": gerais + especificas}
+
+def get_active_study_contest(session: Session, usuario_id: int) -> EstudoConcurso:
+    """Retorna o concurso ativo e vincula registros antigos ao primeiro concurso."""
+    concursos = session.exec(
+        select(EstudoConcurso).where(EstudoConcurso.usuario_id == usuario_id).order_by(EstudoConcurso.id)
+    ).all()
+    ativo = next((item for item in concursos if item.ativo), None)
+    if ativo is None:
+        ativo = concursos[0] if concursos else EstudoConcurso(usuario_id=usuario_id, nome="Concurso atual", ativo=True)
+        ativo.ativo = True
+        session.add(ativo)
+        session.flush()
+        for registro in session.exec(select(EstudoSessao).where(EstudoSessao.usuario_id == usuario_id, EstudoSessao.concurso_id.is_(None))).all():
+            registro.concurso_id = ativo.id
+        for plano in session.exec(select(EstudoPlano).where(EstudoPlano.usuario_id == usuario_id, EstudoPlano.concurso_id.is_(None))).all():
+            plano.concurso_id = ativo.id
+        session.commit()
+    return ativo
+
+
+@app.get("/estudos/concursos", response_class=HTMLResponse)
+async def estudos_concursos(request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login")
+    try:
+        usuario_id = int(user_id)
+    except ValueError:
+        return RedirectResponse(url="/estudos/login")
+    with Session(engine) as session:
+        ativo = get_active_study_contest(session, usuario_id)
+        concursos = session.exec(select(EstudoConcurso).where(EstudoConcurso.usuario_id == usuario_id).order_by(desc(EstudoConcurso.ativo), desc(EstudoConcurso.criado_em))).all()
+    return templates.TemplateResponse(request=request, name="estudos_concursos.html", context={"config": APP_CONFIG, "concursos": concursos, "concurso_ativo": ativo, "mensagem": request.query_params.get("mensagem")})
+
+
+@app.post("/estudos/concursos")
+async def criar_estudo_concurso(request: Request, nome: str = Form(...), cargo: str = Form(""), banca: str = Form(""), data_prova: str = Form("")):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login", status_code=303)
+    try:
+        usuario_id = int(user_id)
+        nome_limpo = nome.strip()
+        if not nome_limpo:
+            raise ValueError
+        data = datetime.strptime(data_prova, "%Y-%m-%d").date() if data_prova else None
+        with Session(engine) as session:
+            for item in session.exec(select(EstudoConcurso).where(EstudoConcurso.usuario_id == usuario_id)).all():
+                item.ativo = False
+            session.add(EstudoConcurso(usuario_id=usuario_id, nome=nome_limpo[:180], cargo=cargo.strip()[:180] or None, banca=banca.strip()[:120] or None, data_prova=data, ativo=True))
+            session.commit()
+        return RedirectResponse(url="/estudos?success=concurso", status_code=303)
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/estudos/concursos?mensagem=erro", status_code=303)
+
+
+@app.post("/estudos/concursos/selecionar")
+async def selecionar_estudo_concurso(request: Request, concurso_id: int = Form(...)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login", status_code=303)
+    with Session(engine) as session:
+        usuario_id = int(user_id)
+        escolhido = session.get(EstudoConcurso, concurso_id)
+        if not escolhido or escolhido.usuario_id != usuario_id:
+            return RedirectResponse(url="/estudos/concursos?mensagem=erro", status_code=303)
+        for item in session.exec(select(EstudoConcurso).where(EstudoConcurso.usuario_id == usuario_id)).all():
+            item.ativo = item.id == concurso_id
+        session.commit()
+    return RedirectResponse(url="/estudos", status_code=303)
+
+
+@app.post("/estudos/concursos/editar")
+async def editar_estudo_concurso(request: Request, concurso_id: int = Form(...), nome: str = Form(...), cargo: str = Form(""), banca: str = Form(""), data_prova: str = Form("")):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login", status_code=303)
+    try:
+        usuario_id = int(user_id)
+        nome_limpo = nome.strip()
+        if not nome_limpo:
+            raise ValueError
+        data = datetime.strptime(data_prova, "%Y-%m-%d").date() if data_prova else None
+        with Session(engine) as session:
+            concurso = session.get(EstudoConcurso, concurso_id)
+            if not concurso or concurso.usuario_id != usuario_id:
+                raise ValueError
+            concurso.nome = nome_limpo[:180]
+            concurso.cargo = cargo.strip()[:180] or None
+            concurso.banca = banca.strip()[:120] or None
+            concurso.data_prova = data
+            session.commit()
+        return RedirectResponse(url="/estudos/concursos", status_code=303)
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/estudos/concursos?mensagem=erro", status_code=303)
+
 
 @app.get("/estudos/raio-x", response_class=HTMLResponse)
 async def view_raio_x_banca(request: Request, analise_id: int = None):
@@ -1404,6 +1622,30 @@ async def view_raio_x_banca(request: Request, analise_id: int = None):
         materias_salvas = json.loads(analise.materias_json or "{}")
         if isinstance(materias_salvas, list):
             materias_salvas = {"gerais": materias_salvas, "especificas": [], "todas": materias_salvas}
+        linha_salva = _normalizar_raio_x(json.loads(analise.analise_json or "{}").get("linha_cargo", ""))
+        cargo_salvo = _normalizar_raio_x(analise.cargo or "")
+        if ("analista autarquico" in cargo_salvo or "analista autarquico" in linha_salva) and ("informatica" in cargo_salvo or "tecnologia da informacao" in linha_salva):
+            materias_salvas["gerais"] = ["L\u00edngua Portuguesa", "Racioc\u00ednio L\u00f3gico e Matem\u00e1tico", "Inform\u00e1tica B\u00e1sica", "Administra\u00e7\u00e3o P\u00fablica, Governan\u00e7a e \u00c9tica", "No\u00e7\u00f5es de Direito Administrativo, Constitucional e Previdenci\u00e1rio", "Reda\u00e7\u00e3o / Prova Discursiva"]
+            materias_salvas["especificas"] = ["Conhecimentos Espec\u00edficos de Tecnologia da Informa\u00e7\u00e3o"]
+            materias_salvas["todas"] = materias_salvas["gerais"] + materias_salvas["especificas"]
+        if "tecnico autarquico" in linha_salva and "informatica" in linha_salva:
+            materias_salvas["gerais"] = [item for item in materias_salvas.get("gerais", []) if _normalizar_raio_x(item) not in {"geografia", "contabilidade", "redacao", "redacao oficial"}]
+            for materia in ("Noções de Administração Pública, Atendimento e Ética", "Noções de Legislação Institucional, Previdenciária e de Assistência à Saúde"):
+                if materia not in materias_salvas["gerais"]:
+                    materias_salvas["gerais"].append(materia)
+            if "Conhecimentos Específicos de Informática" not in materias_salvas.get("especificas", []):
+                materias_salvas.setdefault("especificas", []).append("Conhecimentos Específicos de Informática")
+            materias_salvas["todas"] = materias_salvas["gerais"] + materias_salvas["especificas"]
+        for grupo in ("gerais", "especificas"):
+            unicas = []
+            vistas = set()
+            for materia in materias_salvas.get(grupo, []):
+                chave = _normalizar_raio_x(materia)
+                if chave not in vistas:
+                    vistas.add(chave)
+                    unicas.append(materia)
+            materias_salvas[grupo] = unicas
+        materias_salvas["todas"] = materias_salvas.get("gerais", []) + materias_salvas.get("especificas", [])
         dados = {
             "materias": materias_salvas,
             "analise": json.loads(analise.analise_json or "{}"),
@@ -1415,6 +1657,7 @@ async def view_raio_x_banca(request: Request, analise_id: int = None):
         dados["analise"].setdefault("como_cobra", detalhes_atual["como_cobra"])
         dados["analise"].setdefault("formato", detalhes_atual["formato"])
         dados["analise"].setdefault("armadilhas_banca", detalhes_atual["armadilhas"])
+        dados["analise"]["prioridades"] = _prioridades_raio_x(materias_salvas)
     return templates.TemplateResponse(request=request, name="estudos_raio_x.html", context={"config": APP_CONFIG, "bancas": sorted(RAIO_X_BANCAS), "historico": historico, "analise": analise, "dados": dados})
 
 @app.post("/estudos/raio-x")
@@ -1438,6 +1681,30 @@ async def criar_raio_x_banca(request: Request, banca: str = Form(...), cargo: st
         texto = ""
     cargo_texto, cargo_encontrado, linha_cargo = _extrair_contexto_cargo(texto, cargo)
     materias = _extrair_materias_edital(cargo_texto)
+    # Editais do IBADE e de outras bancas costumam colocar as disciplinas
+    # gerais em um anexo separado da tabela de cargos. Complementa somente
+    # as matérias gerais com o PDF inteiro; as especÃ­ficas ficam restritas
+    # ao cargo escolhido para nÃ£o misturar Analista com TÃ©cnico.
+    materias_edital = _extrair_materias_edital(texto)
+    for materia in materias_edital.get("gerais", []):
+        if materia not in materias["gerais"]:
+            materias["gerais"].append(materia)
+    cargo_normalizado = _normalizar_raio_x(cargo)
+    if "analista autarquico" in cargo_normalizado and "informatica" in cargo_normalizado:
+        cargo_normalizado = cargo_normalizado.replace("informatica", "tecnologia da informacao")
+    contexto_normalizado = _normalizar_raio_x(cargo_texto)
+    if "informatica" in cargo_normalizado and any(termo in contexto_normalizado for termo in ("arquitetura", "redes de computadores", "banco de dados", "sql")):
+        materias["especificas"].append("Conhecimentos Espec\u00edficos de Inform\u00e1tica")
+    elif "analista autarquico" in cargo_normalizado and "tecnologia da informacao" in cargo_normalizado and any(termo in contexto_normalizado for termo in ("desenvolvimento de sistemas", "seguranca da informacao", "administracao de redes")):
+        materias["especificas"].append("Conhecimentos Espec\u00edficos de Tecnologia da Informa\u00e7\u00e3o")
+    elif "administrativa" in cargo_normalizado and "rotinas administrativas" in contexto_normalizado:
+        materias["especificas"].append("Conhecimentos Espec\u00edficos de Administra\u00e7\u00e3o")
+    if "tecnico autarquico" in cargo_normalizado and "informatica" in cargo_normalizado:
+        materias["gerais"] = [item for item in materias["gerais"] if _normalizar_raio_x(item) not in {"geografia", "contabilidade", "redacao", "redacao oficial"}]
+    if "analista autarquico" in cargo_normalizado and "tecnologia da informacao" in cargo_normalizado:
+        materias["gerais"] = ["L\u00edngua Portuguesa", "Racioc\u00ednio L\u00f3gico e Matem\u00e1tico", "Inform\u00e1tica B\u00e1sica", "Administra\u00e7\u00e3o P\u00fablica, Governan\u00e7a e \u00c9tica", "No\u00e7\u00f5es de Direito Administrativo, Constitucional e Previdenci\u00e1rio", "Reda\u00e7\u00e3o / Prova Discursiva"]
+        materias["especificas"] = ["Conhecimentos Espec\u00edficos de Tecnologia da Informa\u00e7\u00e3o"]
+    materias["todas"] = materias["gerais"] + materias["especificas"]
     # Muitos editais colocam Português e Raciocínio Lógico em uma seção comum,
     # fora do bloco do cargo. Complementa somente matérias gerais, sem puxar
     # conhecimentos específicos de outros cargos.
@@ -1484,17 +1751,77 @@ async def criar_raio_x_banca(request: Request, banca: str = Form(...), cargo: st
         "texto_extraido": bool(texto.strip()),
         "paginas": len(getattr(reader, "pages", [])) if texto else 0,
     }
+    analise["prioridades"] = _prioridades_raio_x(materias)
+    for grupo in ("gerais", "especificas"):
+        unicas = []
+        vistas = set()
+        for materia in materias.get(grupo, []):
+            chave = _normalizar_raio_x(materia)
+            if chave not in vistas:
+                vistas.add(chave)
+                unicas.append(materia)
+        materias[grupo] = unicas
+    materias["todas"] = materias["gerais"] + materias["especificas"]
+    analise["prioridades"] = _prioridades_raio_x(materias)
     with Session(engine) as session:
         # Mantém somente a análise atual por usuário, evitando crescimento indefinido.
         antigas = session.exec(select(EstudoRaioXBanca).where(EstudoRaioXBanca.usuario_id == int(user_id))).all()
         for antiga in antigas:
             session.delete(antiga)
-        item = EstudoRaioXBanca(usuario_id=int(user_id), banca=banca, cargo=cargo.strip() or None, edital_nome=edital.filename, edital_texto=cargo_texto[:200000], materias_json=json.dumps(materias, ensure_ascii=False), analise_json=json.dumps(analise, ensure_ascii=False), fontes_json=json.dumps(perfil["fontes"] + [busca_provas], ensure_ascii=False))
+        item = EstudoRaioXBanca(usuario_id=int(user_id), banca=banca, cargo=cargo.strip() or None, edital_nome=edital.filename, edital_texto=texto[:200000], materias_json=json.dumps(materias, ensure_ascii=False), analise_json=json.dumps(analise, ensure_ascii=False), fontes_json=json.dumps(perfil["fontes"] + [busca_provas], ensure_ascii=False))
         session.add(item)
         session.commit()
         session.refresh(item)
         item_id = item.id
     return RedirectResponse(url=f"/estudos/raio-x?analise_id={item_id}", status_code=303)
+
+@app.post("/estudos/raio-x/aplicar-quadro")
+async def aplicar_raio_x_no_quadro(request: Request, analise_id: int = Form(...)):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return RedirectResponse(url="/estudos/login", status_code=303)
+    try:
+        usuario_id = int(user_id)
+        hoje = datetime.now().date()
+        semana_inicio = hoje - timedelta(days=hoje.weekday())
+        dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        horarios = [("21:00", "22:00"), ("22:15", "00:15")]
+        with Session(engine) as session:
+            concurso = get_active_study_contest(session, usuario_id)
+            analise = session.get(EstudoRaioXBanca, analise_id)
+            if not analise or analise.usuario_id != usuario_id:
+                return RedirectResponse(url="/estudos/raio-x?mensagem=erro", status_code=303)
+            materias = json.loads(analise.materias_json or "{}")
+            gerais = list(materias.get("gerais", []))
+            especificas = list(materias.get("especificas", []))
+            cargo = _normalizar_raio_x(analise.cargo or "")
+            if "analista autarquico" in cargo and "informatica" in cargo:
+                gerais = ["L\u00edngua Portuguesa", "Racioc\u00ednio L\u00f3gico e Matem\u00e1tico", "Inform\u00e1tica B\u00e1sica", "Administra\u00e7\u00e3o P\u00fablica, Governan\u00e7a e \u00c9tica", "No\u00e7\u00f5es de Direito Administrativo, Constitucional e Previdenci\u00e1rio", "Reda\u00e7\u00e3o / Prova Discursiva"]
+                especificas = ["Conhecimentos Espec\u00edficos de Tecnologia da Informa\u00e7\u00e3o"]
+            elif "tecnico autarquico" in cargo and "informatica" in cargo:
+                gerais = ["L\u00edngua Portuguesa", "Racioc\u00ednio L\u00f3gico e Matem\u00e1tico", "Inform\u00e1tica B\u00e1sica", "No\u00e7\u00f5es de Administra\u00e7\u00e3o P\u00fablica, Atendimento e \u00c9tica", "No\u00e7\u00f5es de Legisla\u00e7\u00e3o Institucional, Previdenci\u00e1ria e de Assist\u00eancia \u00e0 Sa\u00fade"]
+                especificas = ["Conhecimentos Espec\u00edficos de Inform\u00e1tica"]
+            materias_finais = []
+            for materia in especificas + gerais:
+                chave = _normalizar_raio_x(materia)
+                if materia and chave not in {_normalizar_raio_x(item) for item in materias_finais}:
+                    materias_finais.append(materia)
+            if not materias_finais:
+                return RedirectResponse(url="/estudos/raio-x?mensagem=erro", status_code=303)
+            existentes = session.exec(select(EstudoPlano).where(EstudoPlano.usuario_id == usuario_id, EstudoPlano.concurso_id == concurso.id, EstudoPlano.semana_inicio == semana_inicio)).all()
+            for plano in existentes:
+                session.delete(plano)
+            ciclo = especificas + gerais
+            if not ciclo:
+                ciclo = materias_finais
+            for indice, (dia, horario) in enumerate(((dia, horario) for dia in dias for horario in horarios)):
+                materia = ciclo[indice % len(ciclo)]
+                session.add(EstudoPlano(usuario_id=usuario_id, concurso_id=concurso.id, semana_inicio=semana_inicio, materia=materia, dias_semana=dia, dia_semana=dia, slot=indice % 2, horario_inicio=horario[0], horario_fim=horario[1], meta_questoes=0))
+            session.commit()
+        return RedirectResponse(url=f"/estudos?success=raio_x&semana={semana_inicio}#quadro", status_code=303)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return RedirectResponse(url="/estudos/raio-x?mensagem=erro", status_code=303)
+
 
 @app.post("/estudos/raio-x/excluir")
 async def excluir_raio_x_banca(request: Request):
@@ -1529,9 +1856,11 @@ async def estudos_grafico_semanal(request: Request, semana: str = None, assunto:
     filtro = (assunto or "").strip().lower()
 
     with Session(engine) as session:
+        concurso_ativo = get_active_study_contest(session, usuario_id)
         registros = session.exec(
             select(EstudoSessao).where(
                 EstudoSessao.usuario_id == usuario_id,
+                EstudoSessao.concurso_id == concurso_ativo.id,
                 EstudoSessao.data_estudo >= semana_inicio,
                 EstudoSessao.data_estudo <= semana_fim,
             )
@@ -1573,8 +1902,10 @@ async def estudos_progresso(request: Request, data_progresso: str = None):
     except ValueError:
         data = hoje
     with Session(engine) as session:
+        concurso_ativo = get_active_study_contest(session, usuario_id)
         registros = session.exec(select(EstudoSessao).where(
             EstudoSessao.usuario_id == usuario_id,
+            EstudoSessao.concurso_id == concurso_ativo.id,
             EstudoSessao.data_estudo == data,
         )).all()
     por_materia = {}
@@ -1590,6 +1921,63 @@ async def estudos_progresso(request: Request, data_progresso: str = None):
         "percentual": min(100, round((valores["acertos"] / valores["questoes"]) * 100, 1)) if valores["questoes"] else 0,
     } for materia, valores in sorted(por_materia.items(), key=lambda item: item[1]["questoes"], reverse=True)]
     return {"data": data.isoformat(), "label": "Hoje" if data == hoje else ("Ontem" if data == hoje - timedelta(days=1) else data.strftime("%d/%m/%Y")), "itens": itens}
+
+
+def _get_study_admin_user(request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        return None
+    try:
+        with Session(engine) as session:
+            user = session.get(Usuario, int(user_id))
+            return user if user and api_auth._is_study_admin(user) else None
+    except (TypeError, ValueError):
+        return None
+
+
+@app.get("/estudos/admin", response_class=HTMLResponse)
+async def estudos_admin(request: Request, mensagem: str = None):
+    if not _get_study_admin_user(request):
+        return RedirectResponse(url="/estudos")
+    with Session(engine) as session:
+        usuarios = session.exec(select(Usuario).where(Usuario.role == "estudante").order_by(Usuario.nome, Usuario.username)).all()
+    return templates.TemplateResponse(request=request, name="estudos_admin.html", context={"config": APP_CONFIG, "usuarios": usuarios, "mensagem": mensagem})
+
+
+@app.post("/estudos/admin/usuario-status")
+async def estudos_admin_usuario_status(request: Request, usuario_id: int = Form(...), status: str = Form(...)):
+    if not _get_study_admin_user(request):
+        return RedirectResponse(url="/estudos", status_code=303)
+    novo_status = status if status in ("ativo", "bloqueado") else "ativo"
+    with Session(engine) as session:
+        usuario = session.get(Usuario, usuario_id)
+        if usuario and usuario.role == "estudante":
+            usuario.status_conta = novo_status
+            session.add(usuario)
+            session.commit()
+    texto = "Acesso liberado." if novo_status == "ativo" else "Acesso bloqueado."
+    return RedirectResponse(url=f"/estudos/admin?mensagem={quote(texto)}", status_code=303)
+
+
+@app.post("/estudos/admin/usuario-excluir")
+async def estudos_admin_usuario_excluir(request: Request, usuario_id: int = Form(...)):
+    if not _get_study_admin_user(request):
+        return RedirectResponse(url="/estudos", status_code=303)
+    with Session(engine) as session:
+        usuario = session.get(Usuario, usuario_id)
+        if not usuario or usuario.role != "estudante" or api_auth._is_study_admin(usuario):
+            return RedirectResponse(url="/estudos/admin?mensagem=" + quote("Conta não pode ser excluída."), status_code=303)
+        usuario_email = usuario.email
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM estudos_recuperacao_codigos WHERE usuario_id = :usuario_id"), {"usuario_id": usuario_id})
+        conn.execute(text("DELETE FROM estudos_cadastros_confirmacao WHERE lower(email) = lower(:email)"), {"email": usuario_email or ""})
+        conn.execute(text("DELETE FROM estudos_raio_x_bancas WHERE usuario_id = :usuario_id"), {"usuario_id": usuario_id})
+        conn.execute(text("DELETE FROM estudos_cronometros WHERE usuario_id = :usuario_id"), {"usuario_id": usuario_id})
+        conn.execute(text("DELETE FROM estudos_planos WHERE usuario_id = :usuario_id"), {"usuario_id": usuario_id})
+        conn.execute(text("DELETE FROM estudos_sessoes WHERE usuario_id = :usuario_id"), {"usuario_id": usuario_id})
+        conn.execute(text("DELETE FROM estudos_concursos WHERE usuario_id = :usuario_id"), {"usuario_id": usuario_id})
+        conn.execute(text("DELETE FROM usuarios WHERE id = :usuario_id AND role = 'estudante'"), {"usuario_id": usuario_id})
+    return RedirectResponse(url="/estudos/admin?mensagem=" + quote("Conta excluída definitivamente."), status_code=303)
 
 
 @app.get("/estudos", response_class=HTMLResponse)
@@ -1616,13 +2004,15 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
     inicio_proximo_dia = inicio_dia + timedelta(days=1)
 
     with Session(engine) as session:
+        concurso_ativo = get_active_study_contest(session, usuario_id)
         registros = session.exec(
-            select(EstudoSessao).where(EstudoSessao.usuario_id == usuario_id).order_by(desc(EstudoSessao.data_estudo), desc(EstudoSessao.criado_em))
+            select(EstudoSessao).where(EstudoSessao.usuario_id == usuario_id, EstudoSessao.concurso_id == concurso_ativo.id).order_by(desc(EstudoSessao.data_estudo), desc(EstudoSessao.criado_em))
         ).all()
 
         planos = session.exec(
             select(EstudoPlano).where(
                 EstudoPlano.usuario_id == usuario_id,
+                EstudoPlano.concurso_id == concurso_ativo.id,
                 EstudoPlano.semana_inicio == semana_inicio,
             ).order_by(EstudoPlano.materia)
         ).all()
@@ -1632,6 +2022,7 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
                 select(EstudoPlano.semana_inicio)
                 .where(
                     EstudoPlano.usuario_id == usuario_id,
+                    EstudoPlano.concurso_id == concurso_ativo.id,
                     EstudoPlano.semana_inicio < semana_inicio,
                     EstudoPlano.slot.isnot(None)
                 )
@@ -1642,6 +2033,7 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
                 planos_antigos = session.exec(
                     select(EstudoPlano).where(
                         EstudoPlano.usuario_id == usuario_id,
+                        EstudoPlano.concurso_id == concurso_ativo.id,
                         EstudoPlano.semana_inicio == ultima_semana,
                         EstudoPlano.slot.isnot(None)
                     ).order_by(EstudoPlano.materia)
@@ -1651,13 +2043,13 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         if not planos:
             todas_simples = session.exec(
                 select(EstudoPlano.semana_inicio)
-                .where(EstudoPlano.usuario_id == usuario_id, EstudoPlano.semana_inicio < semana_inicio)
+                .where(EstudoPlano.usuario_id == usuario_id, EstudoPlano.concurso_id == concurso_ativo.id, EstudoPlano.semana_inicio < semana_inicio)
                 .order_by(desc(EstudoPlano.semana_inicio))
             ).all()
             if todas_simples:
                 planos = session.exec(
                     select(EstudoPlano).where(
-                        EstudoPlano.usuario_id == usuario_id,
+                        EstudoPlano.usuario_id == usuario_id, EstudoPlano.concurso_id == concurso_ativo.id,
                         EstudoPlano.semana_inicio == todas_simples[0]
                     ).order_by(EstudoPlano.materia)
                 ).all()
@@ -1678,12 +2070,24 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         filtro_data_fim = datetime.strptime(data_fim, "%Y-%m-%d").date() if data_fim else None
     except ValueError:
         filtro_data_fim = None
-    registros_historico = [
+    registros_historico_completo = [
         registro for registro in registros
         if (not filtro or filtro in (registro.assunto or "").lower())
         and (not filtro_data_inicio or registro.data_estudo >= filtro_data_inicio)
         and (not filtro_data_fim or registro.data_estudo <= filtro_data_fim)
     ]
+    # Mantém a página leve na abertura. Ao pesquisar matéria ou período,
+    # todos os resultados correspondentes continuam sendo exibidos.
+    historico_filtrado = bool(filtro or filtro_data_inicio or filtro_data_fim)
+    limite_historico = 120
+    registros_historico = (
+        registros_historico_completo
+        if historico_filtrado
+        else registros_historico_completo[:limite_historico]
+    )
+    historico_mostrando_limite = (
+        not historico_filtrado and len(registros_historico_completo) > limite_historico
+    )
 
     # Os cards principais representam o total geral de todos os estudos.
     registros_calculo = registros
@@ -1877,7 +2281,13 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         name="estudos.html",
         context={
             "config": APP_CONFIG,
+            "estudos_admin": bool(_get_study_admin_user(request)),
+            "concurso_ativo": concurso_ativo,
             "registros": registros_historico,
+            "total_registros_historico": len(registros_historico_completo),
+            "historico_mostrando_limite": historico_mostrando_limite,
+            "limite_historico": limite_historico,
+            "dias_semana_pt": ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"],
             "total_questoes": total_questoes,
             "total_acertos": total_acertos,
             "total_erros": total_erros,
@@ -2278,8 +2688,10 @@ async def importar_plano_estudo(request: Request, semana_inicio: str = Form(...)
         return RedirectResponse(url=f"/estudos?success=erro_importar&semana={semana_inicio}", status_code=303)
 
     with Session(engine) as session:
+        concurso_ativo = get_active_study_contest(session, usuario_id)
         existentes = session.exec(select(EstudoPlano).where(
             EstudoPlano.usuario_id == usuario_id,
+            EstudoPlano.concurso_id == concurso_ativo.id,
             EstudoPlano.semana_inicio == data_inicio,
         )).all()
         for plano in existentes:
@@ -2288,6 +2700,7 @@ async def importar_plano_estudo(request: Request, semana_inicio: str = Form(...)
         for item in importacoes:
             session.add(EstudoPlano(
                 usuario_id=usuario_id,
+                concurso_id=concurso_ativo.id,
                 semana_inicio=data_inicio,
                 materia=item["materia"],
                 dias_semana=item["dia"],
@@ -2320,8 +2733,10 @@ async def save_estudo_grade(request: Request, semana_inicio: str = Form(...)):
             if inicio and fim:
                 horarios_grade[slot] = (inicio, fim)
         with Session(engine) as session:
+            concurso_ativo = get_active_study_contest(session, usuario_id)
             existentes = session.exec(select(EstudoPlano).where(
                 EstudoPlano.usuario_id == usuario_id,
+                EstudoPlano.concurso_id == concurso_ativo.id,
                 EstudoPlano.semana_inicio == data_inicio,
             )).all()
             por_celula = {}
@@ -2346,6 +2761,7 @@ async def save_estudo_grade(request: Request, semana_inicio: str = Form(...)):
                         else:
                             session.add(EstudoPlano(
                                 usuario_id=usuario_id,
+                                concurso_id=concurso_ativo.id,
                                 semana_inicio=data_inicio,
                                 materia=materia,
                                 dias_semana=dia,
@@ -2380,8 +2796,10 @@ async def save_estudo_plano(
         if not nome_materia:
             raise ValueError("matéria vazia")
         with Session(engine) as session:
+            concurso_ativo = get_active_study_contest(session, int(user_id))
             session.add(EstudoPlano(
                 usuario_id=int(user_id),
+                concurso_id=concurso_ativo.id,
                 semana_inicio=data_inicio,
                 materia=nome_materia,
                 dias_semana=dias_semana.strip() or "Segunda",
@@ -2414,11 +2832,14 @@ async def save_estudos(
 
     try:
         with Session(engine) as session:
+            concurso_ativo = get_active_study_contest(session, int(user_id))
             sessao = session.get(EstudoSessao, registro_id) if registro_id else None
             if sessao and sessao.usuario_id != int(user_id):
                 sessao = None
             if not sessao:
-                sessao = EstudoSessao(usuario_id=int(user_id))
+                sessao = EstudoSessao(usuario_id=int(user_id), concurso_id=concurso_ativo.id)
+            elif sessao.concurso_id is None:
+                sessao.concurso_id = concurso_ativo.id
             sessao.data_estudo = datetime.strptime(data_estudo, "%Y-%m-%d").date()
             sessao.horario_inicio = horario_inicio or None
             sessao.horario_fim = horario_fim or None
