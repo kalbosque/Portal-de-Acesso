@@ -21,7 +21,7 @@
             <p class="mt-1 text-xs text-slate-400">A imagem aparece no lugar da letra “E” na tela de login dos Estudos. JPG, PNG, WEBP ou GIF; máximo de 5 MB.</p>
         </div>
         <div class="flex flex-wrap items-center gap-5">
-            <div class="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-slate-950">
+            <div class="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-slate-950">
                 <img id="estudosLogoPreview" {% if estudos_logo_url %}src="{{ estudos_logo_url }}"{% endif %} alt="Prévia da logo dos Estudos" class="h-full w-full object-contain {% if not estudos_logo_url %}hidden{% endif %}">
                 <div id="estudosLogoFallback" class="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-500 text-3xl font-black text-white {% if estudos_logo_url %}hidden{% endif %}">E</div>
             </div>

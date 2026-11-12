@@ -146,9 +146,11 @@
         <section class="glass-panel w-full rounded-3xl p-7 sm:p-9 shadow-2xl">
             <div class="login-heading mb-8 text-center">
                 {% if estudos_logo_url %}
-                <img src="{{ estudos_logo_url }}" alt="Logo dos Estudos" class="mx-auto h-16 w-16 rounded-2xl bg-white/10 object-contain p-1 shadow-lg">
+                <div class="mx-auto h-24 w-24 overflow-hidden rounded-2xl bg-white/5 shadow-lg">
+                    <img src="{{ estudos_logo_url }}" alt="Logo dos Estudos" class="h-full w-full object-contain">
+                </div>
                 {% else %}
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-500 text-3xl font-black text-white shadow-lg shadow-sky-500/30">E</div>
+                <div class="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-500 text-4xl font-black text-white shadow-lg shadow-sky-500/30">E</div>
                 {% endif %}
                 <p class="mt-5 text-xs font-black uppercase tracking-[.28em] text-sky-400">Área independente</p>
                 <h1 class="mt-5 text-3xl font-bold tracking-tight text-white">Estudos</h1>
