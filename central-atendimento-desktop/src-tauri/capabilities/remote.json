@@ -6,11 +6,20 @@
   "remote": {
     "urls": [
       "http://192.168.1.230:3001/**",
+      "http://192.168.*:*/**",
+      "http://10.*:*/**",
       "http://localhost:3001/**",
+      "http://localhost:*/**",
       "http://127.0.0.1:3001/**",
+      "http://127.0.0.1:*/**",
       "https://portaldoacessos.taildbf5af.ts.net:8443/**",
       "https://portaldoacessos.taildbf5af.ts.net/**",
-      "https://parks-trio-nutritional-contemporary.trycloudflare.com/**"
+      "https://servidor-xml.taildbf5af.ts.net:8443/**",
+      "https://servidor-xml.taildbf5af.ts.net/**",
+      "https://*.taildbf5af.ts.net:8443/**",
+      "https://*.taildbf5af.ts.net/**",
+      "https://parks-trio-nutritional-contemporary.trycloudflare.com/**",
+      "https://*.trycloudflare.com/**"
     ]
   },
   "permissions": [

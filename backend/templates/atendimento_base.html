@@ -124,6 +124,7 @@
             <button type="button" class="attendance-menu-toggle items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-slate-200" onclick="toggleAttendanceMenu(event)" aria-label="Abrir menu"></button>
             <div class="flex flex-wrap items-center gap-2 attendance-nav menu-collapsed">
                 <a href="/central-atendimento" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">💬</span>Conversas</a>
+                <a href="/central-atendimento/agendamentos" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">📅</span>Agendamentos</a>
                 {% if user_role in ['admin', 'recepcao', 'recepção', 'recepcionista'] %}<a href="/central-atendimento/dashboard" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-indigo-500/15"><span class="menu-icon shrink-0" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>Painel</a>{% endif %}
                 <a href="/central-atendimento/contatos" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-emerald-500/15"><span aria-hidden="true">👥</span>Contatos</a>
                 <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-internal-note'))" class="inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-slate-100 transition hover:bg-amber-500/15"><span aria-hidden="true">📝</span>Nota interna</button>
@@ -161,14 +162,14 @@
         }
         async function sairDaCentral(event) {
             event?.stopPropagation();
-            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (_) {}
+            try { fetch('/api/auth/logout', { method: 'POST', keepalive: true }); } catch (_) {}
             document.cookie = 'user_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             document.cookie = 'user_role=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             document.cookie = 'user_name=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             document.cookie = 'username=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             document.cookie = 'user_perms=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
             const isDesktopApp = document.body.classList.contains('desktop-focus') || new URLSearchParams(window.location.search).get('desktop') === '1';
-            window.location.href = isDesktopApp ? '/atendimento/login?desktop=1' : '/atendimento/login';
+            window.location.replace(isDesktopApp ? '/atendimento/login?desktop=1' : '/atendimento/login');
         }
         window.sairDaCentral = sairDaCentral;
         document.addEventListener('click', function(event) {
@@ -231,8 +232,15 @@
     </script>
     {% if authenticated|default(false) %}
     <script>
-        fetch('/api/auth/heartbeat', { method: 'POST' }).catch(() => {});
-        setInterval(() => fetch('/api/auth/heartbeat', { method: 'POST' }).catch(() => {}), 60000);
+        function manterSessaoAtiva() {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
+            fetch('/api/auth/heartbeat', { method: 'POST', signal: controller.signal })
+                .catch(() => {})
+                .finally(() => clearTimeout(timeout));
+        }
+        manterSessaoAtiva();
+        setInterval(manterSessaoAtiva, 60000);
     </script>
     {% endif %}
 </body>

@@ -16,11 +16,11 @@ class ConnectionManager:
 
     async def broadcast(self, message: dict):
         text = json.dumps(message)
-        for connection in self.active_connections:
+        for connection in list(self.active_connections):
             try:
                 await connection.send_text(text)
-            except:
-                pass
+            except Exception:
+                self.disconnect(connection)
 
 # Instância global para ser importada e utilizada por outros módulos
 manager = ConnectionManager()

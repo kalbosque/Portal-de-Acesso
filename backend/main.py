@@ -31,6 +31,7 @@ import api_status
 import api_equipamentos_ti
 import api_cofre
 import api_whatsapp
+import api_atendimento_agenda
 import api_tenants
 from database import engine
 from dotenv import load_dotenv
@@ -150,7 +151,9 @@ async def websocket_endpoint(websocket: WebSocket):
             # Respond to ping to keep connection alive
             if data == "ping":
                 await websocket.send_text("pong")
-    except WebSocketDisconnect:
+    except Exception:
+        pass
+    finally:
         manager.disconnect(websocket)
 
 
@@ -202,6 +205,9 @@ def ensure_schema_compatibility():
         "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS tipo_registro VARCHAR(20) DEFAULT 'estudo'",
         "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS nome_simulado VARCHAR(255)",
         "CREATE TABLE IF NOT EXISTS estudos_concursos (id SERIAL PRIMARY KEY, usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE, nome VARCHAR(180) NOT NULL, cargo VARCHAR(180), banca VARCHAR(120), data_prova DATE, ativo BOOLEAN NOT NULL DEFAULT FALSE, criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "ALTER TABLE estudos_concursos ADD COLUMN IF NOT EXISTS ciclo_materias TEXT",
+        "ALTER TABLE estudos_concursos ADD COLUMN IF NOT EXISTS ciclo_index INTEGER DEFAULT 0",
+        "ALTER TABLE estudos_concursos ADD COLUMN IF NOT EXISTS modo_quadro VARCHAR(20) DEFAULT 'semanal'",
         "ALTER TABLE estudos_sessoes ADD COLUMN IF NOT EXISTS concurso_id INTEGER REFERENCES estudos_concursos(id)",
         "ALTER TABLE estudos_planos ADD COLUMN IF NOT EXISTS concurso_id INTEGER REFERENCES estudos_concursos(id)",
         "CREATE INDEX IF NOT EXISTS ix_estudos_sessoes_usuario_data ON estudos_sessoes (usuario_id, data_estudo DESC, criado_em DESC)",
@@ -396,6 +402,7 @@ include_router_if_available(api_status, "api_status")
 include_router_if_available(api_equipamentos_ti, "api_equipamentos_ti")
 include_router_if_available(api_cofre, "api_cofre")
 include_router_if_available(api_whatsapp, "api_whatsapp")
+include_router_if_available(api_atendimento_agenda, "api_atendimento_agenda")
 include_router_if_available(api_tenants, "api_tenants")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2133,7 +2140,42 @@ async def estudos_admin(request: Request, mensagem: str = None):
         return RedirectResponse(url="/estudos")
     with Session(engine) as session:
         usuarios = session.exec(select(Usuario).where(Usuario.role == "estudante").order_by(Usuario.nome, Usuario.username)).all()
-    return templates.TemplateResponse(request=request, name="estudos_admin.html", context={"config": APP_CONFIG, "usuarios": usuarios, "mensagem": mensagem})
+        agora_local = datetime.now()
+        agora_utc = datetime.now(timezone.utc)
+        online_ids = set()
+        for usuario in usuarios:
+            if not usuario.last_seen:
+                continue
+            ultimo_acesso = usuario.last_seen
+            if ultimo_acesso.tzinfo is None:
+                esta_online = ultimo_acesso >= agora_local - timedelta(minutes=2)
+            else:
+                esta_online = ultimo_acesso >= agora_utc - timedelta(minutes=2)
+            if esta_online:
+                online_ids.add(usuario.id)
+    return templates.TemplateResponse(request=request, name="estudos_admin.html", context={"config": APP_CONFIG, "usuarios": usuarios, "online_ids": online_ids, "mensagem": mensagem})
+
+
+@app.get("/estudos/admin/status")
+async def estudos_admin_status(request: Request):
+    if not _get_study_admin_user(request):
+        return {"success": False, "online_ids": []}
+    with Session(engine) as session:
+        usuarios = session.exec(select(Usuario).where(Usuario.role == "estudante")).all()
+    agora_local = datetime.now()
+    agora_utc = datetime.now(timezone.utc)
+    online_ids = []
+    for usuario in usuarios:
+        if not usuario.last_seen:
+            continue
+        ultimo_acesso = usuario.last_seen
+        if ultimo_acesso.tzinfo is None:
+            esta_online = ultimo_acesso >= agora_local - timedelta(minutes=2)
+        else:
+            esta_online = ultimo_acesso >= agora_utc - timedelta(minutes=2)
+        if esta_online:
+            online_ids.append(usuario.id)
+    return {"success": True, "online_ids": online_ids}
 
 
 @app.post("/estudos/admin/usuario-status")
@@ -2149,6 +2191,30 @@ async def estudos_admin_usuario_status(request: Request, usuario_id: int = Form(
             session.commit()
     texto = "Acesso liberado." if novo_status == "ativo" else "Acesso bloqueado."
     return RedirectResponse(url=f"/estudos/admin?mensagem={quote(texto)}", status_code=303)
+
+
+@app.post("/estudos/admin/usuario-senha")
+async def estudos_admin_usuario_senha(
+    request: Request,
+    usuario_id: int = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+):
+    if not _get_study_admin_user(request):
+        return RedirectResponse(url="/estudos", status_code=303)
+    if len(password) < 6:
+        return RedirectResponse(url=f"/estudos/admin?mensagem={quote('A senha precisa ter pelo menos 6 caracteres.')}", status_code=303)
+    if password != confirm_password:
+        return RedirectResponse(url=f"/estudos/admin?mensagem={quote('As senhas não coincidem.')}", status_code=303)
+    with Session(engine) as session:
+        usuario = session.get(Usuario, usuario_id)
+        if not usuario or usuario.role != "estudante":
+            return RedirectResponse(url=f"/estudos/admin?mensagem={quote('Estudante não encontrado.')}", status_code=303)
+        usuario.password_hash = api_auth.hash_password(password)
+        usuario.senha_temp = None
+        session.add(usuario)
+        session.commit()
+    return RedirectResponse(url=f"/estudos/admin?mensagem={quote('Senha alterada com sucesso.')}", status_code=303)
 
 
 @app.post("/estudos/admin/usuario-excluir")
@@ -2262,15 +2328,21 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         filtro_data_fim = datetime.strptime(data_fim, "%Y-%m-%d").date() if data_fim else None
     except ValueError:
         filtro_data_fim = None
-    registros_historico_completo = [
-        registro for registro in registros
-        if (not filtro or filtro in (registro.assunto or "").lower())
-        and (not filtro_data_inicio or registro.data_estudo >= filtro_data_inicio)
-        and (not filtro_data_fim or registro.data_estudo <= filtro_data_fim)
-    ]
+    historico_filtrado = bool(filtro or filtro_data_inicio or filtro_data_fim)
+    if historico_filtrado:
+        registros_historico_completo = [
+            registro for registro in registros
+            if (not filtro or filtro in (registro.assunto or "").lower())
+            and (not filtro_data_inicio or registro.data_estudo >= filtro_data_inicio)
+            and (not filtro_data_fim or registro.data_estudo <= filtro_data_fim)
+        ]
+    else:
+        registros_historico_completo = [
+            registro for registro in registros
+            if registro.data_estudo == hoje
+        ]
     # Mantém a página leve na abertura. Ao pesquisar matéria ou período,
     # todos os resultados correspondentes continuam sendo exibidos.
-    historico_filtrado = bool(filtro or filtro_data_inicio or filtro_data_fim)
     limite_historico = 120
     registros_historico = (
         registros_historico_completo
@@ -2292,7 +2364,12 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
     acertos_simulados = sum((r.total_acertos or 0) for r in registros_simulados)
     questoes_estudos = sum((r.quantidade_questoes or 0) for r in registros_estudos)
     acertos_estudos = sum((r.total_acertos or 0) for r in registros_estudos)
-    aproveitamento_simulados = min(100, round((acertos_simulados / questoes_simulados) * 100, 1)) if questoes_simulados else 0
+    notas_simulados = [
+        min(100, round(((r.total_acertos or 0) / r.quantidade_questoes) * 100, 1))
+        for r in registros_simulados
+        if (r.quantidade_questoes or 0) > 0
+    ]
+    aproveitamento_simulados = max(notas_simulados, default=0)
     aproveitamento_estudos = min(100, round((acertos_estudos / questoes_estudos) * 100, 1)) if questoes_estudos else 0
     def calc_segundos(r):
         if r.horario_inicio and r.horario_fim:
@@ -2456,7 +2533,9 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         chave = re.sub(r"[^a-z0-9]+", " ", chave).strip()
         return re.sub(r"\bconh\.?\b|\bconhec\.?\b", "conhecimentos", chave)
 
-    chaves_materias_quadro = sorted({normalizar_chave_materia(materia) for materia in grade.values() if materia and materia.strip()})
+    # O ciclo deve considerar todas as matérias cadastradas no quadro ativo,
+    # inclusive as que ainda não receberam horário em uma célula específica.
+    chaves_materias_quadro = sorted({normalizar_chave_materia(plano.materia) for plano in planos if plano.materia and plano.materia.strip()})
     materias_quadro = [materias_unicas[chave] for chave in chaves_materias_quadro]
     cores_por_chave = {
         chave: paleta_materias[indice % len(paleta_materias)]
@@ -2468,6 +2547,17 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         if materia and materia.strip()
     }
 
+    ciclo_materias_db = None
+    if concurso_ativo and getattr(concurso_ativo, "ciclo_materias", None):
+        try:
+            parsed = json.loads(concurso_ativo.ciclo_materias)
+            if isinstance(parsed, list):
+                ciclo_materias_db = parsed
+        except (ValueError, TypeError):
+            ciclo_materias_db = None
+    ciclo_index_db = getattr(concurso_ativo, "ciclo_index", 0) if concurso_ativo else 0
+    modo_quadro_db = getattr(concurso_ativo, "modo_quadro", "semanal") if concurso_ativo else "semanal"
+
     return templates.TemplateResponse(
         request=request,
         name="estudos.html",
@@ -2475,6 +2565,9 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
             "config": APP_CONFIG,
             "estudos_admin": bool(_get_study_admin_user(request)),
             "concurso_ativo": concurso_ativo,
+            "ciclo_materias_db": ciclo_materias_db,
+            "ciclo_index_db": ciclo_index_db,
+            "modo_quadro_db": modo_quadro_db,
             "registros": registros_historico,
             "total_registros_historico": len(registros_historico_completo),
             "historico_mostrando_limite": historico_mostrando_limite,
@@ -2531,6 +2624,50 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
             "materia_melhorar": materia_melhorar,
         }
     )
+
+@app.post("/estudos/ciclo/salvar")
+async def salvar_ciclo_estudos(request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Autenticação necessária")
+    try:
+        usuario_id = int(user_id)
+        payload = await request.json()
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Dados inválidos")
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Dados inválidos")
+
+    materias = payload.get("materias")
+    indice = payload.get("index", 0)
+    modo = payload.get("modo")
+    concurso_id = payload.get("concurso_id")
+
+    with Session(engine) as session:
+        concurso = None
+        if concurso_id:
+            try:
+                c_id = int(concurso_id)
+                concurso = session.get(EstudoConcurso, c_id)
+                if concurso and concurso.usuario_id != usuario_id:
+                    concurso = None
+            except (ValueError, TypeError):
+                concurso = None
+        if not concurso:
+            concurso = get_active_study_contest(session, usuario_id)
+
+        if concurso:
+            if materias is not None and isinstance(materias, list):
+                concurso.ciclo_materias = json.dumps([str(m).strip() for m in materias if str(m).strip()], ensure_ascii=False)
+            if isinstance(indice, int):
+                concurso.ciclo_index = max(0, indice)
+            if modo and isinstance(modo, str) and modo in ("semanal", "ciclo"):
+                concurso.modo_quadro = modo
+            session.add(concurso)
+            session.commit()
+            session.refresh(concurso)
+    return {"success": True}
 
 @app.post("/estudos/cronometro/concluir")
 async def concluir_cronometro(request: Request):
@@ -3560,6 +3697,14 @@ async def view_central_atendimento(request: Request):
     can_edit_identity = api_whatsapp._can_edit_identity(request)
     can_manage_company = user_role == "admin" or (user_role == "cliente_atendimento" and can_edit_identity)
 
+    current_tenant_id = None
+    if os.getenv("ATENDIMENTO_MULTIEMPRESA_ENABLED", "false").lower() in ("1", "true", "yes", "on") and user_role != "admin":
+        try:
+            tenant_ctx = resolve_context(request)
+            current_tenant_id = tenant_ctx.tenant_id
+        except Exception:
+            current_tenant_id = None
+
     response = templates.TemplateResponse(
         request=request,
         name="atendimento_whatsapp.html",
@@ -3573,17 +3718,47 @@ async def view_central_atendimento(request: Request):
             "authenticated": True,
             "has_access": has_access,
             "desktop_mode": desktop_mode,
-            "can_edit_identity": user_role in ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepÃ§Ã£o", "recepcionista"),
+            "can_edit_identity": user_role in ("admin", "operator", "gestor", "gerente", "supervisor", "recepcao", "recepção", "recepcionista"),
             "profile_name": profile_name,
             "profile_photo_url": profile_photo_url,
             "can_edit_identity": can_edit_identity,
             "can_manage_company": can_manage_company,
             "atendimento_multiempresa_enabled": os.getenv("ATENDIMENTO_MULTIEMPRESA_ENABLED", "false").lower() in ("1", "true", "yes", "on"),
+            "current_tenant_id": current_tenant_id,
         }
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    if request.query_params.get("desktop") == "1":
+        response.set_cookie("central_atendimento_tauri", "1", httponly=False, samesite="lax")
+    return response
+
+@app.get("/central-atendimento/agendamentos", response_class=HTMLResponse)
+async def view_atendimento_agenda(request: Request):
+    desktop_mode = request.query_params.get("desktop") == "1" or request.cookies.get("central_atendimento_tauri") == "1"
+    user_id = get_signed_cookie(request, "user_id")
+    if not user_id:
+        return RedirectResponse(url="/atendimento/login")
+    if not _can_access_atendimento(request):
+        return RedirectResponse(url="/")
+
+    config = load_app_config()
+    if not config.get("MODULO_ATENDIMENTO", False):
+        return RedirectResponse(url="/")
+
+    response = templates.TemplateResponse(
+        request=request,
+        name="atendimento_agenda.html",
+        context={
+            "config": config,
+            "authenticated": True,
+            "desktop_mode": desktop_mode,
+            "user_role": get_signed_cookie(request, "user_role", "operator"),
+            "user_name": get_signed_cookie(request, "user_name", ""),
+        },
+    )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     if request.query_params.get("desktop") == "1":
         response.set_cookie("central_atendimento_tauri", "1", httponly=False, samesite="lax")
     return response

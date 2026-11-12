@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from sqlmodel import Session, select
 from database import engine
 from models import StatusMaquina
+from api_atendimento_agenda import process_due_messages
 from utils_email import send_email_async
 import os
 from dotenv import load_dotenv
@@ -73,6 +74,9 @@ if __name__ == "__main__":
     
     # Roda a limpeza aos domingos às 03:00 da manhã
     schedule.every().sunday.at("03:00").do(cleanup_old_records)
+
+    # Envia mensagens da agenda quando o recurso estiver ativado
+    schedule.every(1).minutes.do(process_due_messages)
     
     # Roda a primeira verificação imediatamente no boot
     check_offline_machines()

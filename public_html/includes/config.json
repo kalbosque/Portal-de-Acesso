@@ -31,5 +31,6 @@
     "WHATSAPP_INSTANCE_COLORS": {
         "portal-de-acesso": "#00a884",
         "atual-contabilidade": "#00a884"
-    }
+    },
+    "ATENDIMENTO_AGENDAMENTOS_ENABLED": true
 }

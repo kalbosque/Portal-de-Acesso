@@ -1,7 +1,20 @@
 use tauri::Manager;
 use tauri_plugin_notification::NotificationExt;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 const APP_ID: &str = "br.com.atualrnc.central-atendimento-operador";
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+#[cfg(windows)]
+fn no_console_command(program: &str) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
 
 #[cfg(windows)]
 fn register_windows_notification_identity() -> bool {
@@ -18,7 +31,7 @@ fn register_windows_notification_identity() -> bool {
     ];
 
     for (name, value) in values {
-        let status = std::process::Command::new("reg.exe")
+        let status = no_console_command("reg.exe")
             .args(["add", &key, "/v", name, "/t", "REG_SZ", "/d", value, "/f"])
             .status();
 
@@ -31,14 +44,14 @@ fn register_windows_notification_identity() -> bool {
 
     // O Windows mantém a entrada exibida em Configurações por usuário.
     // Criamos somente na primeira execução para não sobrescrever a escolha do usuário.
-    let settings_exists = std::process::Command::new("reg.exe")
+    let settings_exists = no_console_command("reg.exe")
         .args(["query", &settings_key])
         .status()
         .map(|status| status.success())
         .unwrap_or(false);
 
     if !settings_exists {
-        let _ = std::process::Command::new("reg.exe")
+        let _ = no_console_command("reg.exe")
             .args(["add", &settings_key, "/v", "Enabled", "/t", "REG_DWORD", "/d", "1", "/f"])
             .status();
     }
@@ -57,19 +70,15 @@ fn trigger_message_alert(app: tauri::AppHandle, sender: String, preview: String)
     };
     let app_title = "Central de Atendimento v0.1.9";
 
-    // Pisca a barra de tarefas sem forçar foco (forçar foco suprime o toast do Windows)
+    // Pisca a barra de tarefas sem forçar foco excessivo (reduz o impacto visual e o lag).
     if let Some(window) = app.get_webview_window("main") {
         let window_clone = window.clone();
         std::thread::spawn(move || {
-            for i in 0..20 {
-                let flash_title = if i % 2 == 0 {
-                    "NOVA MENSAGEM"
-                } else {
-                    app_title
-                };
-                let _ = window_clone.set_title(flash_title);
+            let flash_steps = ["NOVA MENSAGEM", app_title, app_title];
+            for title in flash_steps {
+                let _ = window_clone.set_title(title);
                 let _ = window_clone.request_user_attention(Some(tauri::UserAttentionType::Critical));
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_millis(180));
             }
             let _ = window_clone.set_title(app_title);
             let _ = window_clone.request_user_attention(None);

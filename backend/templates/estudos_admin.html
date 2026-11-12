@@ -16,13 +16,15 @@
     {% if mensagem %}<div class="mb-5 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{{ mensagem }}</div>{% endif %}
 
     <section class="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60">
-        <div class="border-b border-white/10 px-5 py-4"><h2 class="font-black text-white">Contas de estudantes</h2><p class="mt-1 text-xs text-slate-400">{{ usuarios|length }} conta(s) cadastrada(s).</p></div>
+        <div class="border-b border-white/10 px-5 py-4"><h2 class="font-black text-white">Contas de estudantes</h2><p class="mt-1 text-xs text-slate-400">{{ usuarios|length }} conta(s) cadastrada(s). O status atualiza automaticamente.</p></div>
         <div class="divide-y divide-white/5">
         {% for usuario in usuarios %}
             <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
                 <div class="min-w-0"><div class="font-bold text-white">{{ usuario.nome or usuario.username }}</div><div class="mt-1 text-xs text-slate-400">{{ usuario.email }} · @{{ usuario.username }}</div></div>
                 <div class="flex items-center gap-3">
+                    <span data-online-status="{{ usuario.id }}" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase {% if usuario.id in online_ids %}bg-emerald-500/15 text-emerald-300{% else %}bg-slate-500/15 text-slate-400{% endif %}"><span data-online-dot class="h-1.5 w-1.5 rounded-full {% if usuario.id in online_ids %}bg-emerald-400{% else %}bg-slate-500{% endif %}"></span><span data-online-label>{{ 'Online' if usuario.id in online_ids else 'Offline' }}</span></span>
                     <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase {% if usuario.status_conta == 'bloqueado' %}bg-rose-500/15 text-rose-300{% else %}bg-emerald-500/15 text-emerald-300{% endif %}">{{ 'Bloqueado' if usuario.status_conta == 'bloqueado' else 'Ativo' }}</span>
+                    <button type="button" onclick="abrirAlterarSenha({{ usuario.id }}, '{{ (usuario.nome or usuario.username)|e }}')" class="rounded-lg border border-indigo-400/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-indigo-300 hover:bg-indigo-500/10">Alterar senha</button>
                     <form method="post" action="/estudos/admin/usuario-status"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><input type="hidden" name="status" value="{{ 'ativo' if usuario.status_conta == 'bloqueado' else 'bloqueado' }}"><button class="rounded-lg border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/5">{{ 'Liberar acesso' if usuario.status_conta == 'bloqueado' else 'Bloquear acesso' }}</button></form>
                     <form method="post" action="/estudos/admin/usuario-excluir" onsubmit="return confirm('Excluir definitivamente esta conta e todos os dados de Estudos? Esta ação não pode ser desfeita.');"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><button class="rounded-lg border border-rose-400/20 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-rose-300 hover:bg-rose-500 hover:text-white">Excluir conta</button></form>
                 </div>
@@ -31,4 +33,48 @@
         </div>
     </section>
 </div>
+<div id="modalAlterarSenha" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+    <form method="post" action="/estudos/admin/usuario-senha" class="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+        <div class="mb-5 flex items-center justify-between"><div><h2 class="text-lg font-black text-white">Alterar senha</h2><p id="nomeUsuarioSenha" class="mt-1 text-xs text-slate-400"></p></div><button type="button" onclick="fecharAlterarSenha()" class="text-2xl text-slate-500 hover:text-white">×</button></div>
+        <input type="hidden" name="usuario_id" id="usuarioSenhaId">
+        <input name="password" type="password" minlength="6" required placeholder="Nova senha (mínimo 6 caracteres)" class="mb-3 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-indigo-400">
+        <input name="confirm_password" type="password" minlength="6" required placeholder="Confirme a nova senha" class="mb-4 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-indigo-400">
+        <div class="flex gap-2"><button type="button" onclick="fecharAlterarSenha()" class="flex-1 rounded-xl border border-white/10 px-4 py-3 text-xs font-black uppercase text-slate-300">Cancelar</button><button class="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-xs font-black uppercase text-white hover:bg-indigo-500">Salvar senha</button></div>
+    </form>
+</div>
+<script>
+    function abrirAlterarSenha(id, nome) {
+        document.getElementById('usuarioSenhaId').value = id;
+        document.getElementById('nomeUsuarioSenha').textContent = `Usuário: ${nome}`;
+        const modal = document.getElementById('modalAlterarSenha');
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+        modal.querySelector('input[name="password"]').focus();
+    }
+    function fecharAlterarSenha() {
+        const modal = document.getElementById('modalAlterarSenha');
+        modal.classList.add('hidden'); modal.classList.remove('flex');
+        modal.querySelector('form').reset();
+    }
+    async function atualizarStatusOnline() {
+        try {
+            const resposta = await fetch('/estudos/admin/status', { credentials: 'include', cache: 'no-store' });
+            const dados = await resposta.json();
+            if (!dados.success) return;
+            const online = new Set((dados.online_ids || []).map(Number));
+            document.querySelectorAll('[data-online-status]').forEach((badge) => {
+                const estaOnline = online.has(Number(badge.dataset.onlineStatus));
+                const dot = badge.querySelector('[data-online-dot]');
+                const label = badge.querySelector('[data-online-label]');
+                badge.classList.toggle('bg-emerald-500/15', estaOnline);
+                badge.classList.toggle('text-emerald-300', estaOnline);
+                badge.classList.toggle('bg-slate-500/15', !estaOnline);
+                badge.classList.toggle('text-slate-400', !estaOnline);
+                dot.classList.toggle('bg-emerald-400', estaOnline);
+                dot.classList.toggle('bg-slate-500', !estaOnline);
+                label.textContent = estaOnline ? 'Online' : 'Offline';
+            });
+        } catch (erro) {}
+    }
+    setInterval(atualizarStatusOnline, 30000);
+</script>
 {% endblock %}

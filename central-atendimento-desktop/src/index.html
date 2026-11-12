@@ -7,7 +7,14 @@
     <style>
       html, body { margin: 0; width: 100%; height: 100%; background: #07131a; }
       body { color: #e2e8f0; font: 14px Arial, sans-serif; }
-      .loading { display: grid; place-items: center; height: 100%; color: #a7f3d0; font-weight: 600; }
+      .loading {
+        display: grid;
+        place-items: center;
+        height: 100%;
+        color: #a7f3d0;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
       .panel { width: min(440px, calc(100% - 40px)); padding: 30px; border: 1px solid #1e3a46; border-radius: 18px; background: #0d2029; box-shadow: 0 20px 60px #0008; }
       h1 { margin: 0 0 8px; font-size: 20px; color: #f8fafc; }
       p { margin: 0 0 22px; color: #94a3b8; line-height: 1.5; font-weight: 400; }
@@ -19,6 +26,25 @@
       .config-link { position: fixed; right: 18px; bottom: 15px; width: auto; margin: 0; padding: 7px 10px; background: transparent; color: #64748b; font-size: 11px; font-weight: 400; }
       .config-link:hover { color: #a7f3d0; background: transparent; }
       .error { min-height: 18px; margin-top: 10px; color: #fda4af; font-size: 12px; }
+      .loading-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 18px;
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        border-radius: 12px;
+        background: rgba(15, 23, 42, 0.7);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+      }
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(167, 243, 208, 0.3);
+        border-top-color: #a7f3d0;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
@@ -30,6 +56,7 @@
       // atual quando ainda não existe uma configuração salva.
       // Servidor padrão da Central de Atendimento
       const DEFAULT_SERVER = 'https://portaldoacessos.taildbf5af.ts.net:8443';
+      const STARTUP_DELAY_MS = 200;
       let redirectTimer;
 
       function getSavedServer() {
@@ -51,41 +78,60 @@
         return server;
       }
 
+      function isValidServer(value) {
+        try {
+          const parsed = new URL(value);
+          return ['http:', 'https:'].includes(parsed.protocol) && !!parsed.hostname;
+        } catch (_) {
+          return false;
+        }
+      }
+
       function renderSetup(message = '') {
         clearTimeout(redirectTimer);
         const saved = getSavedServer();
+        const inputValue = saved && isValidServer(saved) ? saved : DEFAULT_SERVER;
+
         document.getElementById('app').innerHTML = `
           <form class="panel" id="server-form">
             <h1>Configurar servidor</h1>
             <p>Informe o IP ou nome do servidor da Central. Esta configuração fica salva somente neste computador.</p>
             <label for="server-url">Endereço do servidor</label>
-            <input id="server-url" value="${saved.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" placeholder="http://192.168.10.50:8080" autocomplete="url">
+            <input id="server-url" value="${inputValue.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" placeholder="http://192.168.10.50:8080" autocomplete="url">
             <div class="error" id="server-error">${message}</div>
             <button type="submit">Salvar e abrir Central</button>
           </form>
           <button class="config-link" id="cancel-config" type="button">Cancelar</button>`;
+
         document.getElementById('server-form').addEventListener('submit', event => {
           event.preventDefault();
           const input = document.getElementById('server-url');
           const server = normalizeServer(input.value);
-          try {
-            const parsed = new URL(server);
-            if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) throw new Error();
-          } catch (_) {
+
+          if (!isValidServer(server)) {
             document.getElementById('server-error').textContent = 'Informe um endereço válido, como http://192.168.10.50:8080';
             return;
           }
+
           localStorage.setItem(SERVER_KEY, server);
           openServer(server);
         });
+
         document.getElementById('cancel-config').addEventListener('click', () => {
-          const server = localStorage.getItem(SERVER_KEY);
-          if (server) openServer(server);
+          const server = normalizeServer(localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER);
+          if (isValidServer(server)) openServer(server);
         });
       }
 
       function openServer(server) {
-        window.location.replace(`${normalizeServer(server)}/atendimento/login?desktop=1`);
+        const normalized = normalizeServer(server);
+        if (!isValidServer(normalized)) {
+          renderSetup('Servidor inválido. Verifique o endereço e tente novamente.');
+          return;
+        }
+
+        const target = `${normalized}/atendimento/login?desktop=1`;
+        window.location.replace(target);
       }
 
       if (isTauriRuntime) {
@@ -98,9 +144,22 @@
       if (new URLSearchParams(window.location.search).has('config')) {
         renderSetup();
       } else {
-        document.getElementById('app').innerHTML = '<div>Abrindo a Central de Atendimento...</div><button class="config-link" id="change-server" type="button">Configurar servidor</button>';
+        document.getElementById('app').innerHTML = `
+          <div class="loading-card">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Abrindo a Central de Atendimento...</span>
+          </div>
+          <button class="config-link" id="change-server" type="button">Configurar servidor</button>
+        `;
+
         document.getElementById('change-server').addEventListener('click', renderSetup);
-        redirectTimer = setTimeout(() => openServer(savedServer), 700);
+
+        if (!isValidServer(savedServer)) {
+          renderSetup('Não foi possível localizar um servidor válido. Configure o endereço da Central.');
+          return;
+        }
+
+        redirectTimer = setTimeout(() => openServer(savedServer), STARTUP_DELAY_MS);
       }
     </script>
   </body>

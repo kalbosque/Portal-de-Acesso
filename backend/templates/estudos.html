@@ -142,13 +142,144 @@
 (function(){
     // Garante que o armazenamento antigo não prenda o usuário na aba de desempenho
     try { localStorage.removeItem('estudos_aba_ativa'); } catch(e) {}
+
+    window.mostrarNotificacaoEstudo = function(titulo, mensagem, tipo = 'sucesso', duracao = 4000) {
+        let container = document.getElementById('estudosToastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'estudosToastContainer';
+            container.className = 'fixed top-20 sm:top-24 left-1/2 -translate-x-1/2 z-[9999] flex max-w-lg w-full flex-col items-center gap-2.5 pointer-events-none px-4';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'study-toast pointer-events-auto flex items-start gap-3.5 rounded-2xl border p-4 shadow-2xl backdrop-blur-xl transition-all duration-350 transform translate-y-[-16px] opacity-0 cursor-pointer w-full';
+
+        let config = {
+            bg: 'bg-slate-900/95 border-emerald-400/60 shadow-emerald-500/25 ring-2 ring-emerald-400/20',
+            iconBg: 'bg-emerald-500 text-slate-950 shadow-emerald-500/50',
+            icon: '✓',
+            titleColor: 'text-emerald-300'
+        };
+
+        if (tipo === 'info') {
+            config = {
+                bg: 'bg-slate-900/95 border-sky-400/60 shadow-sky-500/25 ring-2 ring-sky-400/20',
+                iconBg: 'bg-sky-500 text-slate-950 shadow-sky-500/50',
+                icon: 'ℹ',
+                titleColor: 'text-sky-300'
+            };
+        } else if (tipo === 'aviso') {
+            config = {
+                bg: 'bg-slate-900/95 border-amber-400/60 shadow-amber-500/25 ring-2 ring-amber-400/20',
+                iconBg: 'bg-amber-400 text-slate-950 shadow-amber-400/50',
+                icon: '!',
+                titleColor: 'text-amber-300'
+            };
+        } else if (tipo === 'erro') {
+            config = {
+                bg: 'bg-slate-900/95 border-rose-500/60 shadow-rose-500/25 ring-2 ring-rose-500/20',
+                iconBg: 'bg-rose-500 text-white shadow-rose-500/50',
+                icon: '✕',
+                titleColor: 'text-rose-300'
+            };
+        }
+
+        toast.className += ` ${config.bg}`;
+        toast.innerHTML = `
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${config.iconBg} font-black text-lg shadow-md">
+                ${config.icon}
+            </div>
+            <div class="flex-1 min-w-0 pr-1">
+                <h5 class="text-xs font-black uppercase tracking-wider ${config.titleColor}">${titulo}</h5>
+                <p class="mt-0.5 text-xs font-semibold text-slate-100 leading-relaxed">${mensagem}</p>
+            </div>
+            <button type="button" class="text-slate-400 hover:text-white p-1 text-sm leading-none shrink-0" aria-label="Fechar">✕</button>
+        `;
+
+        function fecharToast(el) {
+            el.style.transition = 'all 0.35s ease';
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-16px) scale(0.95)';
+            setTimeout(() => el.remove(), 350);
+        }
+
+        toast.onclick = () => fecharToast(toast);
+        container.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.classList.remove('translate-y-[-16px]', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+        });
+
+        if (duracao > 0) {
+            setTimeout(() => {
+                if (toast.parentElement) fecharToast(toast);
+            }, duracao);
+        }
+    };
+
+    function mostrarBoasVindasEstudos() {
+        try {
+            if (sessionStorage.getItem('estudos_boas_vindas_exibido') === '1') return;
+        } catch (error) {
+            return;
+        }
+
+        const nomeUsuario = {{ (request.cookies.get("user_name") or "Usuário") | tojson }};
+        if (!nomeUsuario || !String(nomeUsuario).trim()) return;
+
+        const overlay = document.createElement('div');
+        overlay.setAttribute('aria-live', 'polite');
+        overlay.setAttribute('role', 'dialog');
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.background = 'rgba(3, 7, 18, 0.42)';
+        overlay.style.backdropFilter = 'blur(4px)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '999999';
+        overlay.style.padding = '20px';
+
+        overlay.innerHTML = `
+            <div style="
+                width: min(360px, calc(100vw - 28px));
+                background: rgba(15, 23, 42, 0.86);
+                border: 1px solid rgba(148, 163, 184, 0.18);
+                border-radius: 18px;
+                padding: 20px 22px;
+                text-align: center;
+                color: white;
+                font-family: 'Inter', sans-serif;
+                box-shadow: 0 18px 42px rgba(15, 23, 42, 0.3);
+            ">
+                <div style="font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #cbd5e1; margin-bottom: 8px; opacity: 0.9;">Bem-vindo</div>
+                <div style="font-size: clamp(28px, 4vw, 36px); font-weight: 700; line-height: 1.1; letter-spacing: -0.04em; color: #f8fafc;">${String(nomeUsuario).trim()}</div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        try {
+            sessionStorage.setItem('estudos_boas_vindas_exibido', '1');
+        } catch (error) {}
+
+        setTimeout(() => {
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.25s ease';
+            setTimeout(() => overlay.remove(), 250);
+        }, 2500);
+    }
+
+    mostrarBoasVindasEstudos();
 })();
 </script>
-    <!-- Ambient glowing aurora background -->
-<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
-    <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-sky-500/10 blur-[100px] animate-pulse" style="animation-duration: 9s;"></div>
-    <div class="absolute top-1/3 -right-32 w-[420px] h-[420px] rounded-full bg-indigo-500/10 blur-[120px] animate-pulse" style="animation-duration: 14s;"></div>
-    <div class="absolute -bottom-32 left-1/4 w-[460px] h-[460px] rounded-full bg-amber-500/5 blur-[120px] animate-pulse" style="animation-duration: 11s;"></div>
+    <!-- Ambient glowing aurora background (otimizado para 0% de uso de CPU/GPU em qualquer máquina) -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true" style="contain: strict;">
+    <div class="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-sky-500/10 blur-[80px]" style="transform: translateZ(0);"></div>
+    <div class="absolute top-1/3 -right-32 w-[420px] h-[420px] rounded-full bg-indigo-500/10 blur-[90px]" style="transform: translateZ(0);"></div>
+    <div class="absolute -bottom-32 left-1/4 w-[460px] h-[460px] rounded-full bg-amber-500/5 blur-[90px]" style="transform: translateZ(0);"></div>
 </div>
 <div class="max-w-7xl mx-auto px-4 py-8 relative z-10">
 
@@ -219,11 +350,17 @@
                 <select id="timerDuration" class="w-20 sm:w-24 rounded-xl border border-slate-700 bg-slate-800 px-2 sm:px-3 py-2 text-xs sm:text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors cursor-pointer shrink-0">
                     <option value="1500">25 min</option>
                     <option value="3000">50 min</option>
-                    <option value="3600" selected>60 min</option>
-                    <option value="5400">90 min</option>
+                    <option value="3600" selected>1 hora</option>
+                    <option value="5400">1h30</option>
+                    <option value="7200">2 horas</option>
                     <option value="custom">Personalizado</option>
                 </select>
-                <input id="timerCustom" type="number" min="1" max="600" value="2" aria-label="Quantidade de minutos" class="hidden w-16 rounded-xl border border-slate-700 bg-slate-800 px-2 py-2 text-xs sm:text-sm text-slate-300 outline-none hover:bg-slate-700 focus:border-amber-400/50 transition-colors shrink-0">
+                <div id="timerCustomFields" class="hidden items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-2 py-1">
+                    <input id="timerCustomHours" type="number" min="0" max="24" value="2" aria-label="Horas personalizadas" placeholder="h" class="w-10 bg-transparent text-center text-xs sm:text-sm text-slate-300 outline-none">
+                    <span class="text-[10px] text-slate-500">h</span>
+                    <input id="timerCustomMinutes" type="text" inputmode="numeric" maxlength="2" value="00" aria-label="Minutos personalizados" placeholder="00" class="w-10 bg-transparent text-center text-xs sm:text-sm text-slate-300 outline-none">
+                    <span class="text-[10px] text-slate-500">min</span>
+                </div>
                 <button id="timerStart" type="button" class="shrink-0 rounded-xl bg-amber-400 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-950 hover:bg-amber-300 transition-colors shadow-sm shadow-amber-400/20">Iniciar</button>
                 <button id="timerPause" type="button" class="timer-action-button shrink-0 rounded-xl border border-slate-700 bg-slate-800 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">Pausar</button>
                 <button id="timerFinish" type="button" class="timer-action-button shrink-0 rounded-xl border border-slate-700 bg-slate-800 px-3 sm:px-3.5 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">Finalizar</button>
@@ -242,35 +379,8 @@
         </div>
     </section>
 
-    {% if success == 'ok' %}
-    <div class="study-success-message mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-        Sessão de estudo salva com sucesso.
-    </div>
-    {% elif success == 'plano' %}
-    <div class="study-success-message mb-6 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-        Matéria adicionada ao plano semanal.
-    </div>
-    {% elif success == 'plano_importado' %}
-    <div class="study-success-message mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-        Matérias importadas com sucesso! Seu quadro de horários e seu ciclo de estudos foram atualizados com as matérias do arquivo.
-    </div>
-    {% elif success == 'grade' %}
-    <div class="study-success-message mb-6 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
-        Quadro de horários salvo com sucesso.
-    </div>
-    {% elif success == 'excluido' %}
-    <div class="study-success-message mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-        Registro excluído com sucesso.
-    </div>
-    {% elif success == 'erro' %}
-    <div class="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-        Não foi possível salvar a sessão de estudo.
-    </div>
-    {% elif success == 'erro_importar' %}
-    <div class="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-        Não foi possível identificar matérias no arquivo enviado. Verifique se a planilha ou arquivo contém os nomes das matérias.
-    </div>
-    {% endif %}
+    <!-- Toast Container Flutuante Centralizado Abaixo do Topbar -->
+    <div id="estudosToastContainer" class="fixed top-20 sm:top-24 left-1/2 -translate-x-1/2 z-[9999] flex max-w-lg w-full flex-col items-center gap-2.5 pointer-events-none px-4"></div>
 
     <div id="quadro" class="mb-6 scroll-mt-6 rounded-3xl border border-white/10 bg-slate-900/60 p-4 shadow-2xl shadow-slate-950/30">
         <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -278,6 +388,13 @@
                 <p class="text-xs font-black uppercase tracking-[0.2em] text-sky-300">Quadro de horários</p>
                 <h2 id="quadroTitulo" class="mt-1 text-xl font-black text-white">Planejamento dos estudos</h2>
             </div>
+            <div id="estudos-motivacao" class="estudos-quadro-motivacao flex min-h-8 flex-1 items-center justify-center rounded-xl border-0 bg-transparent px-4 py-1.5 text-center text-sm font-semibold leading-tight tracking-wide text-white/90" aria-live="polite"><span id="estudos-motivacao-text"></span></div>
+            <script>
+                (() => {
+                    const elemento = document.getElementById('estudos-motivacao-text');
+                    if (elemento) elemento.textContent = `“${window.mensagemMotivacionalEstudos()}”`;
+                })();
+            </script>
             <!-- Alternador de Modo: Grade Semanal vs Ciclo de Estudos -->
             <div class="inline-flex rounded-2xl border border-white/10 bg-slate-950/80 p-1 shadow-inner">
                 <button type="button" id="btnModoSemanal" class="rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all bg-sky-500 text-slate-950 shadow-md">
@@ -1065,7 +1182,7 @@
                 <select id="historicoAssunto" name="assunto" class="w-full rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500">
                     <option value="">Todas as matérias</option>
                     {% for materia in materias_quadro or materias_grade %}
-                    <option value="{{ materia }}" {% if assunto_filtro == materia %}selected{% endif %}>{{ materia }}</option>
+                    <option value="{{ materia }}" {% if assunto_filtro == materia|lower %}selected{% endif %}>{{ materia }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -1379,8 +1496,21 @@
         border-color: #fca5a5 !important;
         color: #e11d48 !important;
     }
-    .study-success-message { transition: opacity .3s ease, transform .3s ease; }
-    .study-success-message.is-dismissing { opacity: 0; transform: translateY(-4px); }
+    @keyframes toastDropIn {
+        0% { transform: translateY(-20px) scale(0.96); opacity: 0; }
+        60% { transform: translateY(3px) scale(1.01); opacity: 1; }
+        100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .study-toast {
+        animation: toastDropIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    html.light-mode .study-toast {
+        background: #ffffff !important;
+        box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.2) !important;
+    }
+    html.light-mode .study-toast p {
+        color: #334155 !important;
+    }
     .study-delete-details > summary { list-style: none; }
     .study-delete-details > summary::-webkit-details-marker { display: none; }
     @keyframes timerAlertPulse {
@@ -1443,7 +1573,9 @@
         const status = document.getElementById('timerStatus');
         const materia = document.getElementById('timerMateria');
         const duration = document.getElementById('timerDuration');
-        const custom = document.getElementById('timerCustom');
+        const customFields = document.getElementById('timerCustomFields');
+        const customHours = document.getElementById('timerCustomHours');
+        const customMinutes = document.getElementById('timerCustomMinutes');
         const alertBox = document.getElementById('timerAlert');
         const alertMessage = document.getElementById('timerAlertMessage');
         const finishButton = document.getElementById('timerFinish');
@@ -1532,10 +1664,16 @@
             state.finished = true; state.paused = true; state.remaining = 0; setState(state); clearInterval(ticker);
             if (!state.break) {
                 registerCompletedStudy(state);
+                // Avança o ciclo assim que a sessão termina. A pausa continua
+                // existindo, mas não deve manter a matéria concluída como atual.
+                document.dispatchEvent(new CustomEvent('estudos:cronometro-finalizado', {
+                    detail: { materia: state.materia || '' }
+                }));
                 const breakState = { endsAt: Date.now() + 10 * 60 * 1000, remaining: 10 * 60, paused: false, finished: false, break: true, materia: '' };
                 setState(breakState);
                 startTicker();
             }
+            if (state.break) resetAfterBreak();
             alertMessage.textContent = state.break ? 'Sua pausa de 10 minutos terminou. Está na hora de voltar aos estudos.' : (state.materia ? `Sua sessão de ${state.materia} terminou. A pausa de descanso de 10 minutos começou.` : 'Sua sessão de estudo terminou. A pausa de descanso de 10 minutos começou.');
             alertBox.classList.remove('hidden'); alertBox.classList.add('flex'); alertBox.style.display = 'flex';
             document.getElementById('timerStartBreak').classList.add('hidden');
@@ -1560,9 +1698,32 @@
         }
         function startTicker() { clearInterval(ticker); update(); ticker = setInterval(update, 1000); }
 
-        duration.onchange = () => custom.classList.toggle('hidden', duration.value !== 'custom');
+        function resetAfterBreak() {
+            const state = getState();
+            if (!state?.break || !state.finished) return;
+            localStorage.removeItem(key);
+            clearInterval(ticker);
+            setActiveTimerButton('timerReset');
+            if (registroInicio) registroInicio.value = '';
+            if (registroFim) registroFim.value = '';
+            if (display) display.textContent = '01:00:00';
+            setTimerStatus('Pronto para iniciar', 'text-slate-400');
+            const btnPause = document.getElementById('timerPause');
+            if (btnPause) btnPause.textContent = 'Pausar';
+        }
+
+        duration.onchange = () => {
+            customFields.classList.toggle('hidden', duration.value !== 'custom');
+            customFields.classList.toggle('flex', duration.value === 'custom');
+        };
+        customMinutes.addEventListener('blur', () => {
+            const minutos = Math.min(59, Math.max(0, Number(customMinutes.value) || 0));
+            customMinutes.value = String(minutos).padStart(2, '0');
+        });
         document.getElementById('timerStart').onclick = async () => {
-            const selectedSeconds = duration.value === 'custom' ? Number(custom.value) * 60 : Number(duration.value);
+            const selectedSeconds = duration.value === 'custom'
+                ? (Math.max(0, Number(customHours.value) || 0) * 3600) + (Math.min(59, Math.max(0, Number(customMinutes.value) || 0)) * 60)
+                : Number(duration.value);
             if (!Number.isFinite(selectedSeconds) || selectedSeconds < 60) {
                 setTimerStatus('Informe pelo menos 1 minuto', 'text-rose-300');
                 return;
@@ -1604,9 +1765,18 @@
         }
         document.getElementById('timerStartBreak').onclick = () => { const state = { endsAt: Date.now() + 10 * 60 * 1000, remaining: 10 * 60, paused: false, finished: false, break: true, materia: '' }; alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); setState(state); setActiveTimerButton('timerStart'); startTicker(); };
         document.getElementById('timerReset').onclick = () => { localStorage.removeItem(key); clearInterval(ticker); stopBlink(); setActiveTimerButton('timerReset'); if (registroInicio) registroInicio.value = ''; if (registroFim) registroFim.value = ''; display.textContent = '01:00:00'; setTimerStatus('Pronto para iniciar', 'text-slate-400'); const btnPause = document.getElementById('timerPause'); if(btnPause) btnPause.textContent = 'Pausar'; };
-        document.getElementById('timerCloseAlert').onclick = () => { alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink(); document.dispatchEvent(new CustomEvent('estudos:ir-para-registro')); };
+        document.getElementById('timerCloseAlert').onclick = () => {
+            const state = getState();
+            alertBox.classList.add('hidden'); alertBox.classList.remove('flex'); alertBox.style.display = 'none'; stopBlink();
+            if (state?.break && state.finished) resetAfterBreak();
+            document.dispatchEvent(new CustomEvent('estudos:ir-para-registro'));
+        };
         const _initialTimerState = getState();
-        if (_initialTimerState) { syncRecordFields(_initialTimerState); startTicker(); }
+        if (_initialTimerState?.break && _initialTimerState.finished) {
+            resetAfterBreak();
+        } else if (_initialTimerState) {
+            syncRecordFields(_initialTimerState); startTicker();
+        }
     })();
 </script>
 <script>
@@ -1690,7 +1860,17 @@
                 restaurarRascunho();
             }
 
-            form.addEventListener('submit', () => {
+            form.addEventListener('submit', (event) => {
+                let cronState = null;
+                try { cronState = JSON.parse(localStorage.getItem('estudos_cronometro') || 'null'); } catch (_) {}
+                const descansoAtivo = cronState?.break === true
+                    && cronState?.finished !== true
+                    && Number(cronState?.endsAt || 0) > Date.now();
+                if (false && descansoAtivo) {
+                    event.preventDefault();
+                    alert('O cronômetro está em pausa de descanso. Finalize a pausa antes de salvar o registro de estudo.');
+                    return;
+                }
                 salvarRascunho();
                 const inicio = document.getElementById('registroHorarioInicio');
                 const fim = document.getElementById('registroHorarioFim');
@@ -1714,8 +1894,8 @@
                 headers: { 'Accept': 'application/json' }
             }).catch(() => {});
         }
-        // Dispara a cada 5 minutos, ao focar na janela ou alternar abas
-        setInterval(manterSessaoAtiva, 5 * 60 * 1000);
+        // Dispara a cada minuto, mantendo o status Online dentro da janela de 2 minutos.
+        setInterval(manterSessaoAtiva, 60 * 1000);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 manterSessaoAtiva();
@@ -1969,50 +2149,101 @@
 
         // Matérias atualmente cadastradas no quadro semanal
         const materiasDoQuadro = {{ (materias_quadro or []) | tojson }};
+        const cicloDoBanco = {{ (ciclo_materias_db or None) | tojson }};
+        const cicloIndexDoBanco = {{ ciclo_index_db | default(0) }};
+        const modoDoBanco = {{ (modo_quadro_db or 'semanal') | tojson }};
 
-        // Chaves de armazenamento local
-        const KEY_MODO = 'estudos_modo_quadro';
-        const KEY_MATERIAS = 'estudos_ciclo_materias';
-        const KEY_INDEX = 'estudos_ciclo_index';
-        const KEY_CUSTOM = 'estudos_ciclo_custom';
+        // Cada concurso precisa ter seu próprio ciclo. Antes as chaves eram
+        // globais e o IPAM reutilizava a fila salva para a SEMUSA.
+        const CONCURSO_ID = {{ concurso_ativo.id }};
+        const STORAGE_PREFIX = `estudos_concurso_${CONCURSO_ID}_`;
+        const KEY_MODO = `${STORAGE_PREFIX}modo_quadro`;
+        const KEY_MATERIAS = `${STORAGE_PREFIX}ciclo_materias`;
+        const KEY_INDEX = `${STORAGE_PREFIX}ciclo_index`;
+        const KEY_CUSTOM = `${STORAGE_PREFIX}ciclo_custom`;
+        const KEY_QUADRO_SIGNATURE = `${STORAGE_PREFIX}quadro_signature`;
 
-        function getMateriasCiclo() {
-            // Se o usuário adicionou ou removeu matérias manualmente no ciclo
+        // Estado do ciclo: O banco de dados é a fonte primária de verdade
+        let cicloMateriasMemoria = Array.isArray(cicloDoBanco) && cicloDoBanco.length > 0
+            ? [...cicloDoBanco]
+            : null;
+        let cicloIndexMemoria = (typeof cicloIndexDoBanco === 'number' && !isNaN(cicloIndexDoBanco)) ? cicloIndexDoBanco : 0;
+        let cicloModoMemoria = modoDoBanco || 'semanal';
+
+        // Fallback para localStorage apenas se o banco ainda não possui ciclo salvo para este concurso
+        if (!cicloMateriasMemoria) {
             try {
                 const salvo = JSON.parse(localStorage.getItem(KEY_MATERIAS) || 'null');
-                if (Array.isArray(salvo) && localStorage.getItem(KEY_CUSTOM) === 'true') {
-                    return salvo;
+                if (Array.isArray(salvo) && salvo.length > 0) {
+                    cicloMateriasMemoria = salvo;
                 }
             } catch (e) {}
-
-            // Se o quadro semanal tem matérias preenchidas, sincroniza com o quadro
-            if (materiasDoQuadro && materiasDoQuadro.length > 0) {
-                const unicas = [...new Set(materiasDoQuadro)];
-                salvarMateriasCiclo(unicas);
-                return unicas;
-            }
-
-            // Se o quadro está zerado sem matérias, o ciclo fica ZERADO (vazio)
-            return [];
         }
 
-        function salvarMateriasCiclo(lista) {
-            localStorage.setItem(KEY_MATERIAS, JSON.stringify(lista));
+        // Se ainda assim estiver vazio, inicializa com as matérias do quadro se houver
+        if (!cicloMateriasMemoria && materiasDoQuadro && materiasDoQuadro.length > 0) {
+            cicloMateriasMemoria = [...new Set(materiasDoQuadro)];
+        }
+
+        if (!cicloMateriasMemoria) {
+            cicloMateriasMemoria = [];
+        }
+
+        // Mantém cache local atualizado com o concurso ativo
+        localStorage.setItem(KEY_MATERIAS, JSON.stringify(cicloMateriasMemoria));
+        localStorage.setItem(KEY_INDEX, String(cicloIndexMemoria));
+        localStorage.setItem(KEY_MODO, cicloModoMemoria);
+        localStorage.setItem(KEY_CUSTOM, 'true');
+
+        // Função única que sincroniza memória, localStorage e PostgreSQL de forma imediata e garantida
+        function salvarCicloCompleto(materias, idx, modo) {
+            cicloMateriasMemoria = Array.isArray(materias) ? [...materias] : [];
+            cicloIndexMemoria = (typeof idx === 'number' && !isNaN(idx)) ? Math.max(0, idx) : 0;
+            if (modo) cicloModoMemoria = modo;
+
+            localStorage.setItem(KEY_MATERIAS, JSON.stringify(cicloMateriasMemoria));
+            localStorage.setItem(KEY_INDEX, String(cicloIndexMemoria));
+            localStorage.setItem(KEY_MODO, cicloModoMemoria);
+            localStorage.setItem(KEY_CUSTOM, 'true');
+
+            // Envio imediato para persistência definitiva no banco de dados
+            try {
+                fetch('/estudos/ciclo/salvar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    keepalive: true,
+                    body: JSON.stringify({
+                        concurso_id: CONCURSO_ID,
+                        materias: cicloMateriasMemoria,
+                        index: cicloIndexMemoria,
+                        modo: cicloModoMemoria
+                    })
+                }).catch(err => console.warn('[Ciclo] Erro ao sincronizar com servidor:', err));
+            } catch (e) {}
+        }
+
+        function getMateriasCiclo() {
+            return Array.isArray(cicloMateriasMemoria) ? [...cicloMateriasMemoria] : [];
         }
 
         function getIndexAtual(total) {
             if (total <= 0) return 0;
-            const idx = parseInt(localStorage.getItem(KEY_INDEX) || '0', 10);
+            const idx = cicloIndexMemoria;
             return (isNaN(idx) || idx < 0 || idx >= total) ? 0 : idx;
         }
 
         function salvarIndexAtual(idx) {
-            localStorage.setItem(KEY_INDEX, String(idx));
+            salvarCicloCompleto(cicloMateriasMemoria, idx, cicloModoMemoria);
+        }
+
+        function salvarMateriasCiclo(lista) {
+            salvarCicloCompleto(lista, getIndexAtual(lista.length), cicloModoMemoria);
         }
 
         function aplicarModo(modo) {
             const isCiclo = modo === 'ciclo';
-            localStorage.setItem(KEY_MODO, modo);
+            salvarCicloCompleto(cicloMateriasMemoria, getIndexAtual(cicloMateriasMemoria.length), modo);
 
             if (containerSemanal) containerSemanal.classList.toggle('hidden', isCiclo);
             if (containerCiclo) containerCiclo.classList.toggle('hidden', !isCiclo);
@@ -2198,10 +2429,9 @@
             else if (origem < atualAntes && destino >= atualAntes) novoAtual--;
             else if (origem > atualAntes && destino <= atualAntes) novoAtual++;
 
-            localStorage.setItem(KEY_CUSTOM, 'true');
-            salvarMateriasCiclo(materias);
-            salvarIndexAtual(novoAtual);
+            salvarCicloCompleto(materias, novoAtual, cicloModoMemoria);
             renderizarCiclo();
+            window.mostrarNotificacaoEstudo('Ordem Atualizada!', 'A nova sequência do ciclo foi salva com sucesso.', 'sucesso', 2500);
         }
 
         const btnAvancar = document.getElementById('cicloBtnAvancar');
@@ -2285,6 +2515,12 @@
         const registroFormHoje = document.querySelector('form[action="/estudos"]');
         if (registroFormHoje) {
             registroFormHoje.addEventListener('submit', () => {
+                const btnSubmit = registroFormHoje.querySelector('button[type="submit"]');
+                if (btnSubmit) {
+                    btnSubmit.innerHTML = 'Gravando estudo...';
+                    btnSubmit.classList.add('opacity-75', 'cursor-wait');
+                }
+
                 const registroMateriaHoje = document.getElementById('registroAssunto');
                 const materia = registroMateriaHoje && registroMateriaHoje.value.trim();
                 if (!materia) return;
@@ -2413,13 +2649,13 @@
                 if (btnRemover) {
                     const remIdx = parseInt(btnRemover.dataset.cicloRemover, 10);
                     let materias = getMateriasCiclo();
+                    const nomeRemovido = materias[remIdx];
                     materias.splice(remIdx, 1);
-                    localStorage.setItem(KEY_CUSTOM, 'true');
-                    salvarMateriasCiclo(materias);
                     let curIdx = getIndexAtual(materias.length);
                     if (curIdx >= materias.length) curIdx = Math.max(0, materias.length - 1);
-                    salvarIndexAtual(curIdx);
+                    salvarCicloCompleto(materias, curIdx, cicloModoMemoria);
                     renderizarCiclo();
+                    window.mostrarNotificacaoEstudo('Matéria Removida', `"${nomeRemovido || 'Matéria'}" foi removida do ciclo.`, 'aviso', 3000);
                 }
             });
         }
@@ -2442,10 +2678,10 @@
                 }
                 const materias = getMateriasCiclo();
                 materias.push(materia);
-                localStorage.setItem(KEY_CUSTOM, 'true');
-                salvarMateriasCiclo(materias);
+                salvarCicloCompleto(materias, getIndexAtual(materias.length), cicloModoMemoria);
                 selectGrade.value = '';
                 renderizarCiclo();
+                window.mostrarNotificacaoEstudo('Matéria Adicionada!', `"${materia}" foi adicionada com sucesso ao seu ciclo de estudos.`, 'sucesso');
             });
         }
 
@@ -2476,11 +2712,11 @@
             }
             const materias = getMateriasCiclo();
             materias.push(nova);
-            localStorage.setItem(KEY_CUSTOM, 'true');
-            salvarMateriasCiclo(materias);
+            salvarCicloCompleto(materias, getIndexAtual(materias.length), cicloModoMemoria);
             inputNova.value = '';
             if (boxNova) boxNova.classList.add('hidden');
             renderizarCiclo();
+            window.mostrarNotificacaoEstudo('Nova Matéria Salva!', `"${nova}" foi criada e salva com sucesso no seu ciclo de estudos.`, 'sucesso');
         }
 
         if (btnSalvarNova) {
@@ -2501,29 +2737,52 @@
             btnResetar.addEventListener('click', () => {
                 if (confirm('Sincronizar o ciclo com as matérias do quadro de horários?')) {
                     const padrao = materiasDoQuadro && materiasDoQuadro.length > 0 ? [...new Set(materiasDoQuadro)] : [];
-                    localStorage.removeItem(KEY_CUSTOM);
-                    salvarMateriasCiclo(padrao);
-                    salvarIndexAtual(0);
+                    salvarCicloCompleto(padrao, 0, cicloModoMemoria);
                     renderizarCiclo();
+                    window.mostrarNotificacaoEstudo('Ciclo Sincronizado!', 'O ciclo foi sincronizado com as matérias do quadro.', 'sucesso');
                 }
             });
         }
 
-        const modoSalvo = localStorage.getItem(KEY_MODO) || 'semanal';
+        document.addEventListener('estudos:cronometro-finalizado', (event) => {
+            if (localStorage.getItem(KEY_MODO) !== 'ciclo') return;
+            const materias = getMateriasCiclo();
+            if (!materias.length) return;
+            const materiaConcluida = String(event.detail?.materia || '').trim().toLowerCase();
+            const atual = getIndexAtual(materias.length);
+            const encontrada = materias.findIndex(item => String(item || '').trim().toLowerCase() === materiaConcluida);
+            const proximo = (encontrada >= 0 ? encontrada : atual) + 1;
+            salvarIndexAtual(proximo % materias.length);
+            const proximaMateria = materias[proximo % materias.length];
+            const timerMateria = document.getElementById('timerMateria');
+            if (timerMateria && proximaMateria) timerMateria.value = proximaMateria;
+            renderizarCiclo();
+        });
 
-        {% if success == 'plano_importado' or success == 'grade' %}
-        try {
-            const novasMateriasDoQuadro = [
-                {% for m in materias_quadro %}"{{ m }}",{% endfor %}
-            ];
-            const unicas = [...new Set(novasMateriasDoQuadro)];
-            localStorage.removeItem(KEY_CUSTOM);
-            salvarMateriasCiclo(unicas);
-            salvarIndexAtual(0);
-        } catch (e) {}
+        const modoSalvo = modoDoBanco || localStorage.getItem(KEY_MODO) || 'semanal';
+        aplicarModo(modoSalvo);
+
+        {% if success == 'ok' %}
+        window.mostrarNotificacaoEstudo('Sessão Salva!', 'Sua sessão de estudo foi salva com sucesso no histórico.', 'sucesso', 4500);
+        {% elif success == 'plano' %}
+        window.mostrarNotificacaoEstudo('Matéria Adicionada!', 'Matéria adicionada ao plano semanal com sucesso.', 'sucesso', 4500);
+        {% elif success == 'plano_importado' %}
+        window.mostrarNotificacaoEstudo('Matérias Importadas!', 'Quadro e ciclo atualizados com sucesso.', 'sucesso', 4500);
+        {% elif success == 'grade' %}
+        window.mostrarNotificacaoEstudo('Quadro Salvo!', 'Quadro de horários salvo com sucesso.', 'sucesso', 4500);
+        {% elif success == 'excluido' %}
+        window.mostrarNotificacaoEstudo('Registro Excluído!', 'Registro excluído do histórico com sucesso.', 'aviso', 4500);
+        {% elif success == 'erro' or success == 'erro_importar' %}
+        window.mostrarNotificacaoEstudo('Erro!', 'Ocorreu um erro ao processar sua solicitação.', 'erro', 5500);
         {% endif %}
 
-        aplicarModo(modoSalvo);
+        {% if success %}
+        try {
+            const urlLimpa = new URL(window.location.href);
+            urlLimpa.searchParams.delete('success');
+            window.history.replaceState(null, '', urlLimpa.toString());
+        } catch(e) {}
+        {% endif %}
     })();
 </script>
 {% endblock %}

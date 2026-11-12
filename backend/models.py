@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, date, timezone
 from typing import Optional, List
+from sqlalchemy import DateTime
 from sqlmodel import Field, SQLModel, create_engine, Session, select, Relationship
 
 class Usuario(SQLModel, table=True):
@@ -16,6 +17,7 @@ class Usuario(SQLModel, table=True):
     empresa_logo_url: Optional[str] = None
     foto_perfil_url: Optional[str] = None
     senha_temp: Optional[str] = None
+    last_seen: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
 class Impressora(SQLModel, table=True):
@@ -150,6 +152,33 @@ class ContatoWhatsApp(SQLModel, table=True):
     empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
     data_cadastro: datetime = Field(default_factory=datetime.now)
 
+class AtendimentoAgendamento(SQLModel, table=True):
+    __tablename__ = "atendimento_agendamentos"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nome_cliente: str = Field(max_length=180)
+    telefone: str = Field(index=True, max_length=32)
+    titulo: str = Field(max_length=180)
+    data_hora: datetime = Field(index=True, sa_type=DateTime(timezone=True))
+    observacao: Optional[str] = None
+    status: str = Field(default="agendado", index=True)
+    criado_por: str = Field(default="Desconhecido")
+    criado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True, sa_type=DateTime(timezone=True))
+    empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
+
+class MensagemWhatsAppAgendada(SQLModel, table=True):
+    __tablename__ = "whatsapp_mensagens_agendadas"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nome_destinatario: str = Field(max_length=180)
+    telefone: str = Field(index=True, max_length=32)
+    mensagem: str
+    data_hora: datetime = Field(index=True, sa_type=DateTime(timezone=True))
+    instancia: str = Field(max_length=180)
+    status: str = Field(default="pendente", index=True)
+    criado_por: str = Field(default="Desconhecido")
+    criado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True, sa_type=DateTime(timezone=True))
+    enviado_em: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
+    empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
+
 class StatusMaquina(SQLModel, table=True):
     __tablename__ = "status_maquinas"
     ip: str = Field(primary_key=True)
@@ -261,6 +290,9 @@ class EstudoConcurso(SQLModel, table=True):
     banca: Optional[str] = Field(default=None, max_length=120)
     data_prova: Optional[date] = None
     ativo: bool = Field(default=False, index=True)
+    ciclo_materias: Optional[str] = Field(default=None)
+    ciclo_index: int = Field(default=0)
+    modo_quadro: Optional[str] = Field(default="semanal")
     criado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
 class EstudoRaioXBanca(SQLModel, table=True):

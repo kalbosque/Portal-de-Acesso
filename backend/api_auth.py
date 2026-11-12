@@ -180,7 +180,7 @@ async def login(
                 redirect = "/chamados"
 
             response = JSONResponse({"success": True, "redirect": redirect})
-            session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(), "user_id": user.id})
+            session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(timezone.utc), "user_id": user.id})
             session.commit()
             if desktop_mode:
                 response.set_cookie("central_atendimento_tauri", "1", path="/", httponly=False, samesite="Lax")
@@ -427,6 +427,27 @@ async def solicitar_recuperacao_estudos(email: str = Form(...)):
     return JSONResponse({"success": True, "message": "Código de alteração de senha enviado para seu e-mail."})
 
 
+@router.post("/estudos/validar-codigo-recuperacao")
+async def validar_codigo_recuperacao_estudos(email: str = Form(...), codigo: str = Form(...)):
+    email = email.strip().casefold()
+    codigo = re.sub(r"\D", "", codigo)
+    if len(codigo) != 6:
+        return JSONResponse({"success": False, "detail": "Informe o código de 6 números."}, status_code=400)
+    with engine.begin() as conn:
+        row = conn.execute(text("""SELECT * FROM estudos_recuperacao_codigos
+            WHERE lower(email) = :email AND usado = FALSE ORDER BY id DESC LIMIT 1"""), {"email": email}).mappings().first()
+        if not row:
+            return JSONResponse({"success": False, "detail": "Solicitação de alteração não encontrada."}, status_code=404)
+        if row["expira_em"] < datetime.now(timezone.utc):
+            return JSONResponse({"success": False, "detail": "O código expirou. Solicite outro."}, status_code=410)
+        if row["tentativas"] >= ESTUDO_CODIGO_MAX_TENTATIVAS:
+            return JSONResponse({"success": False, "detail": "Limite de tentativas atingido. Solicite outro código."}, status_code=429)
+        if not hmac.compare_digest(_digest_codigo_estudos(codigo), row["codigo_digest"]):
+            conn.execute(text("UPDATE estudos_recuperacao_codigos SET tentativas = tentativas + 1 WHERE id = :id"), {"id": row["id"]})
+            return JSONResponse({"success": False, "detail": "Código inválido."}, status_code=400)
+    return JSONResponse({"success": True, "message": "Código validado. Agora crie sua nova senha."})
+
+
 @router.post("/estudos/alterar-senha-codigo")
 async def alterar_senha_codigo_estudos(
     email: str = Form(...),
@@ -468,7 +489,7 @@ async def heartbeat(request: Request):
             with Session(engine) as session:
                 user = session.get(Usuario, int(user_id))
                 if user:
-                    session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(), "user_id": user.id})
+                    session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(timezone.utc), "user_id": user.id})
                     session.commit()
                     # Renova os cookies da sessão por mais 30 dias
                     _set_session_cookies(response, user)

@@ -189,6 +189,7 @@
 
 <script>
     let instancesData = [];
+    let defaultInstanceName = '';
     let pollingInterval = null;
     let targetInstanceName = null;
     const isAdmin = {{ 'true' if is_admin else 'false' }};
@@ -203,6 +204,7 @@
             if (res.ok) {
                 const data = await res.json();
                 instancesData = data.instances || [];
+                defaultInstanceName = data.default_instance || instancesData[0]?.instanceName || '';
                 instanceAccess = data.instance_access || {};
                 instanceColors = data.instance_colors || {};
                 const toggle = document.getElementById('auto-create-tickets');
@@ -371,6 +373,7 @@
 
         instancesData.forEach(inst => {
             const isConnected = (inst.state === 'open' || inst.state === 'connected');
+            const isDefault = inst.instanceName === defaultInstanceName;
             const iconColor = isConnected ? 'text-[#00a884]' : 'text-slate-500';
             const statusText = isConnected ? 'Ativo' : 'Desconectado';
             
@@ -387,6 +390,11 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                 </button>
             ` : '';
+            const defaultControl = isAdmin
+                ? (isDefault
+                    ? '<span class="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-300">Padrão</span>'
+                    : `<button type="button" onclick="setDefaultInstance('${inst.instanceName}', event)" class="rounded-full border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-slate-300 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300">Definir como padrão</button>`)
+                : (isDefault ? '<span class="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-300">Padrão</span>' : '');
 
             row.innerHTML = `
                 <div class="flex items-center gap-4">
@@ -401,10 +409,38 @@
                         </div>
                     </div>
                 </div>
-                ${btnHtml}
+                <div class="flex items-center gap-2">${defaultControl}${btnHtml}</div>
             `;
             listEl.appendChild(row);
         });
+    }
+
+    async function setDefaultInstance(instanceName, event) {
+        event?.stopPropagation();
+        if (!isAdmin || !instancesData.some(instance => instance.instanceName === instanceName)) return;
+
+        const previousDefault = defaultInstanceName;
+        defaultInstanceName = instanceName;
+        renderInstancesList();
+
+        try {
+            const res = await fetch('/api/whatsapp/instances/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    instances: instancesData.map(({instanceName, label}) => ({instanceName, label})),
+                    default_instance: instanceName
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) throw new Error(data.detail || 'Não foi possível definir o aparelho padrão.');
+            defaultInstanceName = data.default_instance || instanceName;
+            renderInstancesList();
+        } catch (error) {
+            defaultInstanceName = previousDefault;
+            renderInstancesList();
+            alert(error.message || 'Não foi possível definir o aparelho padrão.');
+        }
     }
 
     function openConnectModal() {
@@ -454,14 +490,14 @@
         let exists = instancesData.find(i => i.instanceName === safeName);
         if (!exists) {
             // Salvar na API
-            const allNames = instancesData.map(i => i.instanceName);
-            allNames.push(safeName);
+            const allInstances = instancesData.map(({instanceName, label}) => ({instanceName, label}));
+            allInstances.push({instanceName: safeName, label: safeName});
             
             try {
                 await fetch('/api/whatsapp/instances/save', {
                     method: 'POST', 
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ instances: allNames, default_instance: allNames[0] })
+                    body: JSON.stringify({ instances: allInstances, default_instance: defaultInstanceName || safeName })
                 });
             } catch(e) {
                 console.error('Erro ao salvar instância:', e);

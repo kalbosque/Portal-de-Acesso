@@ -10,6 +10,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Request, Form, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import RedirectResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from sqlmodel import Session, select, func, desc
 from sqlalchemy import text
 
@@ -392,7 +393,13 @@ def _sync_group_history_name(session: Session, chamado: Chamado, messages):
 
 # ── GET /api/tickets/chat?chamado_id=X&since_id=Y  (frontend polling) ─────────
 @router.get("/chat")
-def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = None):
+def get_chat_messages(
+    chamado_id: int,
+    since_id: int = 0,
+    before_id: int = 0,
+    limit: int = 50,
+    request: Request = None,
+):
     _ensure_typing_schema()
     _ensure_favorite_schema()
     user_name, user_role = _get_user(request)
@@ -402,15 +409,42 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
             raise HTTPException(status_code=404)
         _check_whatsapp_instance_access(request, chamado)
 
-        msgs = session.exec(
-            select(ChamadoInteracao)
-            .where(
-                ChamadoInteracao.chamado_id == chamado_id,
-                ChamadoInteracao.id > since_id,
-            )
-            .order_by(ChamadoInteracao.id)
-        ).all()
+        limit = max(1, min(int(limit or 50), 100))
+        base_query = select(ChamadoInteracao).where(ChamadoInteracao.chamado_id == chamado_id)
+        if before_id:
+            # Histórico antigo: busca uma página anterior à mensagem visível.
+            msgs = session.exec(
+                base_query.where(ChamadoInteracao.id < before_id)
+                .order_by(desc(ChamadoInteracao.id))
+                .limit(limit)
+            ).all()
+            msgs.reverse()
+        elif since_id:
+            # Atualizações novas: mantém a ordem crescente para o polling.
+            msgs = session.exec(
+                base_query.where(ChamadoInteracao.id > since_id)
+                .order_by(ChamadoInteracao.id)
+                .limit(limit)
+            ).all()
+        else:
+            # Abertura da conversa: começa pelas mensagens mais recentes.
+            msgs = session.exec(
+                base_query.order_by(desc(ChamadoInteracao.id)).limit(limit)
+            ).all()
+            msgs.reverse()
         _sync_group_history_name(session, chamado, msgs)
+
+        status_updates = []
+        if since_id and not before_id:
+            status_messages = session.exec(
+                base_query.where(
+                    ChamadoInteracao.whatsapp_status.in_(("delivered", "read")),
+                ).order_by(desc(ChamadoInteracao.id)).limit(50)
+            ).all()
+            status_updates = [
+                {"id": message.id, "whatsapp_status": message.whatsapp_status}
+                for message in status_messages
+            ]
 
         # Grupos sao conversas abertas: ao abrir/atualizar o historico,
         # qualquer mensagem pendente deve ser considerada lida automaticamente.
@@ -433,6 +467,10 @@ def get_chat_messages(chamado_id: int, since_id: int = 0, request: Request = Non
 
         return {
             "ok": True,
+            "has_more": bool(msgs and msgs[0].id > 1 and len(msgs) >= limit),
+            "oldest_id": msgs[0].id if msgs else None,
+            "newest_id": msgs[-1].id if msgs else None,
+            "status_updates": status_updates,
             "messages": [
                 {
                     "id": m.id,
@@ -509,12 +547,14 @@ async def send_chat_message(
             "url": f"/uploads/whatsapp_media/{stored_name}",
             "mime": mime_type,
             "filename": safe_name,
+            "size": len(raw_bytes),
             "caption": msg_text,
             "base64": base64.b64encode(raw_bytes).decode("ascii"),
         }
         msg_text = json.dumps({k: v for k, v in media_payload.items() if k != "base64"}, ensure_ascii=False)
 
     _ensure_typing_schema()
+    media_send_args = None
     with Session(engine) as session:
         chamado = _get_ticket_for_request(session, chamado_id, request)
         if not chamado:
@@ -532,6 +572,12 @@ async def send_chat_message(
             responde_a_texto=(reply.mensagem[:500] if reply else None),
         )
         session.add(msg)
+        reopened = False
+        if chamado.status == "Resolvido":
+            chamado.status = "Em Atendimento"
+            chamado.assigned_user = user_name
+            chamado.data_resolucao = None
+            reopened = True
 
         # Incrementar unread para o outro lado
         if user_role == "admin":
@@ -539,14 +585,14 @@ async def send_chat_message(
         else:
             chamado.unread_admin = (chamado.unread_admin or 0) + 1
 
+        session.add(chamado)
         session.commit()
         session.refresh(msg)
 
         if chamado.origem == "WhatsApp" and chamado.whatsapp_cliente:
             from api_whatsapp import send_whatsapp_text_for_interaction, send_whatsapp_media
             if media_payload:
-                background_tasks.add_task(
-                    send_whatsapp_media,
+                media_send_args = (
                     chamado.whatsapp_cliente,
                     media_payload["base64"],
                     media_payload["type"],
@@ -554,10 +600,40 @@ async def send_chat_message(
                     media_payload["filename"],
                     media_payload["caption"],
                     chamado.whatsapp_instance,
+                    msg.id,
                 )
             elif msg_text:
                 whatsapp_text = f"*{user_name}*:\n{msg_text}"
-                background_tasks.add_task(send_whatsapp_text_for_interaction, msg.id, chamado.whatsapp_cliente, whatsapp_text, chamado.whatsapp_instance)
+                quoted = None
+                if reply and reply.whatsapp_message_id:
+                    quoted = {
+                        "id": reply.whatsapp_message_id,
+                        "remoteJid": reply.whatsapp_remote_jid or (chamado.whatsapp_cliente if "@" in str(chamado.whatsapp_cliente or "") else f"{chamado.whatsapp_cliente}@s.whatsapp.net"),
+                        "fromMe": reply.usuario == user_name,
+                    }
+                background_tasks.add_task(send_whatsapp_text_for_interaction, msg.id, chamado.whatsapp_cliente, whatsapp_text, chamado.whatsapp_instance, quoted)
+
+    media_send_result = None
+    if media_send_args is not None:
+        media_send_result = await run_in_threadpool(api_whatsapp.send_whatsapp_media, *media_send_args)
+        if not media_send_result:
+            with Session(engine) as session:
+                failed_message = session.get(ChamadoInteracao, msg.id)
+                if failed_message:
+                    failed_message.whatsapp_status = "failed"
+                    session.add(failed_message)
+                    session.commit()
+
+    if reopened:
+        background_tasks.add_task(
+            manager.broadcast,
+            {
+                "event": "ticket_updated",
+                "ticket_id": chamado_id,
+                "status": "Em Atendimento",
+                "assigned_user": user_name,
+            },
+        )
 
     background_tasks.add_task(
         manager.broadcast,
@@ -573,7 +649,7 @@ async def send_chat_message(
         },
     )
 
-    return {
+    response_payload = {
         "ok": True,
         "message": {
             "id": msg.id,
@@ -582,13 +658,16 @@ async def send_chat_message(
             "responde_a_id": msg.responde_a_id,
             "responde_a_usuario": msg.responde_a_usuario,
             "responde_a_texto": msg.responde_a_texto,
-            "whatsapp_status": msg.whatsapp_status or "sent",
+            "whatsapp_status": "failed" if media_send_result is False else (msg.whatsapp_status or "sent"),
             "data_hora": _display_datetime(msg.data_hora).strftime("%d/%m/%Y %H:%M:%S"),
             "is_me": True,
             "can_edit": True,
             "can_delete": True,
         },
     }
+    if media_send_result is False:
+        response_payload["warning"] = "A Evolution recusou o anexo. A mensagem ficou salva na Central, mas não foi enviada ao WhatsApp."
+    return response_payload
 
 
 @router.put("/chat/message/{message_id}")
@@ -641,6 +720,7 @@ def toggle_favorite_message(message_id: int, payload: dict, request: Request):
 def forward_chat_message(message_id: int, payload: dict, request: Request, background_tasks: BackgroundTasks):
     user_name, _ = _get_user(request)
     target = str(payload.get("number") or "").strip()
+    target_instance = str(payload.get("instance") or "").strip()
     requested_ids = payload.get("message_ids") or [message_id]
     try:
         message_ids = list(dict.fromkeys(int(item) for item in requested_ids))[:50]
@@ -658,19 +738,124 @@ def forward_chat_message(message_id: int, payload: dict, request: Request, backg
         chamado = _get_ticket_for_request(session, msg.chamado_id, request)
         if not chamado or chamado.origem != "WhatsApp":
             raise HTTPException(status_code=400, detail="Mensagem sem conversa WhatsApp")
-        from api_whatsapp import send_whatsapp_text
+        # Quando o destinatário pertence a outra instância, o envio precisa usar
+        # a instância dele, e não a instância da conversa de origem.
+        whatsapp_instance = target_instance or chamado.whatsapp_instance
+        if not api_whatsapp.user_can_access_instance(request, whatsapp_instance):
+            raise HTTPException(status_code=403, detail="VocÃª nÃ£o tem permissÃ£o para esta conexÃ£o WhatsApp")
+
+        def same_forward_target(value):
+            value = str(value or "").strip()
+            if "@g.us" in value.lower() or "@lid" in value.lower() or "@g.us" in target.lower():
+                return value.lower() == target.lower()
+            return api_whatsapp._normalize_contact_number(value) == api_whatsapp._normalize_contact_number(target)
+
+        target_chamado = next(
+            (candidate for candidate in session.exec(select(Chamado).where(
+                Chamado.origem == "WhatsApp",
+                Chamado.whatsapp_instance == whatsapp_instance,
+                Chamado.status != "Resolvido",
+            )).all() if same_forward_target(candidate.whatsapp_cliente)),
+            None,
+        )
+        if not target_chamado:
+            target_chamado = Chamado(
+                usuario=target,
+                titulo="Atendimento WhatsApp",
+                categoria="WhatsApp",
+                descricao="Conversa criada pelo encaminhamento de uma mensagem",
+                origem="WhatsApp",
+                whatsapp_cliente=target,
+                whatsapp_instance=whatsapp_instance,
+                empresa_atendimento_id=api_whatsapp.tenant_id_for_instance(whatsapp_instance),
+                status="Em Atendimento",
+                assigned_user=user_name,
+                prioridade="Media",
+                visivel_suporte=True,
+            )
+            session.add(target_chamado)
+            session.flush()
         sent_count = 0
+        forwarded_local_ids = []
         for item in messages:
-            forwarded_text = item.mensagem
-            if forwarded_text.lstrip().startswith("{"):
-                forwarded_text = "[MÃ­dia encaminhada pela Central]"
-            if send_whatsapp_text(
+            forwarded_text = str(item.mensagem or "")
+            media_sent = False
+            media = None
+            media_candidate = forwarded_text.strip()
+            for _ in range(2):
+                if not media_candidate.startswith(("{", '"')):
+                    break
+                try:
+                    decoded = json.loads(media_candidate)
+                except (TypeError, ValueError):
+                    break
+                if isinstance(decoded, dict):
+                    media = decoded
+                    break
+                if not isinstance(decoded, str):
+                    break
+                media_candidate = decoded.strip()
+            if isinstance(media, dict) and media.get("__wa_media__") and (media.get("url") or media.get("base64")):
+                media_url = str(media.get("url") or "")
+                media_name = os.path.basename(media_url.split("?", 1)[0].rstrip("/"))
+                media_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "public_html", "uploads", "whatsapp_media"))
+                media_path = os.path.normpath(os.path.join(media_root, media_name))
+                allowed_dir = media_root
+                media_base64 = str(media.get("base64") or "")
+                if not media_base64 and media_name and media_path.startswith(allowed_dir + os.sep) and os.path.isfile(media_path):
+                    with open(media_path, "rb") as media_file:
+                        media_base64 = base64.b64encode(media_file.read()).decode("ascii")
+                if media_base64:
+                    media_sent = api_whatsapp.send_whatsapp_media(
+                        target,
+                        media_base64,
+                        str(media.get("type") or "document"),
+                        str(media.get("mime") or "application/octet-stream"),
+                        str(media.get("filename") or "arquivo"),
+                        str(media.get("caption") or ""),
+                        whatsapp_instance,
+                    )
+            if media:
+                sent = media_sent
+            else:
+                sent = api_whatsapp.send_whatsapp_text(
                 target,
-                f"*Mensagem encaminhada por {user_name}:*\n{forwarded_text}",
-                chamado.whatsapp_instance,
-            ):
+                f"*Mensagem encaminhada por {user_name}:*\n{forwarded_text if not media else '[Mídia encaminhada pela Central]'}",
+                whatsapp_instance,
+                )
+            if sent:
                 sent_count += 1
-    return {"ok": sent_count == len(messages), "number": target, "count": len(messages), "sent_count": sent_count}
+                local_message = forwarded_text if media else f"*Mensagem encaminhada por {user_name}:*\n{forwarded_text}"
+                local_interaction = ChamadoInteracao(
+                    chamado_id=target_chamado.id,
+                    usuario=user_name,
+                    mensagem=local_message,
+                    whatsapp_status="sent",
+                )
+                session.add(local_interaction)
+                session.flush()
+                forwarded_local_ids.append(local_interaction.id)
+        session.commit()
+        if forwarded_local_ids:
+            background_tasks.add_task(
+                manager.broadcast,
+                {
+                    "event": "new_message",
+                    "chamado_id": target_chamado.id,
+                    "msg_id": forwarded_local_ids[-1],
+                    "usuario": user_name,
+                    "is_me": True,
+                    "whatsapp_instance": whatsapp_instance,
+                },
+            )
+    success = sent_count == len(messages)
+    return {
+        "ok": success,
+        "number": target,
+        "count": len(messages),
+        "sent_count": sent_count,
+        "detail": "Mensagem encaminhada." if success else f"A conexão do WhatsApp recusou o envio ({sent_count}/{len(messages)} enviada(s)).",
+    }
 
 
 @router.delete("/chat/message/{message_id}")
@@ -932,11 +1117,26 @@ async def reabrir_ticket(request: Request, background_tasks: BackgroundTasks, id
     with Session(engine) as session:
         chamado = _get_ticket_for_request(session, id, request)
         if not chamado: return RedirectResponse(url="/chamados?error=not_found", status_code=303)
-        if not (user_role == "admin" or chamado.usuario == user_name):
+        # Permite reabrir: admin, dono do chamado, ou operador de atendimento/suporte
+        allowed = user_role == "admin" or chamado.usuario == user_name
+        if not allowed:
+            try:
+                raw_perms = json.loads(get_signed_cookie(request, "user_perms", "[]") or "[]")
+                from auth_utils import normalize_permissions
+                perms = normalize_permissions(raw_perms)
+                allowed = "Atendimento" in perms or "Suporte" in perms
+            except Exception:
+                pass
+        if not allowed:
             return RedirectResponse(url="/chamados?error=denied", status_code=303)
             
         chamado.status = "Aberto"
-        chamado.assigned_user = None
+        # Se quem reabriu é um operador (não o cliente dono do chamado),
+        # assume o atendimento automaticamente
+        if user_name != chamado.usuario:
+            chamado.assigned_user = user_name
+        else:
+            chamado.assigned_user = None
         session.add(chamado)
         session.commit()
         

@@ -201,7 +201,7 @@
             <form id="formRecuperarSenha" class="mt-5 hidden space-y-3 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4">
                 <p class="text-xs leading-relaxed text-indigo-200">Este e-mail já possui cadastro. Enviaremos um código para você criar uma nova senha.</p>
                 <input name="email" required type="email" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Seu e-mail">
-                <input name="codigo" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="glass-input w-full rounded-lg px-3 py-2.5 text-center text-lg font-black tracking-[.5em] text-white placeholder-slate-500" placeholder="Código de 6 números">
+                <input name="codigo" required inputmode="numeric" maxlength="6" pattern="[0-9]{6}" class="glass-input w-full rounded-lg px-3 py-2.5 text-center text-base font-bold tracking-[.25em] text-white placeholder-slate-500" placeholder="Digite o código">
                 <input name="password" required minlength="6" type="password" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Nova senha (mínimo 6 caracteres)">
                 <input name="confirm_password" required minlength="6" type="password" class="glass-input w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500" placeholder="Confirme a nova senha">
                 <button type="submit" class="w-full rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500">Alterar senha</button>
@@ -255,6 +255,33 @@
         const formRecuperarSenha = document.getElementById('formRecuperarSenha');
         const cancelarRecuperacao = document.getElementById('cancelarRecuperacao');
         const solicitarCodigoRecuperacao = document.getElementById('solicitarCodigoRecuperacao');
+        const validarCodigoRecuperacao = document.createElement('button');
+        validarCodigoRecuperacao.type = 'button';
+        validarCodigoRecuperacao.className = 'w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-emerald-500';
+        validarCodigoRecuperacao.textContent = 'Validar código';
+        validarCodigoRecuperacao.hidden = true;
+        formRecuperarSenha.elements.codigo.insertAdjacentElement('afterend', validarCodigoRecuperacao);
+        const campoCodigoRecuperacao = formRecuperarSenha.elements.codigo;
+        const campoNovaSenha = formRecuperarSenha.elements.password;
+        const campoConfirmaSenha = formRecuperarSenha.elements.confirm_password;
+        const botaoAlterarSenha = formRecuperarSenha.querySelector('button[type="submit"]');
+        let codigoRecuperacaoValidado = false;
+        campoCodigoRecuperacao.type = 'text';
+        campoCodigoRecuperacao.setAttribute('autocomplete', 'one-time-code');
+
+        function resetarRecuperacao() {
+            codigoRecuperacaoValidado = false;
+            campoCodigoRecuperacao.hidden = true;
+            campoNovaSenha.hidden = true;
+            campoConfirmaSenha.hidden = true;
+            botaoAlterarSenha.hidden = true;
+            validarCodigoRecuperacao.hidden = true;
+            solicitarCodigoRecuperacao.hidden = false;
+            campoCodigoRecuperacao.required = false;
+            campoNovaSenha.required = false;
+            campoConfirmaSenha.required = false;
+        }
+        resetarRecuperacao();
         const linkCadastrarEstudos = document.getElementById('linkCadastrarEstudos');
         const formCadastrarEstudos = document.getElementById('formCadastrarEstudos');
         const formConfirmarEstudos = document.getElementById('formConfirmarEstudos');
@@ -264,8 +291,13 @@
         const notificacaoCodigoEstudos = document.getElementById('notificacaoCodigoEstudos');
         let notificacaoCodigoTimer;
 
-        function mostrarNotificacaoCodigo() {
+        function mostrarNotificacaoCodigo(tipo = null) {
             clearTimeout(notificacaoCodigoTimer);
+            const isRecuperacao = tipo === 'recuperacao' || (tipo === null && !formRecuperarSenha.classList.contains('hidden'));
+            const titulo = notificacaoCodigoEstudos.querySelector('.mb-1');
+            const texto = notificacaoCodigoEstudos.querySelector('.text-xs');
+            if (titulo) titulo.textContent = isRecuperacao ? 'Código de recuperação enviado!' : 'Novo código enviado!';
+            if (texto) texto.textContent = isRecuperacao ? 'Confira seu e-mail para continuar a recuperação da senha.' : 'Confira seu e-mail para continuar o cadastro.';
             notificacaoCodigoEstudos.classList.remove('hidden');
             notificacaoCodigoEstudos.classList.add('flex');
             notificacaoCodigoTimer = setTimeout(() => {
@@ -344,7 +376,9 @@
                 const resposta = await fetch('/api/auth/estudos/reenviar-codigo', { method: 'POST', body });
                 const dados = await resposta.json();
                 mostrarMensagemEstudos(dados.message || dados.detail || 'Não foi possível reenviar o código.', resposta.ok && dados.success);
-                if (resposta.ok && dados.success) mostrarNotificacaoCodigo();
+                if (resposta.ok && dados.success) {
+                    mostrarNotificacaoCodigo();
+                }
             } catch { mostrarMensagemEstudos('Não foi possível conectar ao servidor.'); }
         });
 
@@ -352,6 +386,7 @@
             event.preventDefault();
             formEntrar.classList.add('hidden');
             formRecuperarSenha.classList.remove('hidden');
+            resetarRecuperacao();
             formRecuperarSenha.elements.email.value = formEntrar.elements.login_id.value.includes('@') ? formEntrar.elements.login_id.value : '';
             formRecuperarSenha.elements.email.focus();
         });
@@ -359,6 +394,7 @@
         cancelarRecuperacao.addEventListener('click', () => {
             formEntrar.classList.remove('hidden');
             formRecuperarSenha.classList.add('hidden');
+            resetarRecuperacao();
             mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
             mensagem.textContent = '';
         });
@@ -369,13 +405,45 @@
             try {
                 const resposta = await fetch('/api/auth/estudos/solicitar-recuperacao', { method: 'POST', body });
                 const dados = await resposta.json();
-                mostrarMensagemEstudos(dados.message || dados.detail || 'Não foi possível enviar o código.', resposta.ok && dados.success);
-                if (resposta.ok && dados.success) mostrarNotificacaoCodigo();
+                if (!resposta.ok || !dados.success) mostrarMensagemEstudos(dados.message || dados.detail || 'Não foi possível enviar o código.');
+                if (resposta.ok && dados.success) {
+                    campoCodigoRecuperacao.value = '';
+                    mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
+                    mensagem.textContent = '';
+                    mostrarNotificacaoCodigo();
+                    campoCodigoRecuperacao.hidden = false;
+                    campoCodigoRecuperacao.required = true;
+                    solicitarCodigoRecuperacao.hidden = true;
+                    validarCodigoRecuperacao.hidden = false;
+                    campoCodigoRecuperacao.focus();
+                }
             } catch { mostrarMensagemEstudos('Não foi possível conectar ao servidor.'); }
+        });
+
+        validarCodigoRecuperacao.addEventListener('click', async () => {
+            const body = new FormData();
+            body.append('email', formRecuperarSenha.elements.email.value);
+            body.append('codigo', campoCodigoRecuperacao.value);
+            try {
+                const resposta = await fetch('/api/auth/estudos/validar-codigo-recuperacao', { method: 'POST', body });
+                const dados = await resposta.json();
+                mostrarMensagemEstudos(dados.message || dados.detail || 'NÃ£o foi possÃ­vel validar o cÃ³digo.', resposta.ok && dados.success);
+                if (resposta.ok && dados.success) {
+                    codigoRecuperacaoValidado = true;
+                    validarCodigoRecuperacao.hidden = true;
+                    campoNovaSenha.hidden = false;
+                    campoConfirmaSenha.hidden = false;
+                    campoNovaSenha.required = true;
+                    campoConfirmaSenha.required = true;
+                    botaoAlterarSenha.hidden = false;
+                    campoNovaSenha.focus();
+                }
+            } catch { mostrarMensagemEstudos('NÃ£o foi possÃ­vel conectar ao servidor.'); }
         });
 
         formRecuperarSenha.onsubmit = async (event) => {
             event.preventDefault();
+            if (!codigoRecuperacaoValidado) return mostrarMensagemEstudos('Valide o cÃ³digo antes de criar a nova senha.');
             mensagem.className = 'mt-4 hidden rounded-xl border px-4 py-3 text-sm';
             try {
                 const resposta = await fetch('/api/auth/estudos/alterar-senha-codigo', { method: 'POST', body: new FormData(formRecuperarSenha) });
@@ -405,6 +473,7 @@
                     mensagem.textContent = dados.detail || 'Não foi possível entrar.';
                     return;
                 }
+                try { sessionStorage.removeItem('estudos_boas_vindas_exibido'); } catch {}
                 if (dados.redirect) window.location.href = dados.redirect;
             } catch {
                 mensagem.className = 'mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300';

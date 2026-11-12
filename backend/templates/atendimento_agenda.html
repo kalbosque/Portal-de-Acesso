@@ -1,0 +1,460 @@
+{% extends "atendimento_base.html" %}
+
+{% block title %}Agendamentos | {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-6xl space-y-6">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[.25em] text-emerald-300">Central de Atendimento</p>
+            <h2 class="mt-1 text-2xl font-black text-white">Agendamentos</h2>
+            <p class="mt-2 text-sm text-slate-400">Organize atendimentos e programe mensagens pelo WhatsApp.</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="agenda-status" class="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-200">Carregando...</span>
+            {% if user_role == 'admin' %}
+            <button id="agenda-toggle" type="button" onclick="toggleAgenda()" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500">Ativar agenda</button>
+            {% endif %}
+            <a href="/central-atendimento" class="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-300 hover:bg-white/5">Voltar às conversas</a>
+        </div>
+    </div>
+
+    <div id="agenda-error" class="hidden rounded-xl border border-rose-400/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200" role="alert"></div>
+    <div id="agenda-paused" class="hidden rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        A agenda está desativada. Os registros continuam salvos; mensagens pendentes serão enviadas quando ela for ativada novamente.
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+        <section class="rounded-2xl border border-white/10 bg-slate-900/70 p-5">
+            <h3 class="text-base font-black text-white">Novo atendimento</h3>
+            <p class="mt-1 text-xs text-slate-400">De segunda a sexta, das 08:00 às 17:00, com pausa das 12:00 às 13:00. Cada horário dura 1 hora.</p>
+            <form id="appointment-form" class="mt-4 space-y-3">
+                <fieldset disabled class="space-y-3">
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="block text-xs font-bold text-slate-300">Nome do cliente
+                            <input name="nome_cliente" maxlength="180" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5" autocomplete="name">
+                        </label>
+                        <label class="block text-xs font-bold text-slate-300">Telefone
+                            <input name="telefone" maxlength="32" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5" autocomplete="tel" placeholder="DDI + DDD + número">
+                        </label>
+                    </div>
+                    <label class="block text-xs font-bold text-slate-300">Motivo do atendimento
+                        <input name="titulo" maxlength="180" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5" placeholder="Ex.: Retorno, suporte, reunião">
+                    </label>
+                    <div class="rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                        <div class="mb-3 flex items-center justify-between gap-2">
+                            <button type="button" onclick="changeAppointmentMonth(-1)" class="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5" aria-label="Mês anterior">‹</button>
+                            <h4 id="appointment-month" class="text-sm font-black capitalize text-white">Carregando calendário...</h4>
+                            <button type="button" onclick="changeAppointmentMonth(1)" class="rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5" aria-label="Próximo mês">›</button>
+                        </div>
+                        <div class="mb-2 grid grid-cols-7 gap-1 text-center text-[9px] font-black uppercase text-slate-500">
+                            <span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span>
+                        </div>
+                        <div id="appointment-calendar" class="grid grid-cols-7 gap-1" role="grid" aria-label="Calendário de disponibilidade"></div>
+                        <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[9px] font-bold text-slate-400">
+                            <span><i class="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-400"></i>Disponível</span>
+                            <span><i class="mr-1 inline-block h-2 w-2 rounded-full bg-rose-400"></i>Sem horários livres</span>
+                            <span><i class="mr-1 inline-block h-2 w-2 rounded-full bg-slate-600"></i>Fechado</span>
+                        </div>
+                        <button id="appointment-calendar-retry" type="button" onclick="loadAppointmentCalendar().catch((error) => showAgendaError(error.message))" class="hidden mt-3 rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-200 hover:bg-white/15">Tentar carregar calendário novamente</button>
+                    </div>
+                    <div>
+                        <p id="appointment-selected-day" class="text-xs font-bold text-slate-300">Escolha um dia disponível.</p>
+                        <div id="appointment-times" class="mt-2 flex flex-wrap gap-2">
+                            <span class="text-xs text-slate-500">Selecione uma data no calendário.</span>
+                        </div>
+                        <input type="hidden" name="data_hora">
+                    </div>
+                    <label class="block text-xs font-bold text-slate-300">Observação (opcional)
+                        <textarea name="observacao" rows="2" maxlength="2000" class="glass-input mt-1 w-full rounded-xl px-3 py-2.5"></textarea>
+                    </label>
+                    <button id="appointment-submit" disabled class="w-full rounded-xl bg-indigo-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">Salvar atendimento</button>
+                </fieldset>
+            </form>
+        </section>
+
+        <section class="rounded-2xl border border-white/10 bg-slate-900/70 p-5">
+            <h3 class="text-base font-black text-white">Programar mensagem no WhatsApp</h3>
+            <form id="scheduled-message-form" class="mt-4 space-y-3">
+                <fieldset disabled class="space-y-3">
+                    <label class="block text-xs font-bold text-slate-300">Instância do WhatsApp
+                        <select id="scheduled-instance" name="instancia" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5">
+                            <option value="">Carregando instâncias...</option>
+                        </select>
+                    </label>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="block text-xs font-bold text-slate-300">Nome do destinatário
+                            <input name="nome_destinatario" maxlength="180" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5" autocomplete="name">
+                        </label>
+                        <label class="block text-xs font-bold text-slate-300">Telefone
+                            <input name="telefone" maxlength="32" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5" autocomplete="tel" placeholder="DDI + DDD + número">
+                        </label>
+                    </div>
+                    <label class="block text-xs font-bold text-slate-300">Data e horário do envio
+                        <input name="data_hora" type="datetime-local" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5">
+                    </label>
+                    <label class="block text-xs font-bold text-slate-300">Mensagem
+                        <textarea name="mensagem" rows="3" maxlength="4000" required class="glass-input mt-1 w-full rounded-xl px-3 py-2.5"></textarea>
+                    </label>
+                    <button class="w-full rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500">Programar envio</button>
+                </fieldset>
+            </form>
+        </section>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+        <section class="rounded-2xl border border-white/10 bg-slate-900/70 p-5">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="font-black text-white">Atendimentos marcados</h3>
+                <span id="appointment-count" class="text-[10px] font-bold text-slate-500">0</span>
+            </div>
+            <div id="appointments-list" class="space-y-3">
+                <p class="text-sm text-slate-500">Carregando...</p>
+            </div>
+        </section>
+        <section class="rounded-2xl border border-white/10 bg-slate-900/70 p-5">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="font-black text-white">Mensagens programadas</h3>
+                <span id="message-count" class="text-[10px] font-bold text-slate-500">0</span>
+            </div>
+            <div id="messages-list" class="space-y-3">
+                <p class="text-sm text-slate-500">Carregando...</p>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script>
+    const agendaEnabled = { value: false };
+    const agendaStatus = document.getElementById('agenda-status');
+    const agendaError = document.getElementById('agenda-error');
+    const agendaPaused = document.getElementById('agenda-paused');
+    let calendarMonth = new Date();
+    calendarMonth.setDate(1);
+    let currentCalendarDays = [];
+    let selectedAppointmentDate = '';
+    let selectedAppointmentTime = '';
+
+    function escapeAgendaHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, (character) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
+
+    function formatAgendaDate(value) {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? 'Data inválida' : date.toLocaleString('pt-BR');
+    }
+
+    function showAgendaError(message) {
+        agendaError.textContent = message;
+        agendaError.classList.remove('hidden');
+    }
+
+    async function agendaRequest(url, options = {}) {
+        const response = await fetch(url, {
+            credentials: 'include',
+            headers: {'Content-Type': 'application/json', ...(options.headers || {})},
+            ...options
+        });
+        const responseText = await response.text();
+        let data = {};
+        try {
+            data = responseText ? JSON.parse(responseText) : {};
+        } catch {
+            if (response.ok) throw new Error('O servidor retornou uma resposta inválida.');
+        }
+        if (!response.ok) {
+            throw new Error(data.detail || `Não foi possível concluir a operação (HTTP ${response.status}).`);
+        }
+        return data;
+    }
+
+    function updateAgendaControls() {
+        document.querySelectorAll('#appointment-form fieldset, #scheduled-message-form fieldset').forEach((fieldset) => {
+            fieldset.disabled = !agendaEnabled.value;
+        });
+        updateAppointmentSelection();
+        agendaPaused.classList.toggle('hidden', agendaEnabled.value);
+        agendaStatus.textContent = agendaEnabled.value ? 'Agenda ativada' : 'Agenda desativada';
+        agendaStatus.className = agendaEnabled.value
+            ? 'rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-200'
+            : 'rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-200';
+        const button = document.getElementById('agenda-toggle');
+        if (button) {
+            button.textContent = agendaEnabled.value ? 'Desativar agenda' : 'Ativar agenda';
+            button.className = agendaEnabled.value
+                ? 'rounded-xl border border-rose-400/40 bg-rose-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-rose-500'
+                : 'rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500';
+        }
+    }
+
+    function renderAppointmentCalendar(data) {
+        const monthTitle = new Date(data.year, data.month - 1, 1)
+            .toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
+        document.getElementById('appointment-month').textContent = monthTitle;
+        currentCalendarDays = data.days || [];
+        const firstWeekday = (new Date(data.year, data.month - 1, 1).getDay() + 6) % 7;
+        const cells = Array(firstWeekday).fill('<span aria-hidden="true"></span>');
+
+        currentCalendarDays.forEach((day) => {
+            const dayNumber = Number(day.date.slice(-2));
+            const isSelected = selectedAppointmentDate === day.date;
+            let color = 'border-white/5 bg-slate-950/30 text-slate-600';
+            if (day.available) color = 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20';
+            else if (day.open && !day.past) color = 'border-rose-400/15 bg-rose-500/5 text-rose-300';
+            if (isSelected) color += ' ring-2 ring-indigo-400';
+
+            const label = day.available
+                ? `${dayNumber}: disponível`
+                : (day.past ? `${dayNumber}: data passada` : (day.open ? `${dayNumber}: sem horários livres` : `${dayNumber}: fechado`));
+            cells.push(`
+                <button type="button" ${day.available ? `onclick="selectAppointmentDate('${day.date}')"` : 'disabled'}
+                    aria-label="${label}" title="${label}"
+                    class="flex aspect-square items-center justify-center rounded-lg border text-xs font-bold disabled:cursor-not-allowed ${color}">
+                    ${dayNumber}
+                </button>
+            `);
+        });
+        document.getElementById('appointment-calendar').innerHTML = cells.join('');
+
+        const selectedDay = currentCalendarDays.find((day) => day.date === selectedAppointmentDate);
+        if (!selectedDay || !selectedDay.available) {
+            selectedAppointmentDate = '';
+            selectedAppointmentTime = '';
+            renderAppointmentTimes(null);
+            updateAppointmentSelection();
+        } else {
+            renderAppointmentTimes(selectedDay);
+        }
+    }
+
+    function renderAppointmentTimes(day) {
+        const label = document.getElementById('appointment-selected-day');
+        const container = document.getElementById('appointment-times');
+        if (!day) {
+            label.textContent = 'Escolha um dia disponível.';
+            container.innerHTML = '<span class="text-xs text-slate-500">Selecione uma data no calendário.</span>';
+            return;
+        }
+
+        const dateLabel = new Date(`${day.date}T12:00:00`).toLocaleDateString('pt-BR', {
+            weekday: 'long', day: 'numeric', month: 'long'
+        });
+        label.textContent = `Horários livres para ${dateLabel}:`;
+        container.innerHTML = day.slots.map((slot) => {
+            const selected = selectedAppointmentTime === slot;
+            return `<button type="button" onclick="selectAppointmentTime('${day.date}', '${slot}')"
+                class="rounded-lg border px-3 py-2 text-xs font-black ${selected ? 'border-indigo-300 bg-indigo-500 text-white' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'}">${slot}</button>`;
+        }).join('');
+    }
+
+    function selectAppointmentDate(date) {
+        selectedAppointmentDate = date;
+        selectedAppointmentTime = '';
+        const day = currentCalendarDays.find((item) => item.date === date);
+        renderAppointmentCalendar({
+            year: calendarMonth.getFullYear(),
+            month: calendarMonth.getMonth() + 1,
+            days: currentCalendarDays
+        });
+        renderAppointmentTimes(day);
+        updateAppointmentSelection();
+    }
+
+    function selectAppointmentTime(date, time) {
+        selectedAppointmentDate = date;
+        selectedAppointmentTime = time;
+        const day = currentCalendarDays.find((item) => item.date === date);
+        renderAppointmentCalendar({
+            year: calendarMonth.getFullYear(),
+            month: calendarMonth.getMonth() + 1,
+            days: currentCalendarDays
+        });
+        renderAppointmentTimes(day);
+        updateAppointmentSelection();
+    }
+
+    function updateAppointmentSelection() {
+        const input = document.querySelector('#appointment-form [name="data_hora"]');
+        if (input) input.value = selectedAppointmentDate && selectedAppointmentTime
+            ? `${selectedAppointmentDate}T${selectedAppointmentTime}`
+            : '';
+        const button = document.getElementById('appointment-submit');
+        if (button) button.disabled = !agendaEnabled.value || !selectedAppointmentTime;
+    }
+
+    async function loadAppointmentCalendar() {
+        const year = calendarMonth.getFullYear();
+        const month = calendarMonth.getMonth() + 1;
+        const monthTitle = document.getElementById('appointment-month');
+        const retryButton = document.getElementById('appointment-calendar-retry');
+        monthTitle.textContent = 'Carregando calendário...';
+        retryButton.classList.add('hidden');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        try {
+            const data = await agendaRequest(
+                `/api/atendimento/agenda/calendar?year=${year}&month=${month}`,
+                {signal: controller.signal}
+            );
+            renderAppointmentCalendar(data);
+            retryButton.classList.add('hidden');
+        } catch (error) {
+            monthTitle.textContent = 'Calendário indisponível';
+            retryButton.classList.remove('hidden');
+            if (error.name === 'AbortError') {
+                throw new Error('A consulta do calendário demorou demais. Verifique a conexão com o servidor e tente novamente.');
+            }
+            throw error;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    function changeAppointmentMonth(amount) {
+        calendarMonth.setMonth(calendarMonth.getMonth() + amount);
+        selectedAppointmentDate = '';
+        selectedAppointmentTime = '';
+        renderAppointmentTimes(null);
+        updateAppointmentSelection();
+        loadAppointmentCalendar().catch((error) => showAgendaError(error.message));
+    }
+
+    function renderAppointments(items) {
+        document.getElementById('appointment-count').textContent = `${items.length} registro(s)`;
+        const container = document.getElementById('appointments-list');
+        if (!items.length) {
+            container.innerHTML = '<p class="text-sm text-slate-500">Nenhum atendimento agendado.</p>';
+            return;
+        }
+        container.innerHTML = items.map((item) => `
+            <article class="rounded-xl border border-white/5 bg-slate-950/50 p-3">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="font-bold text-white">${escapeAgendaHtml(item.nome_cliente)} · ${escapeAgendaHtml(item.titulo)}</p>
+                        <p class="mt-1 text-xs text-slate-400">${escapeAgendaHtml(formatAgendaDate(item.data_hora))} · ${escapeAgendaHtml(item.telefone)}</p>
+                        ${item.observacao ? `<p class="mt-2 whitespace-pre-wrap text-xs text-slate-500">${escapeAgendaHtml(item.observacao)}</p>` : ''}
+                    </div>
+                    <span class="shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase ${item.status === 'agendado' ? 'bg-indigo-500/10 text-indigo-300' : 'bg-slate-500/10 text-slate-400'}">${escapeAgendaHtml(item.status)}</span>
+                </div>
+                ${item.status === 'agendado' ? `<button type="button" onclick="cancelAppointment(${Number(item.id)})" class="mt-3 text-[10px] font-black uppercase text-rose-300 hover:text-rose-200">Cancelar atendimento</button>` : ''}
+            </article>
+        `).join('');
+    }
+
+    function renderMessages(items) {
+        document.getElementById('message-count').textContent = `${items.length} registro(s)`;
+        const container = document.getElementById('messages-list');
+        if (!items.length) {
+            container.innerHTML = '<p class="text-sm text-slate-500">Nenhuma mensagem programada.</p>';
+            return;
+        }
+        const labels = {pendente: 'Pendente', enviando: 'Enviando', enviada: 'Enviada', falhou: 'Falhou', cancelada: 'Cancelada'};
+        container.innerHTML = items.map((item) => `
+            <article class="rounded-xl border border-white/5 bg-slate-950/50 p-3">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="font-bold text-white">${escapeAgendaHtml(item.nome_destinatario)} · ${escapeAgendaHtml(item.telefone)}</p>
+                        <p class="mt-1 text-xs text-slate-400">${escapeAgendaHtml(formatAgendaDate(item.data_hora))} · ${escapeAgendaHtml(item.instancia)}</p>
+                        <p class="mt-2 whitespace-pre-wrap break-words text-xs text-slate-300">${escapeAgendaHtml(item.mensagem)}</p>
+                    </div>
+                    <span class="shrink-0 rounded-full bg-slate-500/10 px-2 py-1 text-[9px] font-black uppercase text-slate-300">${labels[item.status] || escapeAgendaHtml(item.status)}</span>
+                </div>
+                ${item.status === 'pendente' ? `<button type="button" onclick="cancelScheduledMessage(${Number(item.id)})" class="mt-3 text-[10px] font-black uppercase text-rose-300 hover:text-rose-200">Cancelar mensagem</button>` : ''}
+            </article>
+        `).join('');
+    }
+
+    async function loadAgenda() {
+        const data = await agendaRequest('/api/atendimento/agenda');
+        agendaEnabled.value = data.enabled;
+        updateAgendaControls();
+        renderAppointments(data.appointments || []);
+        renderMessages(data.messages || []);
+    }
+
+    async function loadAgendaInstances() {
+        const select = document.getElementById('scheduled-instance');
+        try {
+            const data = await agendaRequest('/api/atendimento/agenda/instances');
+            const instances = data.instances || [];
+            select.innerHTML = instances.length
+                ? instances.map((item) => `<option value="${escapeAgendaHtml(item.instanceName)}">${escapeAgendaHtml(item.label || item.instanceName)}</option>`).join('')
+                : '<option value="">Nenhuma instância disponível</option>';
+            if (data.default_instance) select.value = data.default_instance;
+        } catch (error) {
+            select.innerHTML = '<option value="">Não foi possível carregar as instâncias</option>';
+            showAgendaError(error.message);
+        }
+    }
+
+    async function toggleAgenda() {
+        const nextEnabled = !agendaEnabled.value;
+        if (!nextEnabled && !confirm('Desativar a agenda? Os registros serão mantidos e as mensagens pendentes ficarão pausadas até a reativação.')) return;
+        try {
+            await agendaRequest('/api/atendimento/agenda/enabled', {
+                method: 'POST',
+                body: JSON.stringify({enabled: nextEnabled})
+            });
+            agendaError.classList.add('hidden');
+            await loadAgenda();
+        } catch (error) {
+            showAgendaError(error.message);
+        }
+    }
+
+    async function submitAgendaForm(form, endpoint) {
+        try {
+            if (endpoint.endsWith('/appointments') && !form.elements.data_hora.value) {
+                throw new Error('Escolha um dia e um horário disponível no calendário.');
+            }
+            const payload = Object.fromEntries(new FormData(form).entries());
+            await agendaRequest(endpoint, {method: 'POST', body: JSON.stringify(payload)});
+            form.reset();
+            await loadAgenda();
+            if (endpoint.endsWith('/appointments')) {
+                selectedAppointmentDate = '';
+                selectedAppointmentTime = '';
+                await loadAppointmentCalendar();
+            }
+            agendaError.classList.add('hidden');
+        } catch (error) {
+            showAgendaError(error.message);
+        }
+    }
+
+    async function cancelAppointment(id) {
+        if (!confirm('Cancelar este atendimento agendado?')) return;
+        try {
+            await agendaRequest(`/api/atendimento/agenda/appointments/${id}/cancel`, {method: 'POST'});
+            await loadAgenda();
+            await loadAppointmentCalendar();
+        } catch (error) {
+            showAgendaError(error.message);
+        }
+    }
+
+    async function cancelScheduledMessage(id) {
+        if (!confirm('Cancelar esta mensagem programada?')) return;
+        try {
+            await agendaRequest(`/api/atendimento/agenda/messages/${id}/cancel`, {method: 'POST'});
+            await loadAgenda();
+        } catch (error) {
+            showAgendaError(error.message);
+        }
+    }
+
+    document.getElementById('appointment-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitAgendaForm(event.currentTarget, '/api/atendimento/agenda/appointments');
+    });
+    document.getElementById('scheduled-message-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitAgendaForm(event.currentTarget, '/api/atendimento/agenda/messages');
+    });
+    loadAgenda().catch((error) => showAgendaError(error.message));
+    loadAgendaInstances();
+    loadAppointmentCalendar().catch((error) => showAgendaError(error.message));
+</script>
+{% endblock %}
