@@ -306,7 +306,9 @@
                 <a href="{% if request.cookies.get('user_role') == 'estudante' %}/estudos{% else %}/{% endif %}" class="flex items-center gap-3 group flex-shrink-0">
                     <div class="relative">
                         <div class="absolute -inset-1.5 bg-indigo-600/30 rounded-2xl blur opacity-0 group-hover:opacity-100 transition duration-500"></div>
-                        {% if config.APP_LOGO_URL %}
+                        {% if estudos_logo_url %}
+                            <img src="{{ estudos_logo_url }}" alt="Logo dos Estudos" class="relative h-9 w-9 object-contain rounded-xl shadow-lg border border-white/5" />
+                        {% elif config.APP_LOGO_URL %}
                             <img src="/static/{{ config.APP_LOGO_URL }}" alt="Logo" class="relative h-9 w-auto object-contain rounded-xl shadow-lg border border-white/5" />
                         {% else %}
                             <div class="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center shadow-xl border border-indigo-500/30">

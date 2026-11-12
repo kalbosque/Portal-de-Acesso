@@ -1711,7 +1711,7 @@ async def estudos_concursos(request: Request):
     with Session(engine) as session:
         ativo = get_active_study_contest(session, usuario_id)
         concursos = session.exec(select(EstudoConcurso).where(EstudoConcurso.usuario_id == usuario_id).order_by(desc(EstudoConcurso.ativo), desc(EstudoConcurso.criado_em))).all()
-    return templates.TemplateResponse(request=request, name="estudos_concursos.html", context={"config": APP_CONFIG, "concursos": concursos, "concurso_ativo": ativo, "mensagem": request.query_params.get("mensagem")})
+    return templates.TemplateResponse(request=request, name="estudos_concursos.html", context={"config": APP_CONFIG, "concursos": concursos, "concurso_ativo": ativo, "mensagem": request.query_params.get("mensagem"), "estudos_logo_url": _get_study_logo_url()})
 
 
 @app.post("/estudos/concursos")
@@ -1867,7 +1867,7 @@ async def view_raio_x_banca(request: Request, analise_id: int = None):
         dados["analise"].setdefault("formato", detalhes_atual["formato"])
         dados["analise"].setdefault("armadilhas_banca", detalhes_atual["armadilhas"])
         dados["analise"]["prioridades"] = _prioridades_raio_x(materias_salvas)
-    return templates.TemplateResponse(request=request, name="estudos_raio_x.html", context={"config": APP_CONFIG, "bancas": sorted(RAIO_X_BANCAS), "historico": historico, "analise": analise, "dados": dados})
+    return templates.TemplateResponse(request=request, name="estudos_raio_x.html", context={"config": APP_CONFIG, "bancas": sorted(RAIO_X_BANCAS), "historico": historico, "analise": analise, "dados": dados, "estudos_logo_url": _get_study_logo_url()})
 
 @app.post("/estudos/raio-x")
 async def criar_raio_x_banca(request: Request, banca: str = Form(...), cargo: str = Form(""), edital: UploadFile = File(...)):
@@ -2645,6 +2645,7 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
         name="estudos.html",
         context={
             "config": APP_CONFIG,
+            "estudos_logo_url": _get_study_logo_url(),
             "estudos_admin": bool(_get_study_admin_user(request)),
             "concurso_ativo": concurso_ativo,
             "ciclo_materias_db": ciclo_materias_db,
