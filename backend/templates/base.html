@@ -2175,5 +2175,38 @@
         }
     })();
     </script>
+    {% if request.url.path.startswith('/estudos') and request.url.path != '/estudos/login' %}
+    <script>
+        (() => {
+            let heartbeatInFlight = false;
+            const manterSessaoAtiva = async () => {
+                if (heartbeatInFlight) return;
+                heartbeatInFlight = true;
+                try {
+                    const resposta = await fetch('/api/auth/heartbeat', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    if (resposta.status === 401 || resposta.status === 403) {
+                        window.location.replace('/estudos/login');
+                    } else if (!resposta.ok) {
+                        console.error('Não foi possível atualizar a presença:', resposta.status);
+                    }
+                } catch (erro) {
+                    console.error('Falha ao atualizar a presença:', erro);
+                } finally {
+                    heartbeatInFlight = false;
+                }
+            };
+            manterSessaoAtiva();
+            setInterval(manterSessaoAtiva, 60 * 1000);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') manterSessaoAtiva();
+            });
+            window.addEventListener('focus', manterSessaoAtiva);
+        })();
+    </script>
+    {% endif %}
 </body>
 </html>

@@ -1886,22 +1886,6 @@
             });
         }
 
-        // ── Keep-Alive / Manter Sessão Sempre Ativa ────────────────────────
-        function manterSessaoAtiva() {
-            fetch('/api/auth/heartbeat', {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Accept': 'application/json' }
-            }).catch(() => {});
-        }
-        // Dispara a cada minuto, mantendo o status Online dentro da janela de 2 minutos.
-        setInterval(manterSessaoAtiva, 60 * 1000);
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                manterSessaoAtiva();
-            }
-        });
-        window.addEventListener('focus', manterSessaoAtiva);
     })();
 </script>
 <script>

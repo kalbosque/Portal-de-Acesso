@@ -29,6 +29,10 @@ def _is_study_account_allowed(user: Usuario) -> bool:
     return user.role == "estudante" or email_allowed
 
 
+def _is_account_status_denied(user: Usuario) -> bool:
+    return (user.status_conta or "ativo") in {"pendente", "bloqueado"}
+
+
 def _is_study_admin(user: Usuario) -> bool:
     return (user.email or "").strip().casefold() in STUDY_ADMIN_EMAILS
 
@@ -101,6 +105,12 @@ def _set_session_cookies(response: Response, user: Usuario) -> None:
     response.set_cookie("username", user.username, **cookie_kwargs)
     response.set_cookie("user_role", user.role, **cookie_kwargs)
     response.set_cookie("user_perms", json.dumps(perms, ensure_ascii=False), **cookie_kwargs)
+
+
+def _clear_session_cookies(response: Response) -> None:
+    for key in ("user_id", "user_name", "username", "user_role", "user_perms", "study_access"):
+        response.delete_cookie(key, path="/")
+    response.delete_cookie("study_access", path="/estudos")
 
 
 @router.post("/login")
@@ -483,32 +493,51 @@ async def alterar_senha_codigo_estudos(
 @router.api_route("/heartbeat", methods=["GET", "POST"])
 async def heartbeat(request: Request):
     user_id = request.cookies.get("user_id") or get_signed_cookie(request, "user_id")
-    response = JSONResponse({"success": True})
-    if user_id:
-        try:
-            with Session(engine) as session:
-                user = session.get(Usuario, int(user_id))
-                if user:
-                    session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(timezone.utc), "user_id": user.id})
-                    session.commit()
-                    # Renova os cookies da sessão por mais 30 dias
-                    _set_session_cookies(response, user)
-                    if _is_study_account_allowed(user):
-                        new_study_token = create_study_access_token(str(user.id))
-                        if new_study_token:
-                            forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip()
-                            response.set_cookie(
-                                "study_access",
-                                new_study_token,
-                                path="/",
-                                max_age=SESSION_COOKIE_MAX_AGE,
-                                httponly=True,
-                                secure=forwarded_proto == "https",
-                                samesite="lax",
-                            )
-        except Exception as exc:
-            print(f"[HEARTBEAT] Nao foi possivel atualizar presenca: {exc}")
-    return response
+    if not user_id:
+        response = JSONResponse({"success": False, "detail": "Sessão não encontrada."}, status_code=401)
+        _clear_session_cookies(response)
+        return response
+
+    try:
+        with Session(engine) as session:
+            user = session.get(Usuario, int(user_id))
+            if not user:
+                response = JSONResponse({"success": False, "detail": "Sessão não encontrada."}, status_code=401)
+                _clear_session_cookies(response)
+                return response
+
+            if _is_account_status_denied(user):
+                session.execute(text("UPDATE usuarios SET last_seen = NULL WHERE id = :user_id"), {"user_id": user.id})
+                session.commit()
+                response = JSONResponse({"success": False, "detail": "Sua conta não está habilitada para acesso."}, status_code=403)
+                _clear_session_cookies(response)
+                return response
+
+            session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(timezone.utc), "user_id": user.id})
+            session.commit()
+            response = JSONResponse({"success": True})
+            _set_session_cookies(response, user)
+            if _is_study_account_allowed(user):
+                new_study_token = create_study_access_token(str(user.id))
+                if new_study_token:
+                    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip()
+                    response.set_cookie(
+                        "study_access",
+                        new_study_token,
+                        path="/",
+                        max_age=SESSION_COOKIE_MAX_AGE,
+                        httponly=True,
+                        secure=forwarded_proto == "https",
+                        samesite="lax",
+                    )
+            return response
+    except (TypeError, ValueError):
+        response = JSONResponse({"success": False, "detail": "Sessão inválida."}, status_code=401)
+        _clear_session_cookies(response)
+        return response
+    except Exception as exc:
+        print(f"[HEARTBEAT] Nao foi possivel atualizar presenca: {exc}")
+        return JSONResponse({"success": False, "detail": "Não foi possível atualizar a presença."}, status_code=503)
 
 
 @router.post("/logout")
@@ -522,7 +551,5 @@ async def logout(request: Request):
         except Exception as exc:
             print(f"[LOGOUT] Nao foi possivel limpar presenca: {exc}")
     response = JSONResponse({"success": True})
-    for key in ("user_id", "user_name", "username", "user_role", "user_perms", "study_access"):
-        response.delete_cookie(key, path="/")
-    response.delete_cookie("study_access", path="/estudos")
+    _clear_session_cookies(response)
     return response

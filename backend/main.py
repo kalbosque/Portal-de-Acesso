@@ -79,19 +79,28 @@ async def restrict_study_accounts(request: Request, call_next):
         study_token = request.cookies.get("study_access")
         study_user_id = verify_study_access_token(study_token) if study_token else None
 
-        need_renew = False
-        if not study_user_id or user_id != study_user_id:
-            # Se não tem study_access válido mas tem user_id válido e autorizado, renova automaticamente
-            if user_id:
-                try:
-                    with Session(engine) as session:
-                        u = session.get(Usuario, int(user_id))
-                        if u and api_auth._is_study_account_allowed(u):
-                            need_renew = True
-                except Exception:
-                    pass
-            if not need_renew:
-                return RedirectResponse(url="/estudos/login", status_code=303)
+        try:
+            account_id = int(user_id) if user_id else None
+        except ValueError:
+            account_id = None
+
+        if account_id is None:
+            response = RedirectResponse(url="/estudos/login", status_code=303)
+            api_auth._clear_session_cookies(response)
+            return response
+
+        with Session(engine) as session:
+            user = session.get(Usuario, account_id)
+            if (
+                not user
+                or not api_auth._is_study_account_allowed(user)
+                or api_auth._is_account_status_denied(user)
+            ):
+                response = RedirectResponse(url="/estudos/login", status_code=303)
+                api_auth._clear_session_cookies(response)
+                return response
+
+        need_renew = not study_user_id or user_id != study_user_id
 
         response = await call_next(request)
         if need_renew and user_id:
@@ -2171,7 +2180,7 @@ async def estudos_admin(request: Request, mensagem: str = None, erro: bool = Fal
         agora_utc = datetime.now(timezone.utc)
         online_ids = set()
         for usuario in usuarios:
-            if not usuario.last_seen:
+            if api_auth._is_account_status_denied(usuario) or not usuario.last_seen:
                 continue
             ultimo_acesso = usuario.last_seen
             if ultimo_acesso.tzinfo is None:
@@ -2248,7 +2257,7 @@ async def estudos_admin_status(request: Request):
     agora_utc = datetime.now(timezone.utc)
     online_ids = []
     for usuario in usuarios:
-        if not usuario.last_seen:
+        if api_auth._is_account_status_denied(usuario) or not usuario.last_seen:
             continue
         ultimo_acesso = usuario.last_seen
         if ultimo_acesso.tzinfo is None:
@@ -2264,13 +2273,20 @@ async def estudos_admin_status(request: Request):
 async def estudos_admin_usuario_status(request: Request, usuario_id: int = Form(...), status: str = Form(...)):
     if not _get_study_admin_user(request):
         return RedirectResponse(url="/estudos", status_code=303)
-    novo_status = status if status in ("ativo", "bloqueado") else "ativo"
+    if status not in ("ativo", "bloqueado"):
+        texto = "Status de conta inválido."
+        return RedirectResponse(url=f"/estudos/admin?mensagem={quote(texto)}&erro=1", status_code=303)
     with Session(engine) as session:
         usuario = session.get(Usuario, usuario_id)
-        if usuario and usuario.role == "estudante":
-            usuario.status_conta = novo_status
-            session.add(usuario)
-            session.commit()
+        if not usuario or usuario.role != "estudante":
+            texto = "Estudante não encontrado."
+            return RedirectResponse(url=f"/estudos/admin?mensagem={quote(texto)}&erro=1", status_code=303)
+        usuario.status_conta = status
+        if status == "bloqueado":
+            usuario.last_seen = None
+        session.add(usuario)
+        session.commit()
+    novo_status = status
     texto = "Acesso liberado." if novo_status == "ativo" else "Acesso bloqueado."
     return RedirectResponse(url=f"/estudos/admin?mensagem={quote(texto)}", status_code=303)
 
