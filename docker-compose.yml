@@ -32,6 +32,8 @@ services:
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://root:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}@db:5432/sistema_impressao?schema=evolution
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_DATA_HISTORIC=true
       - CACHE_REDIS_ENABLED=false
       - DEL_INSTANCE=false
       - QRCODE_LIMIT=30

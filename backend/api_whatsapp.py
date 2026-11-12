@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import time
@@ -97,6 +98,28 @@ def _display_datetime(value: datetime) -> datetime:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(DISPLAY_TIMEZONE)
+
+
+def _whatsapp_message_datetime(value) -> datetime:
+    """Converte timestamps da Evolution para UTC, usando agora como fallback."""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value or "").strip()
+        try:
+            timestamp = float(raw)
+            if timestamp > 100_000_000_000:
+                timestamp /= 1000
+            return datetime.fromtimestamp(timestamp, timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except ValueError:
+                return datetime.now(timezone.utc)
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _canonical_contact_key(num: str) -> str:
@@ -429,7 +452,13 @@ def _ensure_whatsapp_columns():
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao VARCHAR(32) NULL",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_quantidade INTEGER DEFAULT 0",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_detalhes TEXT NULL",
-        "ALTER TABLE contatos_whatsapp ADD COLUMN IF NOT EXISTS status_interno VARCHAR(40) DEFAULT 'Normal'"
+        "ALTER TABLE contatos_whatsapp ADD COLUMN IF NOT EXISTS status_interno VARCHAR(40) DEFAULT 'Normal'",
+        """
+        CREATE TABLE IF NOT EXISTS whatsapp_message_sync_state (
+            instance_name VARCHAR(120) PRIMARY KEY,
+            last_synced_at TIMESTAMP WITH TIME ZONE NOT NULL
+        )
+        """
     ]
     with engine.begin() as conn:
         for statement in statements:
@@ -2627,6 +2656,14 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     except Exception:
         return {"status": "error", "detail": "Corpo da requisição não é um JSON válido."}
 
+    return await _process_whatsapp_webhook_payload(payload, background_tasks)
+
+
+async def _process_whatsapp_webhook_payload(
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    send_auto_reply: bool = True,
+):
     event = (payload.get("event") or "").lower().replace("_", ".").replace("-", ".")
     print(f"[Webhook] Evento recebido: '{event}' | Payload keys: {list(payload.keys())}")
 
@@ -2869,6 +2906,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         message_obj = _unwrap_whatsapp_message(data.get("message", {}) or {})
         key = data.get("key", {}) or {}
         from_me = key.get("fromMe", False)
+        message_received_at = _whatsapp_message_datetime(data.get("messageTimestamp"))
 
         # Ignora mensagens enviadas pelo próprio número para evitar loops
         if from_me:
@@ -3057,7 +3095,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
                     whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
-                    data_hora=datetime.now(timezone.utc)
+                    data_hora=message_received_at
                 )
                 session.add(interacao)
                 chamado.unread_admin = (chamado.unread_admin or 0) + 1
@@ -3101,7 +3139,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     status="Aberto",
                     prioridade="Media",
                     visivel_suporte=auto_create_ticket,
-                    unread_admin=1
+                    unread_admin=1,
+                    data_abertura=message_received_at,
                 )
                 session.add(chamado)
                 session.commit()
@@ -3116,7 +3155,7 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
                     whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
-                    data_hora=datetime.now(timezone.utc)
+                    data_hora=message_received_at
                 )
                 session.add(interacao)
                 session.commit()
@@ -3138,10 +3177,159 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 # Auto-resposta de boas-vindas. Temporariamente desativada
                 # somente para a empresa Atual Contabilidade (tenant 1),
                 # mantendo o comportamento das demais empresas.
-                if tenant_id_for_instance(instance_from_payload) != 1:
+                if send_auto_reply and tenant_id_for_instance(instance_from_payload) != 1:
                     welcome_msg = f"Olá, {customer_name}! Seu atendimento foi registrado sob o chamado #{ticket_id}. Um de nossos operadores irá atendê-lo em breve."
                     background_tasks.add_task(send_whatsapp_text, phone_number, welcome_msg, instance_from_payload)
 
             last_ticket_id = ticket_id
 
     return {"status": "success", "ticket_id": last_ticket_id}
+
+
+async def _fetch_evolution_message_page(
+    base_url: str,
+    token: str,
+    instance: str,
+    since: datetime,
+    through: datetime,
+    page: int,
+    page_size: int,
+):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["apikey"] = token
+    response = await asyncio.to_thread(
+        requests.post,
+        f"{base_url}/chat/findMessages/{instance}",
+        headers=headers,
+        json={
+            "where": {
+                "messageTimestamp": {
+                    "gte": since.isoformat(),
+                    "lte": through.isoformat(),
+                }
+            },
+            "page": page,
+            "offset": page_size,
+        },
+        timeout=(5, 30),
+    )
+    if not response.ok:
+        raise RuntimeError(f"Evolution findMessages respondeu HTTP {response.status_code}")
+
+    payload = response.json()
+    message_data = payload.get("messages") if isinstance(payload, dict) else None
+    if isinstance(message_data, list):
+        return message_data, 1
+    if not isinstance(message_data, dict):
+        raise ValueError("Resposta inválida de Evolution findMessages.")
+
+    records = message_data.get("records")
+    if not isinstance(records, list):
+        raise ValueError("Evolution findMessages não retornou a lista de mensagens.")
+    try:
+        pages = int(message_data.get("pages") or 0)
+    except (TypeError, ValueError):
+        pages = 0
+    return records, max(pages, 1 if records else 0)
+
+
+async def _sync_whatsapp_instance_history(instance_name: str):
+    instances, _ = get_whatsapp_instances()
+    if not any(item["instanceName"] == instance_name for item in instances):
+        return
+    if not await asyncio.to_thread(_instance_is_connected, instance_name):
+        return
+
+    _ensure_whatsapp_columns()
+    through = datetime.now(timezone.utc)
+    with engine.begin() as connection:
+        row = connection.execute(
+            text(
+                "SELECT last_synced_at FROM whatsapp_message_sync_state "
+                "WHERE instance_name = :instance_name"
+            ),
+            {"instance_name": instance_name},
+        ).first()
+
+    if row and row[0]:
+        last_synced_at = row[0]
+        if last_synced_at.tzinfo is None:
+            last_synced_at = last_synced_at.replace(tzinfo=timezone.utc)
+        since = min(last_synced_at - timedelta(seconds=1), through - timedelta(seconds=1))
+    else:
+        since = through - timedelta(days=7)
+
+    base_url, token, resolved_instance = get_evolution_api_endpoints(instance_name)
+    if not base_url:
+        return
+
+    page_size = 100
+    records, page_count = await _fetch_evolution_message_page(
+        base_url, token, resolved_instance, since, through, 1, page_size
+    )
+
+    for page in range(page_count, 0, -1):
+        if page == 1:
+            page_records = records
+        else:
+            page_records, _ = await _fetch_evolution_message_page(
+                base_url, token, resolved_instance, since, through, page, page_size
+            )
+
+        # A página da Evolution vem da mais nova para a mais antiga.
+        historical_messages = [
+            item for item in reversed(page_records)
+            if isinstance(item, dict)
+            and isinstance(item.get("key"), dict)
+            and not item["key"].get("fromMe")
+        ]
+        if not historical_messages:
+            continue
+
+        background_tasks = BackgroundTasks()
+        await _process_whatsapp_webhook_payload(
+            {
+                "event": "messages.upsert",
+                "instance": instance_name,
+                "data": historical_messages,
+            },
+            background_tasks,
+            send_auto_reply=False,
+        )
+        await background_tasks()
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO whatsapp_message_sync_state (instance_name, last_synced_at)
+                VALUES (:instance_name, :last_synced_at)
+                ON CONFLICT (instance_name)
+                DO UPDATE SET last_synced_at = EXCLUDED.last_synced_at
+                """
+            ),
+            {"instance_name": instance_name, "last_synced_at": through},
+        )
+
+async def whatsapp_history_recovery_loop():
+    await asyncio.sleep(15)
+    while True:
+        try:
+            instances, _ = get_whatsapp_instances()
+            for item in instances:
+                instance_name = item["instanceName"]
+                try:
+                    await _sync_whatsapp_instance_history(instance_name)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    print(
+                        f"[WhatsApp History] Falha ao sincronizar "
+                        f"'{instance_name}': {exc}"
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[WhatsApp History] Falha ao listar instâncias: {exc}")
+        await asyncio.sleep(60)

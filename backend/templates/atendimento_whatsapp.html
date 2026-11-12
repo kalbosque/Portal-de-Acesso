@@ -283,6 +283,10 @@
         border-color: transparent;
     }
     .chat-card.unread .chat-name { color: #f8fafc; font-weight: 800; }
+    .atend-container.sidebar-collapsed .chat-card.mychat-unread .collapsed-unread-badge {
+        background: #ef4444;
+        color: #fff;
+    }
 
     @media (max-width: 960px) {
         .chat-card.active {
@@ -713,8 +717,8 @@
         
         <!-- Tabs de Fila -->
         <div class="flex border-b border-white/5 p-1 bg-slate-950/30">
-            <button onclick="changeQueueTab('aguardando')" id="tab-aguardando" class="atend-tab flex-1 py-2 text-center rounded-lg text-white atend-tab active">Fila <span id="queue-unread-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] text-slate-950">0</span></button>
-            <button onclick="changeQueueTab('atendendo')" id="tab-atendendo" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Meu Chat <span id="mychat-unread-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-black text-slate-950">0</span></button>
+            <button onclick="changeQueueTab('aguardando')" id="tab-aguardando" class="atend-tab flex-1 py-2 text-center rounded-lg text-white atend-tab active">Fila <span id="queue-waiting-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] text-slate-950">0</span></button>
+            <button onclick="changeQueueTab('atendendo')" id="tab-atendendo" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Meu Chat <span id="mychat-active-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] font-black text-slate-950">0</span></button>
             {% if config.get('WHATSAPP_SHOW_GROUPS', false) %}<button onclick="changeQueueTab('grupos')" id="tab-grupos" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Grupos <span id="groups-unread-count" class="ml-1 hidden rounded-full bg-emerald-500 px-1.5 py-0.5 text-[9px] text-slate-950">0</span></button>{% endif %}
             <button onclick="changeQueueTab('resolvidos')" id="tab-resolvidos" class="atend-tab flex-1 py-2 text-center rounded-lg text-slate-500 hover:text-white">Resolvidos</button>
         </div>
@@ -1898,12 +1902,11 @@
         const listDiv = document.getElementById('chats-list');
         listDiv.innerHTML = '';
         // Mensagens de grupos ficam somente na aba Grupos e não entram na fila.
-        const queueUnread = chatsData.filter(c => !_isGroupChat(c) && c.status === 'Aberto' && !c.assigned_user && Number(c.unread_admin || 0) > 0)
-            .reduce((total, c) => total + Number(c.unread_admin || 0), 0);
-        const queueBadge = document.getElementById('queue-unread-count');
+        const queueWaiting = chatsData.filter(c => !_isGroupChat(c) && c.status === 'Aberto' && !c.assigned_user).length;
+        const queueBadge = document.getElementById('queue-waiting-count');
         if (queueBadge) {
-            queueBadge.textContent = queueUnread;
-            queueBadge.classList.toggle('hidden', queueUnread === 0);
+            queueBadge.textContent = queueWaiting;
+            queueBadge.classList.toggle('hidden', queueWaiting === 0);
         }
         const groupsUnread = chatsData.filter(c => String(c.whatsapp_cliente || '').toLowerCase().endsWith('@g.us') && Number(c.unread_admin || 0) > 0)
             .reduce((total, c) => total + Number(c.unread_admin || 0), 0);
@@ -1912,12 +1915,11 @@
             groupsBadge.textContent = groupsUnread;
             groupsBadge.classList.toggle('hidden', groupsUnread === 0);
         }
-        const myChatUnread = chatsData.filter(c => !String(c.whatsapp_cliente || '').toLowerCase().endsWith('@g.us') && c.status !== 'Resolvido' && c.assigned_user && (c.assigned_user === currentUser || is_admin) && Number(c.unread_admin || 0) > 0)
-            .reduce((total, c) => total + Number(c.unread_admin || 0), 0);
-        const myChatBadge = document.getElementById('mychat-unread-count');
+        const myChatActive = chatsData.filter(c => !_isGroupChat(c) && c.status !== 'Resolvido' && c.assigned_user && (c.assigned_user === currentUser || is_admin)).length;
+        const myChatBadge = document.getElementById('mychat-active-count');
         if (myChatBadge) {
-            myChatBadge.textContent = myChatUnread;
-            myChatBadge.classList.toggle('hidden', myChatUnread === 0);
+            myChatBadge.textContent = myChatActive;
+            myChatBadge.classList.toggle('hidden', myChatActive === 0);
         }
         
         let filtered = [];
@@ -2020,13 +2022,16 @@
         
         filtered.forEach(c => {
             const card = document.createElement('div');
-            card.className = `chat-card relative p-3 border-b border-white/5 cursor-pointer flex items-center justify-between gap-3 ${activeTicketId === c.id ? 'active' : ''} ${c.unread_admin > 0 ? 'unread' : ''}`;
+            const unreadCount = Number(c.unread_admin || 0);
+            const myChatUnread = currentQueue === 'atendendo' && unreadCount > 0;
+            card.className = `chat-card relative p-3 border-b border-white/5 cursor-pointer flex items-center justify-between gap-3 ${activeTicketId === c.id ? 'active' : ''} ${unreadCount > 0 ? 'unread' : ''} ${myChatUnread ? 'mychat-unread' : ''}`;
             card.id = `chat-card-${c.id}`;
             card.onclick = () => openChat(c.id);
 
             let badge = '';
-            if (c.unread_admin > 0) {
-                badge = `<span class="bg-[#00a884] text-[#111b21] font-black text-[10px] px-1.5 min-w-[20px] h-5 rounded-full flex items-center justify-center shadow-lg transition-transform">${c.unread_admin}</span>`;
+            if (unreadCount > 0) {
+                const unreadColor = myChatUnread ? 'bg-red-500 text-white' : 'bg-[#00a884] text-[#111b21]';
+                badge = `<span title="Mensagens não lidas" aria-label="${unreadCount} mensagens não lidas" class="${unreadColor} font-black text-[10px] px-1.5 min-w-[20px] h-5 rounded-full flex items-center justify-center shadow-lg transition-transform">${unreadCount}</span>`;
             }
 
             const displayName = getChatDisplayName(c);
@@ -2058,7 +2063,7 @@
                 <div class="flex items-center gap-3 min-w-0 w-full">
                     <div class="w-11 h-11 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold flex-shrink-0 text-base overflow-hidden relative">
                         ${avatarContent}
-                        ${c.unread_admin > 0 ? `<span class="collapsed-unread-badge">${c.unread_admin}</span>` : ''}
+                        ${unreadCount > 0 ? `<span class="collapsed-unread-badge">${unreadCount}</span>` : ''}
                     </div>
                     <div class="collapsed-name-label" title="${displayName}">${displayName.length > 8 ? displayName.substring(0, 8) + '...' : displayName}</div>
                     <div class="min-w-0 flex-grow">
@@ -3479,7 +3484,7 @@
             const badge = document.getElementById(`badge-container-${ticketId}`);
             if (badge) badge.innerHTML = '';
             const card = document.getElementById(`chat-card-${ticketId}`);
-            if (card) card.classList.remove('unread');
+            if (card) card.classList.remove('unread', 'mychat-unread');
         } catch(e) {}
     }
 

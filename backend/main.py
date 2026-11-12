@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import logging
@@ -531,6 +532,23 @@ def on_startup():
 
     print(f"[STARTUP] Seguindo sem criar tabelas apÃ³s falha persistente: {last_error}")
 
+
+@app.on_event("startup")
+def start_whatsapp_history_recovery():
+    app.state.whatsapp_history_recovery_task = asyncio.create_task(
+        api_whatsapp.whatsapp_history_recovery_loop()
+    )
+
+
+@app.on_event("shutdown")
+async def stop_whatsapp_history_recovery():
+    task = getattr(app.state, "whatsapp_history_recovery_task", None)
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 AGENT_API_KEY = os.getenv("AGENT_API_KEY")

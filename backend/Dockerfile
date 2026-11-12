@@ -14,4 +14,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Usa a porta fornecida pela plataforma, mantendo 8000 no Docker Compose local.
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 4"]
+# O gerenciador de WebSocket mantém as conexões em memória; um worker evita
+# que o webhook seja atendido por um processo diferente do cliente conectado.
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]
