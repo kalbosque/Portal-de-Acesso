@@ -2152,8 +2152,17 @@ def _get_study_admin_user(request: Request):
         return None
 
 
+def _get_study_logo_url() -> str:
+    upload_dir = os.path.join(BASE_DIR, "public_html", "uploads", "estudos")
+    for extension in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+        logo_path = os.path.join(upload_dir, f"logo{extension}")
+        if os.path.isfile(logo_path):
+            return f"/uploads/estudos/logo{extension}?v={os.path.getmtime(logo_path)}"
+    return ""
+
+
 @app.get("/estudos/admin", response_class=HTMLResponse)
-async def estudos_admin(request: Request, mensagem: str = None):
+async def estudos_admin(request: Request, mensagem: str = None, erro: bool = False):
     if not _get_study_admin_user(request):
         return RedirectResponse(url="/estudos")
     with Session(engine) as session:
@@ -2171,7 +2180,62 @@ async def estudos_admin(request: Request, mensagem: str = None):
                 esta_online = ultimo_acesso >= agora_utc - timedelta(minutes=2)
             if esta_online:
                 online_ids.add(usuario.id)
-    return templates.TemplateResponse(request=request, name="estudos_admin.html", context={"config": APP_CONFIG, "usuarios": usuarios, "online_ids": online_ids, "mensagem": mensagem})
+    return templates.TemplateResponse(request=request, name="estudos_admin.html", context={"config": APP_CONFIG, "usuarios": usuarios, "online_ids": online_ids, "mensagem": mensagem, "erro": erro, "estudos_logo_url": _get_study_logo_url()})
+
+
+@app.post("/estudos/admin/logo")
+async def estudos_admin_logo(
+    request: Request,
+    logo: Optional[UploadFile] = File(None),
+    remover: str = Form("0"),
+):
+    if not _get_study_admin_user(request):
+        return RedirectResponse(url="/estudos", status_code=303)
+
+    upload_dir = os.path.join(BASE_DIR, "public_html", "uploads", "estudos")
+    extensions = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    if remover == "1":
+        removed = False
+        for extension in extensions:
+            logo_path = os.path.join(upload_dir, f"logo{extension}")
+            if os.path.isfile(logo_path):
+                os.remove(logo_path)
+                removed = True
+        message = "Logo removida." if removed else "Não havia logo para remover."
+        return RedirectResponse(url=f"/estudos/admin?mensagem={quote(message)}", status_code=303)
+
+    if not logo or not logo.filename:
+        message = "Selecione uma imagem para enviar."
+        return RedirectResponse(url=f"/estudos/admin?mensagem={quote(message)}&erro=1", status_code=303)
+
+    content = await logo.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        message = "A imagem deve ter no máximo 5 MB."
+        return RedirectResponse(url=f"/estudos/admin?mensagem={quote(message)}&erro=1", status_code=303)
+
+    image_formats = {
+        "image/jpeg": (".jpg", lambda data: data.startswith(b"\xff\xd8\xff")),
+        "image/png": (".png", lambda data: data.startswith(b"\x89PNG\r\n\x1a\n")),
+        "image/webp": (".webp", lambda data: len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"),
+        "image/gif": (".gif", lambda data: data.startswith((b"GIF87a", b"GIF89a"))),
+    }
+    image_format = image_formats.get(logo.content_type or "")
+    if not image_format or not image_format[1](content):
+        message = "Use uma imagem JPG, PNG, WEBP ou GIF válida."
+        return RedirectResponse(url=f"/estudos/admin?mensagem={quote(message)}&erro=1", status_code=303)
+
+    os.makedirs(upload_dir, exist_ok=True)
+    extension = image_format[0]
+    with open(os.path.join(upload_dir, f"logo{extension}"), "wb") as output:
+        output.write(content)
+    for old_extension in extensions:
+        if old_extension != extension:
+            old_logo_path = os.path.join(upload_dir, f"logo{old_extension}")
+            if os.path.isfile(old_logo_path):
+                os.remove(old_logo_path)
+
+    message = "Logo dos Estudos atualizada com sucesso."
+    return RedirectResponse(url=f"/estudos/admin?mensagem={quote(message)}", status_code=303)
 
 
 @app.get("/estudos/admin/status")
@@ -3643,7 +3707,7 @@ async def view_estudos_login(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="estudos_login.html",
-        context={"config": APP_CONFIG},
+        context={"config": APP_CONFIG, "estudos_logo_url": _get_study_logo_url()},
     )
 
 @app.get("/atendimento/login", response_class=HTMLResponse)

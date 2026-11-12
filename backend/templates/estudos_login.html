@@ -145,9 +145,11 @@
     <main class="relative z-10 w-full max-w-md">
         <section class="glass-panel w-full rounded-3xl p-7 sm:p-9 shadow-2xl">
             <div class="login-heading mb-8 text-center">
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-500 text-3xl font-black text-white shadow-lg shadow-sky-500/30">
-                    E
-                </div>
+                {% if estudos_logo_url %}
+                <img src="{{ estudos_logo_url }}" alt="Logo dos Estudos" class="mx-auto h-16 w-16 rounded-2xl bg-white/10 object-contain p-1 shadow-lg">
+                {% else %}
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-indigo-500 text-3xl font-black text-white shadow-lg shadow-sky-500/30">E</div>
+                {% endif %}
                 <p class="mt-5 text-xs font-black uppercase tracking-[.28em] text-sky-400">Área independente</p>
                 <h1 class="mt-5 text-3xl font-bold tracking-tight text-white">Estudos</h1>
                 <p class="mt-1 text-xs font-semibold uppercase tracking-widest text-indigo-400">Acessar sua conta</p>
