@@ -25,6 +25,10 @@ from atendimento_tenant_context import is_enabled as atendimento_multiempresa_en
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
+# Contas autorizadas especificamente para conectar aparelhos pelo Tauri.
+# Esta lista é independente do perfil administrativo do Portal.
+TAURI_ALLOWED_USERS = {"admin", "ti@atual-rnc.com.br"}
+
 
 @router.get("/media/{filename:path}")
 def serve_whatsapp_media(filename: str, request: Request):
@@ -1230,6 +1234,30 @@ def _require_admin(request: Request):
         raise HTTPException(status_code=403, detail="Acesso exclusivo para administradores")
 
 
+def is_tauri_admin(request: Request) -> bool:
+    """Retorna se a sessão atual é uma das contas autorizadas no Tauri."""
+    is_tauri = request.cookies.get("central_atendimento_tauri") == "1" or request.query_params.get("desktop") == "1"
+    if not is_tauri:
+        return False
+    user_id = get_signed_cookie(request, "user_id")
+    if not user_id:
+        return False
+    try:
+        with Session(engine) as session:
+            user = session.get(Usuario, int(user_id))
+        if not user:
+            return False
+        identities = {str(user.username or "").strip().lower(), str(user.email or "").strip().lower()}
+        return bool(identities & {item.lower() for item in TAURI_ALLOWED_USERS})
+    except (TypeError, ValueError):
+        return False
+
+
+def _require_tauri_admin(request: Request):
+    if not is_tauri_admin(request):
+        raise HTTPException(status_code=403, detail="Usuário não autorizado para conectar aparelhos no Tauri")
+
+
 @router.get("/instances")
 def list_whatsapp_instances(request: Request):
     _require_atendimento_access(request)
@@ -1878,7 +1906,7 @@ def get_whatsapp_qrcode(request: Request, instance: Optional[str] = None):
     Garante que a instância existe e busca o QR Code para autenticação.
     Caso a instância não exista, cria-a antes de buscar o QR.
     """
-    _require_atendimento_access(request)
+    _require_tauri_admin(request)
     base_url, wa_token, instance = get_evolution_api_endpoints(instance)
     if not base_url:
         raise HTTPException(status_code=400, detail="Evolution API não configurada.")

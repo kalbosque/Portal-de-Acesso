@@ -4004,7 +4004,7 @@ async def view_whatsapp_config(request: Request):
         name="whatsapp_config.html",
         context={
             "config": config,
-            "is_admin": user_role == "admin",
+            "is_admin": api_whatsapp.is_tauri_admin(request),
             "authenticated": True,
             "user_name": request.cookies.get("user_name", ""),
             "desktop_mode": desktop_mode,
