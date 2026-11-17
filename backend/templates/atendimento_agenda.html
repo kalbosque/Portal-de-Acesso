@@ -10,11 +10,21 @@
             <h2 class="mt-1 text-2xl font-black text-white">Agendamentos</h2>
             <p class="mt-2 text-sm text-slate-400">Organize atendimentos e programe mensagens pelo WhatsApp.</p>
         </div>
-        <div class="flex items-center gap-3">
-            <span id="agenda-status" class="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-200">Carregando...</span>
+        <div class="flex flex-wrap items-center gap-3">
             {% if user_role == 'admin' %}
-            <button id="agenda-toggle" type="button" onclick="toggleAgenda()" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500">Ativar agenda</button>
+            <div class="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-1.5">
+                <label for="admin-tenant-selector" class="text-xs font-bold text-slate-300">Empresa:</label>
+                <input id="admin-tenant-search" type="search" placeholder="Buscar empresa..." class="glass-input w-40 rounded-lg px-2.5 py-1 text-xs text-white bg-slate-800 border-0 focus:ring-1 focus:ring-emerald-400">
+                <select id="admin-tenant-selector" onchange="onAdminTenantChange(this.value)" class="glass-input rounded-lg px-2.5 py-1 text-xs text-white bg-slate-800 border-0 focus:ring-1 focus:ring-emerald-400">
+                    <option value="">Carregando empresas...</option>
+                </select>
+            </div>
             {% endif %}
+            <span id="agenda-status" class="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-200">Carregando...</span>
+            <button id="btn-config-comercio" type="button" onclick="openComercioModal()" class="rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-sky-200 hover:bg-sky-500/20 transition flex items-center gap-1.5">
+                <span>⚙️</span> Configurar Estabelecimento
+            </button>
+            <button id="agenda-toggle" type="button" onclick="toggleAgenda()" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500">Ativar agenda</button>
             <a href="/central-atendimento" class="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-300 hover:bg-white/5">Voltar às conversas</a>
         </div>
     </div>
@@ -27,7 +37,7 @@
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-2xl border border-white/10 bg-slate-900/70 p-5">
             <h3 class="text-base font-black text-white">Novo atendimento</h3>
-            <p class="mt-1 text-xs text-slate-400">De segunda a sexta, das 08:00 às 17:00, com pausa das 12:00 às 13:00. Cada horário dura 1 hora.</p>
+            <p id="appointment-rules-text" class="mt-1 text-xs text-slate-400">De segunda a sábado, com horários e regras configurados pelo estabelecimento.</p>
             <form id="appointment-form" class="mt-4 space-y-3">
                 <fieldset disabled class="space-y-3">
                     <div class="grid gap-3 sm:grid-cols-2">
@@ -124,6 +134,135 @@
     </div>
 </div>
 
+<!-- Modal de Configuração do Comércio / Estabelecimento & Robô WhatsApp -->
+<div id="comercio-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 overflow-y-auto">
+    <div class="relative w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-900 shadow-2xl p-6 text-white my-8 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between border-b border-white/10 pb-4">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">💈</span>
+                <div>
+                    <h3 class="text-lg font-black text-white">Configurações do Estabelecimento & Robô</h3>
+                    <p class="text-xs text-slate-400">Personalize o auto-atendimento de agendamentos no WhatsApp.</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeComercioModal()" class="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white" aria-label="Fechar">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <form id="comercio-form" class="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
+            <div class="flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5">
+                <div>
+                    <label for="cfg-enabled" class="text-xs font-black uppercase tracking-wider text-emerald-300 cursor-pointer">🤖 Robô de Agendamento no WhatsApp</label>
+                    <p class="text-[11px] text-slate-300">Quando ativado, os clientes que chamarem pelo WhatsApp recebem o menu de agendamentos desta empresa.</p>
+                </div>
+                <label class="relative inline-flex cursor-pointer items-center">
+                    <input id="cfg-enabled" name="enabled" type="checkbox" class="peer sr-only">
+                    <div class="h-6 w-11 rounded-full bg-slate-700 peer-checked:bg-emerald-500 peer-focus:outline-none after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
+                </label>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-emerald-400">🏢 Nome do Estabelecimento</label>
+                <input id="cfg-nome" name="estabelecimento_nome" type="text" required class="glass-input mt-1.5 w-full rounded-xl px-3 py-2.5 text-sm" placeholder="Ex.: Barbearia Estilo & Corte, Salão Bella..." />
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-emerald-400">💬 Mensagem de Boas-Vindas (Menu Inicial)</label>
+                <textarea id="cfg-boas-vindas" name="mensagem_boas_vindas" rows="2" class="glass-input mt-1.5 w-full rounded-xl px-3 py-2.5 text-xs text-slate-200" placeholder="Ex.: Olá! Bem-vindo(a) ao nosso atendimento! Como podemos te ajudar hoje?"></textarea>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-emerald-400">✂️ Serviços e Valores (Opção 2 do WhatsApp)</label>
+                    <span class="text-[10px] text-slate-400">Enviado quando o cliente digita 2</span>
+                </div>
+                <textarea id="cfg-servicos" name="servicos_precos" rows="4" class="glass-input mt-1.5 w-full rounded-xl px-3 py-2.5 font-mono text-xs text-slate-200" placeholder="• Corte de Cabelo: R$ 35,00&#10;• Barba: R$ 25,00&#10;• Combo Corte + Barba: R$ 50,00&#10;• Sobrancelha: R$ 15,00"></textarea>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-emerald-400">📍 Endereço / Localização (Opção 4)</label>
+                    <input id="cfg-endereco" name="endereco" type="text" class="glass-input mt-1.5 w-full rounded-xl px-3 py-2.5 text-xs" placeholder="Ex.: Rua das Flores, 123 - Centro" />
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-emerald-400">⏰ Resumo de Funcionamento (Opção 4)</label>
+                    <input id="cfg-horarios-info" name="horarios_info" type="text" class="glass-input mt-1.5 w-full rounded-xl px-3 py-2.5 text-xs" placeholder="Ex.: Segunda a Sábado das 08h às 19h" />
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-slate-950/40 p-4 space-y-3">
+                <p class="text-xs font-black uppercase tracking-wider text-amber-300">⚙️ Regras do Calendário e Agendamento</p>
+                
+                <div class="grid gap-3 grid-cols-2 sm:grid-cols-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-300">Hora de Abertura</label>
+                        <input id="cfg-hora-abertura" name="hora_abertura" type="time" class="glass-input mt-1 w-full rounded-lg px-2.5 py-1.5 text-xs" />
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-300">Hora de Fechamento</label>
+                        <input id="cfg-hora-fechamento" name="hora_fechamento" type="time" class="glass-input mt-1 w-full rounded-lg px-2.5 py-1.5 text-xs" />
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-300">Início do Almoço</label>
+                        <input id="cfg-almoco-inicio" name="almoco_inicio" type="time" class="glass-input mt-1 w-full rounded-lg px-2.5 py-1.5 text-xs" />
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-300">Fim do Almoço</label>
+                        <input id="cfg-almoco-fim" name="almoco_fim" type="time" class="glass-input mt-1 w-full rounded-lg px-2.5 py-1.5 text-xs" />
+                    </div>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-300">Duração de cada atendimento</label>
+                        <select id="cfg-duracao" name="duracao_minutos" class="glass-input mt-1 w-full rounded-lg px-2.5 py-2 text-xs">
+                            <option value="30">30 minutos</option>
+                            <option value="45">45 minutos</option>
+                            <option value="60">1 hora (padrão)</option>
+                            <option value="90">1 hora e 30 minutos</option>
+                            <option value="120">2 horas</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-300 mb-1">Dias que o comércio atende</label>
+                        <div class="flex flex-wrap gap-2 text-[10px]">
+                            <label class="inline-flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-white/10 cursor-pointer">
+                                <input type="checkbox" value="0" class="cfg-dia rounded"> Seg
+                            </label>
+                            <label class="inline-flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-white/10 cursor-pointer">
+                                <input type="checkbox" value="1" class="cfg-dia rounded"> Ter
+                            </label>
+                            <label class="inline-flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-white/10 cursor-pointer">
+                                <input type="checkbox" value="2" class="cfg-dia rounded"> Qua
+                            </label>
+                            <label class="inline-flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-white/10 cursor-pointer">
+                                <input type="checkbox" value="3" class="cfg-dia rounded"> Qui
+                            </label>
+                            <label class="inline-flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-white/10 cursor-pointer">
+                                <input type="checkbox" value="4" class="cfg-dia rounded"> Sex
+                            </label>
+                            <label class="inline-flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-white/10 cursor-pointer">
+                                <input type="checkbox" value="5" class="cfg-dia rounded"> Sáb
+                            </label>
+                            <label class="inline-flex items-center gap-1 bg-white/5 px-2 py-1 rounded border border-white/10 cursor-pointer">
+                                <input type="checkbox" value="6" class="cfg-dia rounded"> Dom
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="comercio-msg-feedback" class="hidden rounded-xl p-3 text-xs font-bold"></div>
+
+            <div class="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button type="button" onclick="closeComercioModal()" class="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-300 hover:bg-white/5">Cancelar</button>
+                <button id="comercio-save-btn" type="submit" class="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/30">Salvar Configurações</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
     const agendaEnabled = { value: false };
     const agendaStatus = document.getElementById('agenda-status');
@@ -134,6 +273,20 @@
     let currentCalendarDays = [];
     let selectedAppointmentDate = '';
     let selectedAppointmentTime = '';
+    const scheduledMessageDateTimeInput = document.querySelector('#scheduled-message-form [name="data_hora"]');
+
+    function updateScheduledMessageDateTimeMin() {
+        const minimumTimestamp = Math.ceil((Date.now() + 2 * 60 * 1000) / 60000) * 60000;
+        const minimumDate = new Date(minimumTimestamp);
+        const pad = (value) => String(value).padStart(2, '0');
+        scheduledMessageDateTimeInput.min = [
+            `${minimumDate.getFullYear()}-${pad(minimumDate.getMonth() + 1)}-${pad(minimumDate.getDate())}`,
+            `${pad(minimumDate.getHours())}:${pad(minimumDate.getMinutes())}`
+        ].join('T');
+    }
+
+    updateScheduledMessageDateTimeMin();
+    window.setInterval(updateScheduledMessageDateTimeMin, 30000);
 
     function escapeAgendaHtml(value) {
         return String(value || '').replace(/[&<>"']/g, (character) => ({
@@ -151,10 +304,46 @@
         agendaError.classList.remove('hidden');
     }
 
+    let currentSelectedTenantId = sessionStorage.getItem('admin_selected_tenant_id') || '';
+    let adminTenantList = [];
+
+    async function initAdminTenants() {
+        const select = document.getElementById('admin-tenant-selector');
+        if (!select) return;
+        try {
+            const list = await agendaRequest('/api/atendimento/agenda/tenants');
+            adminTenantList = list;
+            const renderTenantOptions = (query = '') => {
+                const normalized = String(query || '').trim().toLocaleLowerCase();
+                const filtered = adminTenantList.filter(t => !normalized || String(t.nome).toLocaleLowerCase().includes(normalized));
+                select.innerHTML = '<option value="">(Padrão / Todas)</option>' +
+                    filtered.map(t => `<option value="${t.id}">${escapeAgendaHtml(t.nome)} — ${t.enabled ? 'Agenda ativa' : 'Agenda desativada'}</option>`).join('');
+                if (currentSelectedTenantId && filtered.some(t => String(t.id) === String(currentSelectedTenantId))) {
+                    select.value = currentSelectedTenantId;
+                }
+            };
+            renderTenantOptions();
+            document.getElementById('admin-tenant-search')?.addEventListener('input', (event) => renderTenantOptions(event.target.value));
+        } catch (e) {
+            console.error('Erro ao carregar empresas para admin:', e);
+        }
+    }
+
+    async function onAdminTenantChange(val) {
+        currentSelectedTenantId = val;
+        sessionStorage.setItem('admin_selected_tenant_id', val);
+        await loadAgenda();
+        await loadAppointmentCalendar();
+    }
+
     async function agendaRequest(url, options = {}) {
+        const headers = {'Content-Type': 'application/json', ...(options.headers || {})};
+        if (currentSelectedTenantId) {
+            headers['X-Tenant-Id'] = currentSelectedTenantId;
+        }
         const response = await fetch(url, {
             credentials: 'include',
-            headers: {'Content-Type': 'application/json', ...(options.headers || {})},
+            headers: headers,
             ...options
         });
         const responseText = await response.text();
@@ -299,6 +488,13 @@
                 {signal: controller.signal}
             );
             renderAppointmentCalendar(data);
+            if (data?.settings) {
+                const rulesEl = document.getElementById('appointment-rules-text');
+                if (rulesEl) {
+                    const almoco = (data.settings.break_start && data.settings.break_end) ? ` (pausa ${data.settings.break_start} às ${data.settings.break_end})` : '';
+                    rulesEl.textContent = `${data.settings.estabelecimento_nome || 'Estabelecimento'}: das ${data.settings.opening_time} às ${data.settings.closing_time}${almoco}. Vagas de ${data.settings.duration_minutes} min.`;
+                }
+            }
             retryButton.classList.add('hidden');
         } catch (error) {
             monthTitle.textContent = 'Calendário indisponível';
@@ -395,10 +591,14 @@
         try {
             await agendaRequest('/api/atendimento/agenda/enabled', {
                 method: 'POST',
-                body: JSON.stringify({enabled: nextEnabled})
+                body: JSON.stringify({
+                    enabled: nextEnabled,
+                    tenant_id: currentSelectedTenantId ? Number(currentSelectedTenantId) : null
+                })
             });
             agendaError.classList.add('hidden');
             await loadAgenda();
+            await loadAppointmentCalendar();
         } catch (error) {
             showAgendaError(error.message);
         }
@@ -408,6 +608,14 @@
         try {
             if (endpoint.endsWith('/appointments') && !form.elements.data_hora.value) {
                 throw new Error('Escolha um dia e um horário disponível no calendário.');
+            }
+            if (endpoint.endsWith('/messages')) {
+                updateScheduledMessageDateTimeMin();
+                const scheduledAt = new Date(form.elements.data_hora.value);
+                const earliestAllowed = new Date(form.elements.data_hora.min);
+                if (Number.isNaN(scheduledAt.getTime()) || scheduledAt < earliestAllowed) {
+                    throw new Error('Escolha uma data e horário com pelo menos 2 minutos de antecedência.');
+                }
             }
             const payload = Object.fromEntries(new FormData(form).entries());
             await agendaRequest(endpoint, {method: 'POST', body: JSON.stringify(payload)});
@@ -453,6 +661,113 @@
         event.preventDefault();
         submitAgendaForm(event.currentTarget, '/api/atendimento/agenda/messages');
     });
+    const comercioModal = document.getElementById('comercio-modal');
+    async function openComercioModal() {
+        if (!comercioModal) return;
+        comercioModal.classList.remove('hidden');
+        comercioModal.classList.add('flex');
+        const feedback = document.getElementById('comercio-msg-feedback');
+        if (feedback) feedback.className = 'hidden';
+        try {
+            const url = currentSelectedTenantId
+                ? `/api/atendimento/agenda/config?tenant_id=${currentSelectedTenantId}`
+                : '/api/atendimento/agenda/config';
+            const data = await agendaRequest(url);
+            const nomeEl = document.getElementById('cfg-nome');
+            const bvEl = document.getElementById('cfg-boas-vindas');
+            const servEl = document.getElementById('cfg-servicos');
+            const endEl = document.getElementById('cfg-endereco');
+            const horInfoEl = document.getElementById('cfg-horarios-info');
+            const habEl = document.getElementById('cfg-hora-abertura');
+            const hfeEl = document.getElementById('cfg-hora-fechamento');
+            const almIniEl = document.getElementById('cfg-almoco-inicio');
+            const almFimEl = document.getElementById('cfg-almoco-fim');
+            const durEl = document.getElementById('cfg-duracao');
+            const enabledEl = document.getElementById('cfg-enabled');
+
+            if (enabledEl) enabledEl.checked = Boolean(data.enabled);
+            if (nomeEl) nomeEl.value = data.estabelecimento_nome || '';
+            if (bvEl) bvEl.value = data.mensagem_boas_vindas || '';
+            if (servEl) servEl.value = data.servicos_precos || '';
+            if (endEl) endEl.value = data.endereco || '';
+            if (horInfoEl) horInfoEl.value = data.horarios_info || '';
+            if (habEl) habEl.value = data.hora_abertura || '08:00';
+            if (hfeEl) hfeEl.value = data.hora_fechamento || '18:00';
+            if (almIniEl) almIniEl.value = data.almoco_inicio || '12:00';
+            if (almFimEl) almFimEl.value = data.almoco_fim || '13:00';
+            if (durEl) durEl.value = String(data.duracao_minutos || 60);
+
+            const dias = Array.isArray(data.dias_semana) ? data.dias_semana : [0, 1, 2, 3, 4, 5];
+            document.querySelectorAll('.cfg-dia').forEach(chk => {
+                chk.checked = dias.includes(Number(chk.value));
+            });
+        } catch (e) {
+            console.error('Erro ao carregar configurações do comércio:', e);
+        }
+    }
+
+    function closeComercioModal() {
+        if (!comercioModal) return;
+        comercioModal.classList.add('hidden');
+        comercioModal.classList.remove('flex');
+    }
+
+    document.getElementById('comercio-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('comercio-save-btn');
+        const feedback = document.getElementById('comercio-msg-feedback');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Salvando...';
+        }
+        
+        try {
+            const dias_semana = Array.from(document.querySelectorAll('.cfg-dia:checked')).map(c => Number(c.value));
+            const payload = {
+                empresa_atendimento_id: currentSelectedTenantId ? Number(currentSelectedTenantId) : null,
+                enabled: Boolean(document.getElementById('cfg-enabled')?.checked),
+                estabelecimento_nome: document.getElementById('cfg-nome')?.value || '',
+                mensagem_boas_vindas: document.getElementById('cfg-boas-vindas')?.value || '',
+                servicos_precos: document.getElementById('cfg-servicos')?.value || '',
+                endereco: document.getElementById('cfg-endereco')?.value || '',
+                horarios_info: document.getElementById('cfg-horarios-info')?.value || '',
+                hora_abertura: document.getElementById('cfg-hora-abertura')?.value || '08:00',
+                hora_fechamento: document.getElementById('cfg-hora-fechamento')?.value || '18:00',
+                almoco_inicio: document.getElementById('cfg-almoco-inicio')?.value || '12:00',
+                almoco_fim: document.getElementById('cfg-almoco-fim')?.value || '13:00',
+                duracao_minutos: Number(document.getElementById('cfg-duracao')?.value || 60),
+                dias_semana: dias_semana
+            };
+
+            await agendaRequest('/api/atendimento/agenda/config', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            if (feedback) {
+                feedback.className = 'rounded-xl p-3 text-xs font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30';
+                feedback.textContent = '✓ Configurações salvas com sucesso! As novas regras já estão ativas.';
+            }
+
+            await loadAgenda();
+            await loadAppointmentCalendar();
+            setTimeout(() => {
+                closeComercioModal();
+            }, 1000);
+        } catch (err) {
+            if (feedback) {
+                feedback.className = 'rounded-xl p-3 text-xs font-bold bg-rose-500/20 text-rose-200 border border-rose-500/30';
+                feedback.textContent = 'Erro ao salvar: ' + err.message;
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Salvar Configurações';
+            }
+        }
+    });
+
+    initAdminTenants();
     loadAgenda().catch((error) => showAgendaError(error.message));
     loadAgendaInstances();
     loadAppointmentCalendar().catch((error) => showAgendaError(error.message));
