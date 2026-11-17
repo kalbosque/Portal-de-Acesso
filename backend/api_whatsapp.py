@@ -1261,7 +1261,28 @@ def is_tauri_admin(request: Request) -> bool:
         if not user:
             return False
         identities = {str(user.username or "").strip().lower(), str(user.email or "").strip().lower()}
-        return bool(identities & {item.lower() for item in TAURI_ALLOWED_USERS})
+        if identities & {item.lower() for item in TAURI_ALLOWED_USERS}:
+            return True
+
+        # Administrador da empresa também pode vincular o aparelho da própria empresa.
+        if get_signed_cookie(request, "user_role") == "cliente_atendimento":
+            try:
+                context = resolve_context(request)
+                if context.tenant_id is None:
+                    return False
+                with Session(engine) as session:
+                    row = session.exec(text("""
+                        SELECT 1
+                        FROM usuarios_empresas_atendimento
+                        WHERE empresa_atendimento_id = :tenant_id
+                          AND usuario_id = :user_id
+                          AND papel = 'tenant_admin'
+                          AND ativo = TRUE
+                    """).bindparams(tenant_id=context.tenant_id, user_id=int(user_id))).first()
+                return bool(row)
+            except (HTTPException, TypeError, ValueError):
+                return False
+        return False
     except (TypeError, ValueError):
         return False
 
