@@ -445,14 +445,18 @@ def get_agenda_tenants(request: Request):
     api_whatsapp._require_atendimento_access(request)
     with Session(engine) as session:
         rows = session.exec(text("""
-            SELECT e.id, e.nome, COALESCE(c.enabled, FALSE) AS agenda_enabled
+            SELECT e.id, e.nome, e.status, COALESCE(c.enabled, FALSE) AS agenda_enabled
             FROM empresas_atendimento e
             LEFT JOIN atendimento_agenda_config c ON c.empresa_atendimento_id = e.id
-            WHERE e.status = 'ativa'
             ORDER BY e.nome
         """)).all()
         return [
-            {"id": int(r[0]), "nome": str(r[1]), "enabled": bool(r[2])}
+            {
+                "id": int(r[0]),
+                "nome": str(r[1]),
+                "status": str(r[2] or "inativa"),
+                "enabled": bool(r[3]),
+            }
             for r in rows
         ]
 

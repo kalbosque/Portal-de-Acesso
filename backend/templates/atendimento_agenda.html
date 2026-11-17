@@ -317,7 +317,7 @@
                 const normalized = String(query || '').trim().toLocaleLowerCase();
                 const filtered = adminTenantList.filter(t => !normalized || String(t.nome).toLocaleLowerCase().includes(normalized));
                 select.innerHTML = '<option value="">(Padrão / Todas)</option>' +
-                    filtered.map(t => `<option value="${t.id}">${escapeAgendaHtml(t.nome)} — ${t.enabled ? 'Agenda ativa' : 'Agenda desativada'}</option>`).join('');
+                    filtered.map(t => `<option value="${t.id}">${escapeAgendaHtml(t.nome)} — ${t.status === 'ativa' ? 'Empresa ativa' : 'Empresa inativa'} · ${t.enabled ? 'Agenda ativa' : 'Agenda desativada'}</option>`).join('');
                 if (currentSelectedTenantId && filtered.some(t => String(t.id) === String(currentSelectedTenantId))) {
                     select.value = currentSelectedTenantId;
                 }
