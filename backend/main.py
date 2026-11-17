@@ -3916,6 +3916,7 @@ async def view_atendimento_agenda(request: Request):
             "user_role": get_signed_cookie(request, "user_role", "operator"),
             "user_name": get_signed_cookie(request, "user_name", ""),
             "agenda_enabled": agenda_enabled,
+            "can_manage_agenda": can_manage_agenda,
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
