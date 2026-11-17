@@ -1228,6 +1228,19 @@ def _require_atendimento_access(request: Request):
         raise HTTPException(status_code=403, detail="Acesso negado: permissão 'Atendimento' ou 'Suporte' necessária")
 
 
+def _require_atendimento_access(request: Request):
+    """Permite a Central somente ao admin principal e contas da Central."""
+    user_id = get_signed_cookie(request, "user_id")
+    role = get_signed_cookie(request, "user_role")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    if role == "admin":
+        return
+    if role != "cliente_atendimento":
+        raise HTTPException(status_code=403, detail="Este usuário não possui acesso à Central de Atendimento")
+    resolve_context(request)
+
+
 def _require_admin(request: Request):
     user_role = get_signed_cookie(request, "user_role")
     if user_role != "admin":

@@ -9,7 +9,7 @@ from typing import Optional, List
 from urllib.parse import quote
 from fastapi import FastAPI, Header, HTTPException, Request, BackgroundTasks, Form, UploadFile, File
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -74,6 +74,28 @@ app = FastAPI(title=APP_CONFIG.get("APP_NAME", "PrintDash"))
 async def restrict_study_accounts(request: Request, call_next):
     """Keep study-only accounts inside the independent study area."""
     path = request.url.path
+    user_id = get_signed_cookie(request, "user_id")
+    user_role = get_signed_cookie(request, "user_role")
+
+    if user_id and user_role == "cliente_atendimento":
+        attendance_paths = (
+            "/central-atendimento", "/atendimento", "/api/atendimento/",
+            "/api/whatsapp/", "/api/auth/", "/static", "/uploads",
+        )
+        if not path.startswith(attendance_paths):
+            return RedirectResponse(url="/central-atendimento", status_code=303)
+
+    if user_id and user_role not in ("admin", "cliente_atendimento"):
+        protected_attendance_path = (
+            path.startswith("/central-atendimento")
+            or path.startswith("/atendimento")
+            or path.startswith("/api/atendimento/")
+            or path.startswith("/api/whatsapp/")
+        )
+        if protected_attendance_path:
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "Este usuário não possui acesso à Central de Atendimento."}, status_code=403)
+            return RedirectResponse(url="/chamados", status_code=303)
     if path.startswith("/estudos") and path != "/estudos/login":
         user_id = request.cookies.get("user_id")
         study_token = request.cookies.get("study_access")
@@ -3749,6 +3771,20 @@ def _can_access_atendimento(request: Request) -> bool:
         perms = normalize_permissions(json.loads(raw_perms))
         return "Atendimento" in perms or "Suporte" in perms
     except Exception:
+        return False
+
+
+def _can_access_atendimento(request: Request) -> bool:
+    """Permite somente o admin principal e contas criadas na Central."""
+    role = get_signed_cookie(request, "user_role")
+    if role == "admin":
+        return True
+    if role != "cliente_atendimento":
+        return False
+    try:
+        resolve_context(request)
+        return True
+    except HTTPException:
         return False
 
 

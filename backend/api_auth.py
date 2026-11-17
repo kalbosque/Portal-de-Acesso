@@ -146,6 +146,12 @@ async def login(
             if not verify_password(password, user.password_hash) and not temp_valid:
                 return JSONResponse({"success": False, "detail": "E-mail/usuario ou senha incorretos."}, status_code=401)
 
+            if user.role == "cliente_atendimento" and intent != "atendimento":
+                return JSONResponse(
+                    {"success": False, "detail": "Esta conta é exclusiva da Central de Atendimento."},
+                    status_code=403,
+                )
+
             study_token = None
             if intent == "estudos":
                 if not _is_study_account_allowed(user):
@@ -174,7 +180,7 @@ async def login(
             if intent == "estudos":
                 redirect = "/estudos"
             elif intent == "atendimento":
-                if user.role != "admin" and "Atendimento" not in user_perms and "Suporte" not in user_perms:
+                if user.role not in ("admin", "cliente_atendimento"):
                     return JSONResponse({"success": False, "detail": "Este usuário não possui permissão para Atendimento."}, status_code=403)
                 if desktop_mode:
                     redirect = "/central-atendimento?desktop=1"
