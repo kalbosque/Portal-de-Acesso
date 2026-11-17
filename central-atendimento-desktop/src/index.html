@@ -64,6 +64,7 @@
         if (
           stored &&
           (/trycloudflare\.com|ngrok-free\.dev|crust-backroom-jolt|servidor-xml\.taildbf5af\.ts\.net/i.test(stored) ||
+           stored.includes('portaldoacessos.taildbf5af.ts.net') ||
            (stored.includes('portaldoacessos.taildb5af5.ts.net') && !stored.includes(':8443')))
         ) {
           localStorage.setItem(SERVER_KEY, DEFAULT_SERVER);
