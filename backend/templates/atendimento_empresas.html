@@ -166,12 +166,22 @@
                 <input id="editarUsername" name="username" required placeholder="Usuário de acesso" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm">
                 <select id="editarPapel" name="papel" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm"><option value="operador">Operador</option><option value="tenant_admin">Administrador da empresa</option></select>
                 <input id="editarPassword" name="password" type="password" minlength="6" placeholder="Nova senha (opcional)" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm">
+                <label class="block"><span class="mb-1 block text-xs text-slate-400">Empresa</span><input id="editarEmpresaNome" type="text" readonly class="w-full rounded-lg border border-indigo-400/30 bg-slate-950 px-3 py-2.5 text-sm text-indigo-200" placeholder="Empresa do atendimento"></label>
                 <label class="sm:col-span-2"><span class="mb-1 block text-xs text-slate-400">Foto do usuário</span><input id="editarFoto" name="foto" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-xs text-slate-300"></label>
                 <div class="flex justify-end gap-2 sm:col-span-2"><button type="button" onclick="fecharModalUsuario()" class="rounded-lg border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button class="rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-500">Salvar alterações</button></div>
             </form>
         </div>
     </div>
     <script>
+        const editarEmpresaNome = document.getElementById('editarEmpresaNome');
+        const modalEditarUsuario = document.getElementById('modalEditarUsuario');
+        if (editarEmpresaNome && modalEditarUsuario) {
+            new MutationObserver(() => {
+                if (modalEditarUsuario.classList.contains('flex')) {
+                    editarEmpresaNome.value = document.getElementById('empresaNome')?.textContent?.trim() || '';
+                }
+            }).observe(modalEditarUsuario, {attributes: true, attributeFilter: ['class']});
+        }
         // Disponibiliza o fechamento para os dois tipos de administrador.
         window.fecharModalUsuario = function () {
             const modal = document.getElementById('modalEditarUsuario');
