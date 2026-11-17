@@ -1068,7 +1068,8 @@
     const isReception = {{ 'true' if is_reception else 'false' }};
     const currentTenantId = {% if current_tenant_id %}{{ current_tenant_id }}{% else %}null{% endif %};
     const agendaEnabled = {{ 'true' if agenda_enabled|default(false) else 'false' }};
-    if (!agendaEnabled) {
+    const canManageAgenda = {{ 'true' if can_manage_agenda|default(false) else 'false' }};
+    if (!agendaEnabled && !canManageAgenda) {
         document.querySelectorAll('a[href*="/central-atendimento/agendamentos"], button[onclick*="/central-atendimento/agendamentos"]').forEach((element) => element.remove());
     }
 

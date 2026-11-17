@@ -3831,6 +3831,7 @@ async def view_central_atendimento(request: Request):
         return RedirectResponse(url="/")
     can_edit_identity = api_whatsapp._can_edit_identity(request)
     can_manage_company = user_role == "admin" or (user_role == "cliente_atendimento" and can_edit_identity)
+    can_manage_agenda = user_role == "admin" or can_edit_identity
 
     current_tenant_id = None
     if os.getenv("ATENDIMENTO_MULTIEMPRESA_ENABLED", "false").lower() in ("1", "true", "yes", "on") and user_role != "admin":
@@ -3871,6 +3872,7 @@ async def view_central_atendimento(request: Request):
             "atendimento_multiempresa_enabled": os.getenv("ATENDIMENTO_MULTIEMPRESA_ENABLED", "false").lower() in ("1", "true", "yes", "on"),
             "current_tenant_id": current_tenant_id,
             "agenda_enabled": agenda_enabled,
+            "can_manage_agenda": can_manage_agenda,
         }
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -3895,7 +3897,8 @@ async def view_atendimento_agenda(request: Request):
             agenda_tenant_id = resolve_context(request).tenant_id
         except Exception:
             agenda_tenant_id = None
-    if not api_atendimento_agenda.get_agenda_settings(tenant_id=agenda_tenant_id).get("enabled", False):
+    can_manage_agenda = get_signed_cookie(request, "user_role") == "admin" or api_whatsapp._can_edit_identity(request)
+    if not api_atendimento_agenda.get_agenda_settings(tenant_id=agenda_tenant_id).get("enabled", False) and not can_manage_agenda:
         return RedirectResponse(url="/central-atendimento")
 
     config = load_app_config()
