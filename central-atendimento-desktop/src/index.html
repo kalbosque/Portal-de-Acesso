@@ -55,7 +55,7 @@
       // Mantém o comportamento anterior: abre automaticamente no servidor
       // atual quando ainda não existe uma configuração salva.
       // Servidor padrão da Central de Atendimento
-      const DEFAULT_SERVER = 'https://portaldoacessos.taildb5af5.ts.net:8443';
+      const DEFAULT_SERVER = 'https://portaldoacessos.taildbf5af.ts.net:8443';
       const STARTUP_DELAY_MS = 200;
       let redirectTimer;
 
@@ -64,8 +64,8 @@
         if (
           stored &&
           (/trycloudflare\.com|ngrok-free\.dev|crust-backroom-jolt|servidor-xml\.taildbf5af\.ts\.net/i.test(stored) ||
-           stored.includes('portaldoacessos.taildbf5af.ts.net') ||
-           (stored.includes('portaldoacessos.taildb5af5.ts.net') && !stored.includes(':8443')))
+           stored.includes('portaldoacessos.taildb5af5.ts.net') ||
+           (stored.includes('portaldoacessos.taildbf5af.ts.net') && !stored.includes(':8443')))
         ) {
           localStorage.setItem(SERVER_KEY, DEFAULT_SERVER);
           return DEFAULT_SERVER;
