@@ -586,7 +586,7 @@
     </div>
     <div class="flex items-center gap-2">
         <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-emerald-300">Conversas</a>
-        <a href="/central-atendimento/agendamentos" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-indigo-300 transition hover:bg-indigo-500/10">Agendamentos</a>
+        {% if agenda_enabled|default(false) %}<a href="/central-atendimento/agendamentos" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-indigo-300 transition hover:bg-indigo-500/10">Agendamentos</a>{% endif %}
         {% if is_admin or can_edit_identity %}
         <button type="button" onclick="openTauriStatusModal()" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-amber-300 transition hover:bg-amber-500/10">Status</button>
         <a href="/central-atendimento/configuracoes" class="rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 transition hover:bg-white/5 hover:text-white">Conexão e configurações</a>
@@ -690,10 +690,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     Lista de Contatos
                 </button>
-                <button type="button" onclick="window.location.href='/central-atendimento/agendamentos?desktop=1'" class="qm-item">
+                {% if agenda_enabled|default(false) %}<button type="button" onclick="window.location.href='/central-atendimento/agendamentos?desktop=1'" class="qm-item">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h3M8 17h3"/></svg>
                     Agendamentos
-                </button>
+                </button>{% endif %}
 
                 <div class="qm-divider"></div>
 
@@ -1069,7 +1069,7 @@
     const currentTenantId = {% if current_tenant_id %}{{ current_tenant_id }}{% else %}null{% endif %};
     const agendaEnabled = {{ 'true' if agenda_enabled|default(false) else 'false' }};
     const canManageAgenda = {{ 'true' if can_manage_agenda|default(false) else 'false' }};
-    if (!agendaEnabled && !canManageAgenda) {
+    if (!agendaEnabled) {
         document.querySelectorAll('a[href*="/central-atendimento/agendamentos"], button[onclick*="/central-atendimento/agendamentos"]').forEach((element) => element.remove());
     }
 

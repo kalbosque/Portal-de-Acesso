@@ -3898,7 +3898,8 @@ async def view_atendimento_agenda(request: Request):
         except Exception:
             agenda_tenant_id = None
     can_manage_agenda = get_signed_cookie(request, "user_role") == "admin" or api_whatsapp._can_edit_identity(request)
-    if not api_atendimento_agenda.get_agenda_settings(tenant_id=agenda_tenant_id).get("enabled", False) and not can_manage_agenda:
+    agenda_enabled = bool(api_atendimento_agenda.get_agenda_settings(tenant_id=agenda_tenant_id).get("enabled", False))
+    if not agenda_enabled and not can_manage_agenda:
         return RedirectResponse(url="/central-atendimento")
 
     config = load_app_config()
@@ -3914,6 +3915,7 @@ async def view_atendimento_agenda(request: Request):
             "desktop_mode": desktop_mode,
             "user_role": get_signed_cookie(request, "user_role", "operator"),
             "user_name": get_signed_cookie(request, "user_name", ""),
+            "agenda_enabled": agenda_enabled,
         },
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
