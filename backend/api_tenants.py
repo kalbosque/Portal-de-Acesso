@@ -265,7 +265,9 @@ def update_company_user_status(company_id: int, user_id: int, request: Request, 
 @router.post("/companies/{company_id}/users/{user_id}/remove")
 def remove_company_user(company_id: int, user_id: int, request: Request):
     """Remove o usuário somente desta empresa, preservando a conta geral."""
-    _require_company_manager(request, company_id)
+    is_global = _require_company_manager(request, company_id)
+    if not is_global and str(get_signed_cookie(request, "user_id")) == str(user_id):
+        raise HTTPException(status_code=400, detail="O administrador da empresa não pode excluir a própria conta")
     with Session(engine) as session:
         result = session.exec(text("""
             UPDATE usuarios_empresas_atendimento SET ativo = FALSE

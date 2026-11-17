@@ -52,6 +52,31 @@
             window.editarUsuarioTenant = function (userId) { const user = window.tenantUsersCache?.[userId]; if (!user) return; if (!window.tenantEditBound) { document.getElementById('formEditarUsuario').addEventListener('submit', async e => { e.preventDefault(); const editingUserId = document.getElementById('editarUsuarioId').value; try { await api(`/api/atendimento/tenants/companies/${companyId}/users/${editingUserId}/edit`, {method:'POST', body:new FormData(e.target)}); document.getElementById('modalEditarUsuario').classList.add('hidden'); document.getElementById('modalEditarUsuario').classList.remove('flex'); await load(); } catch (error) { show(error.message, false); } }); window.tenantEditBound = true; } document.getElementById('editarEmpresaId').value = companyId; document.getElementById('editarUsuarioId').value = userId; document.getElementById('editarNome').value = user.nome || ''; document.getElementById('editarEmail').value = user.email || ''; document.getElementById('editarUsername').value = user.username || ''; document.getElementById('editarPapel').value = user.papel || 'operador'; document.getElementById('editarPassword').value = ''; document.getElementById('editarFoto').value = ''; document.getElementById('modalEditarUsuario').classList.remove('hidden'); document.getElementById('modalEditarUsuario').classList.add('flex'); };
             document.getElementById('tenantSetor').onsubmit = async e => { e.preventDefault(); try { await api(`/api/atendimento/tenants/companies/${companyId}/sectors`, {method:'POST', body:new FormData(e.target)}); e.target.reset(); show('Setor criado.'); await load(); } catch (err) { show(err.message, false); } };
             document.getElementById('tenantUsuario').onsubmit = async e => { e.preventDefault(); try { await api(`/api/atendimento/tenants/companies/${companyId}/users/create`, {method:'POST', body:new FormData(e.target)}); e.target.reset(); show('Usuário criado e vinculado à empresa.'); await load(); } catch (err) { show(err.message, false); } };
+            window.removerUsuarioTenant = async function (userId) {
+              if (!confirm('Excluir este usuário da empresa? A conta não será apagada do sistema.')) return;
+              try {
+                await api(`/api/atendimento/tenants/companies/${companyId}/users/${userId}/remove`, {method:'POST'});
+                show('Usuário removido da empresa.');
+                await load();
+              } catch (error) { show(error.message, false); }
+            };
+            const tenantUsersContainer = document.getElementById('tenantUsuarios');
+            if (tenantUsersContainer) {
+              new MutationObserver(() => {
+                tenantUsersContainer.querySelectorAll(':scope > div').forEach(card => {
+                  const edit = card.querySelector('button[onclick^="editarUsuarioTenant"]');
+                  if (!edit || card.querySelector('.tenant-remove-user')) return;
+                  const match = String(edit.getAttribute('onclick') || '').match(/editarUsuarioTenant\((\d+)\)/);
+                  if (!match) return;
+                  const remove = document.createElement('button');
+                  remove.type = 'button';
+                  remove.className = 'tenant-remove-user rounded-lg bg-rose-500/15 px-2 py-1 text-[10px] font-bold text-rose-300';
+                  remove.textContent = 'Excluir';
+                  remove.onclick = () => window.removerUsuarioTenant(Number(match[1]));
+                  edit.parentElement.appendChild(remove);
+                });
+              }).observe(tenantUsersContainer, {childList: true});
+            }
             try { await load(); } catch (err) { show(err.message, false); }
           })();
         </script>
