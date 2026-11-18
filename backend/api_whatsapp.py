@@ -3015,6 +3015,16 @@ async def _process_whatsapp_webhook_payload(
 
     configured_instances, _ = get_whatsapp_instances()
     configured_names = {str(item.get("instanceName")) for item in configured_instances}
+    try:
+        with Session(engine) as session:
+            tenant_names = session.exec(text("""
+                SELECT instance_name
+                FROM instancias_whatsapp_tenant
+                WHERE ativa = TRUE
+            """)).all()
+        configured_names.update(str(row[0]) for row in tenant_names if row[0])
+    except Exception as exc:
+        print(f"[Webhook] Nao foi possivel consultar instancias por empresa: {exc}")
     if str(instance_from_payload) not in configured_names:
         print(f"[Webhook] Mensagem rejeitada: instancia nao cadastrada '{instance_from_payload}'")
         return {"status": "ignored", "reason": "instance_not_configured"}
