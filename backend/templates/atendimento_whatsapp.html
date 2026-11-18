@@ -1612,7 +1612,7 @@
         // Notificação nativa do Windows via Tauri (funciona mesmo com app minimizado)
         if (isTauriApp) {
             // Evita que o Windows coalesça várias fotos idênticas do mesmo álbum.
-            const nativePreview = isMediaPreview ? `${preview}\u200b${++nativeAlertSequence}` : preview;
+            const nativePreview = `${preview}\u200b${++nativeAlertSequence}`;
             nativeNotificationQueue = nativeNotificationQueue
                 .catch(() => {})
                 .then(async () => {
