@@ -640,6 +640,22 @@ def get_evolution_api_endpoints(instance_name: Optional[str] = None):
         instance = valid_map[str(instance_name).strip().lower()]
     elif instance_name and instance_name in valid_instances:
         instance = instance_name
+    elif instance_name:
+        try:
+            with Session(engine) as session:
+                tenant_instance = session.exec(text("""
+                    SELECT instance_name
+                    FROM instancias_whatsapp_tenant
+                    WHERE LOWER(TRIM(instance_name)) = :instance_name AND ativa = TRUE
+                    LIMIT 1
+                """).bindparams(instance_name=str(instance_name).strip().lower())).first()
+            if tenant_instance:
+                instance = str(tenant_instance[0])
+            elif configured_default:
+                instance = configured_default
+        except Exception:
+            if configured_default:
+                instance = configured_default
     elif instance_name and configured_default:
         # Chamados antigos podem guardar o nome de uma instância removida.
         # Usa a instância atual para buscar fotos, grupos e contatos.
@@ -1298,9 +1314,16 @@ def list_whatsapp_instances(request: Request):
     instances, default_instance = get_whatsapp_instances()
     if atendimento_multiempresa_enabled() and get_signed_cookie(request, "user_role") != "admin":
         context = resolve_context(request)
-        instances = [item for item in instances if tenant_id_for_instance(item.get("instanceName")) == context.tenant_id]
-        if default_instance not in {item.get("instanceName") for item in instances}:
-            default_instance = instances[0].get("instanceName") if instances else None
+        with Session(engine) as session:
+            rows = session.exec(text("""
+                SELECT instance_name, label, padrao
+                FROM instancias_whatsapp_tenant
+                WHERE empresa_atendimento_id = :tenant_id AND ativa = TRUE
+                ORDER BY padrao DESC, label, instance_name
+            """).bindparams(tenant_id=context.tenant_id)).all()
+        instances = [{"instanceName": str(row[0]), "label": str(row[1] or row[0])} for row in rows]
+        default_row = next((row for row in rows if bool(row[2])), None)
+        default_instance = str(default_row[0]) if default_row else (instances[0]["instanceName"] if instances else None)
 
     # Para cada instância, tenta consultar o estado atual na Evolution API
     detailed = []
@@ -1408,7 +1431,10 @@ def save_whatsapp_instance_colors(request: Request, payload: dict = Body(...)):
 
 @router.post("/instances/save")
 def save_whatsapp_instances(request: Request, payload: dict = Body(...)):
-    _require_admin(request)
+    if get_signed_cookie(request, "user_role") == "admin":
+        _require_admin(request)
+    else:
+        _require_tauri_admin(request)
 
     raw_instances = payload.get("instances", [])
     default_instance = str(payload.get("default_instance", "") or "").strip()
@@ -1428,6 +1454,45 @@ def save_whatsapp_instances(request: Request, payload: dict = Body(...)):
 
     if default_instance and not any(i["instanceName"] == default_instance for i in instances):
         default_instance = ""
+
+    if get_signed_cookie(request, "user_role") != "admin":
+        context = resolve_context(request)
+        if context.tenant_id is None:
+            raise HTTPException(status_code=403, detail="Empresa não determinada para esta conexão.")
+        with Session(engine) as session:
+            for item in instances:
+                existing = session.exec(text("""
+                    SELECT id FROM instancias_whatsapp_tenant
+                    WHERE empresa_atendimento_id = :tenant_id
+                      AND LOWER(TRIM(instance_name)) = :instance_name
+                """).bindparams(
+                    tenant_id=context.tenant_id,
+                    instance_name=item["instanceName"].lower(),
+                )).first()
+                if existing:
+                    session.exec(text("""
+                        UPDATE instancias_whatsapp_tenant
+                        SET label = :label, ativa = TRUE
+                        WHERE id = :id
+                    """).bindparams(label=item["label"], id=existing[0]))
+                else:
+                    session.exec(text("""
+                        INSERT INTO instancias_whatsapp_tenant
+                            (empresa_atendimento_id, instance_name, label, padrao, ativa)
+                        VALUES (:tenant_id, :instance_name, :label, :is_default, TRUE)
+                    """).bindparams(
+                        tenant_id=context.tenant_id,
+                        instance_name=item["instanceName"],
+                        label=item["label"],
+                        is_default=item["instanceName"] == default_instance,
+                    ))
+            session.exec(text("""
+                UPDATE instancias_whatsapp_tenant
+                SET padrao = (instance_name = :default_instance)
+                WHERE empresa_atendimento_id = :tenant_id AND ativa = TRUE
+            """).bindparams(tenant_id=context.tenant_id, default_instance=default_instance))
+            session.commit()
+        return {"success": True, "instances": instances, "default_instance": default_instance}
 
     config = get_whatsapp_config()
     config["WHATSAPP_INSTANCES"] = instances
