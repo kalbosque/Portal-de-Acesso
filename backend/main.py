@@ -80,7 +80,7 @@ async def restrict_study_accounts(request: Request, call_next):
     if user_id and user_role == "cliente_atendimento":
         attendance_paths = (
             "/central-atendimento", "/atendimento", "/api/atendimento/",
-            "/api/whatsapp/", "/api/auth/", "/static", "/uploads",
+            "/api/whatsapp/", "/api/tickets/", "/api/auth/", "/static", "/uploads",
         )
         if not path.startswith(attendance_paths):
             return RedirectResponse(url="/central-atendimento", status_code=303)
@@ -90,6 +90,7 @@ async def restrict_study_accounts(request: Request, call_next):
             path.startswith("/central-atendimento")
             or path.startswith("/atendimento")
             or path.startswith("/api/atendimento/")
+            or path.startswith("/api/tickets/")
             or path.startswith("/api/whatsapp/")
         )
         if protected_attendance_path:
