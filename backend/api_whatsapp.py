@@ -1486,6 +1486,19 @@ def save_whatsapp_instances(request: Request, payload: dict = Body(...)):
                         label=item["label"],
                         is_default=item["instanceName"] == default_instance,
                     ))
+            keep_names = {item["instanceName"].lower() for item in instances}
+            tenant_rows = session.exec(text("""
+                SELECT id, instance_name
+                FROM instancias_whatsapp_tenant
+                WHERE empresa_atendimento_id = :tenant_id AND ativa = TRUE
+            """).bindparams(tenant_id=context.tenant_id)).all()
+            for row in tenant_rows:
+                if str(row[1]).lower() not in keep_names:
+                    session.exec(text("""
+                        UPDATE instancias_whatsapp_tenant
+                        SET ativa = FALSE, padrao = FALSE
+                        WHERE id = :id
+                    """).bindparams(id=row[0]))
             session.exec(text("""
                 UPDATE instancias_whatsapp_tenant
                 SET padrao = (instance_name = :default_instance)
@@ -2052,13 +2065,31 @@ def get_whatsapp_qrcode(request: Request, instance: Optional[str] = None):
 def disconnect_whatsapp(request: Request, instance: Optional[str] = None):
     _require_atendimento_access(request)
     _, user_role = _get_user(request)
-    if user_role != "admin":
-        raise HTTPException(status_code=403, detail="Acesso negado")
+    tenant_context = None
+    if user_role == "admin":
+        _require_admin(request)
+    else:
+        _require_tauri_admin(request)
+        tenant_context = resolve_context(request)
         
     base_url, wa_token, instance = get_evolution_api_endpoints(instance)
     if not base_url:
         raise HTTPException(status_code=400, detail="Evolution API não configurada.")
         
+    if tenant_context is not None:
+        with Session(engine) as session:
+            owned = session.exec(text("""
+                SELECT id FROM instancias_whatsapp_tenant
+                WHERE empresa_atendimento_id = :tenant_id
+                  AND LOWER(TRIM(instance_name)) = :instance_name
+                  AND ativa = TRUE
+            """).bindparams(
+                tenant_id=tenant_context.tenant_id,
+                instance_name=str(instance).lower(),
+            )).first()
+        if not owned:
+            raise HTTPException(status_code=404, detail="Aparelho nÃ£o pertence Ã  empresa atual.")
+
     url = f"{base_url}/instance/logout/{instance}"
     headers = {}
     if wa_token:
@@ -2112,17 +2143,28 @@ def disconnect_whatsapp(request: Request, instance: Optional[str] = None):
                         print(f"[WhatsApp] InstÃ¢ncia '{instance}' removida: {delete_resp.status_code}")
                     except requests.RequestException as delete_exc:
                         print(f"[WhatsApp] Aviso ao remover instÃ¢ncia '{instance}': {delete_exc}")
-                    # Remove da config
-                    config = get_whatsapp_config()
-                    instances = config.get("WHATSAPP_INSTANCES", [])
-                    if not isinstance(instances, list):
-                        instances = []
-                    new_instances = [i for i in instances if (i.get("instanceName") if isinstance(i, dict) else i) != instance]
-                    config["WHATSAPP_INSTANCES"] = new_instances
-                    # update default if needed
-                    if config.get("WHATSAPP_DEFAULT_INSTANCE") == instance:
-                        config["WHATSAPP_DEFAULT_INSTANCE"] = new_instances[0].get("instanceName") if new_instances else None
-                    save_whatsapp_config(config)
+                    if tenant_context is not None:
+                        with Session(engine) as session:
+                            session.exec(text("""
+                                UPDATE instancias_whatsapp_tenant
+                                SET ativa = FALSE, padrao = FALSE
+                                WHERE empresa_atendimento_id = :tenant_id
+                                  AND LOWER(TRIM(instance_name)) = :instance_name
+                            """).bindparams(
+                                tenant_id=tenant_context.tenant_id,
+                                instance_name=str(instance).lower(),
+                            ))
+                            session.commit()
+                    else:
+                        config = get_whatsapp_config()
+                        instances = config.get("WHATSAPP_INSTANCES", [])
+                        if not isinstance(instances, list):
+                            instances = []
+                        new_instances = [i for i in instances if (i.get("instanceName") if isinstance(i, dict) else i) != instance]
+                        config["WHATSAPP_INSTANCES"] = new_instances
+                        if config.get("WHATSAPP_DEFAULT_INSTANCE") == instance:
+                            config["WHATSAPP_DEFAULT_INSTANCE"] = new_instances[0].get("instanceName") if new_instances else None
+                        save_whatsapp_config(config)
                     _connected_map_cache["expires_at"] = 0
                     
                     return {"success": True}
