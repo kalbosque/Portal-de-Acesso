@@ -641,14 +641,31 @@ def attach_instance(
                     SET padrao = FALSE
                     WHERE empresa_atendimento_id = :company_id AND ativa = TRUE
                 """).bindparams(company_id=company_id))
-            session.exec(text("""
-                INSERT INTO instancias_whatsapp_tenant
-                    (empresa_atendimento_id, instance_name, label, padrao)
-                VALUES (:company_id, :instance_name, :label, :padrao)
-            """).bindparams(
-                company_id=company_id, instance_name=instance_name,
-                label=label, padrao=padrao,
-            ))
+            existing = session.exec(text("""
+                SELECT id, empresa_atendimento_id
+                FROM instancias_whatsapp_tenant
+                WHERE LOWER(TRIM(instance_name)) = LOWER(TRIM(:instance_name))
+                LIMIT 1
+            """).bindparams(instance_name=instance_name)).first()
+            if existing and int(existing[1]) != int(company_id):
+                raise HTTPException(status_code=409, detail="Esta instância já está vinculada a outra empresa")
+            if existing:
+                session.exec(text("""
+                    UPDATE instancias_whatsapp_tenant
+                    SET label = :label, padrao = :padrao, ativa = TRUE
+                    WHERE id = :id
+                """).bindparams(
+                    id=existing[0], label=label, padrao=padrao,
+                ))
+            else:
+                session.exec(text("""
+                    INSERT INTO instancias_whatsapp_tenant
+                        (empresa_atendimento_id, instance_name, label, padrao, ativa)
+                    VALUES (:company_id, :instance_name, :label, :padrao, TRUE)
+                """).bindparams(
+                    company_id=company_id, instance_name=instance_name,
+                    label=label, padrao=padrao,
+                ))
             session.commit()
         except Exception as exc:
             session.rollback()

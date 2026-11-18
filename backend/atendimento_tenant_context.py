@@ -72,11 +72,12 @@ def tenant_id_for_instance(instance_name: Optional[str]) -> Optional[int]:
     """Resolve a empresa da instância usada por um webhook do WhatsApp."""
     if not is_enabled() or not instance_name:
         return None
+    clean_name = str(instance_name).strip().lower()
     with Session(engine) as session:
         row = session.exec(text("""
             SELECT iw.empresa_atendimento_id
             FROM instancias_whatsapp_tenant iw
             JOIN empresas_atendimento e ON e.id = iw.empresa_atendimento_id
-            WHERE iw.instance_name = :instance_name AND iw.ativa = TRUE AND e.status = 'ativa'
-        """).bindparams(instance_name=instance_name)).first()
+            WHERE LOWER(TRIM(iw.instance_name)) = :instance_name AND iw.ativa = TRUE AND e.status = 'ativa'
+        """).bindparams(instance_name=clean_name)).first()
     return int(row[0]) if row else None

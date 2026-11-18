@@ -662,6 +662,20 @@
         <p>&copy; 2026 {{ config.APP_NAME }} - Todos os direitos reservados. Desenvolvido por Jose Calbosque.</p>
     </footer>
 
+    <!-- Botão Flutuante Inteligente Global de Rolagem (Alterna entre Subir e Descer) -->
+    <div id="globalScrollNav" class="fixed right-5 sm:right-6 bottom-[88px] sm:bottom-[96px] z-[60] transition-all duration-300 opacity-0 pointer-events-none" aria-label="Navegação rápida de rolagem">
+        <button type="button" id="btnScrollSmartGlobal" data-direction="down" title="Rolar para o final da página" aria-label="Rolar página" class="group flex h-12 w-12 items-center justify-center rounded-full bg-white text-slate-700 shadow-2xl shadow-black/35 border border-slate-200/90 hover:bg-slate-50 hover:scale-110 active:scale-95 focus:outline-none transition-all duration-200 cursor-pointer">
+            <!-- Ícone Descer (quando estiver no topo) -->
+            <svg id="globalIconScrollDown" class="h-6 w-6 transition-transform duration-200 group-hover:translate-y-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+            </svg>
+            <!-- Ícone Subir (quando estiver em baixo) -->
+            <svg id="globalIconScrollUp" class="hidden h-6 w-6 transition-transform duration-200 group-hover:-translate-y-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"></path>
+            </svg>
+        </button>
+    </div>
+
     <!-- Modal Editar Perfil -->
     <div id="modal-perfil" class="account-modal-overlay fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden animate-fade-in">
         <div class="account-modal-panel glass-panel w-full max-w-md rounded-[2.5rem] border border-white/10 overflow-hidden shadow-2xl animate-scale-in">
@@ -2208,5 +2222,67 @@
         })();
     </script>
     {% endif %}
+
+    <script>
+        (() => {
+            const nav = document.getElementById('globalScrollNav');
+            const btn = document.getElementById('btnScrollSmartGlobal');
+            const iconDown = document.getElementById('globalIconScrollDown');
+            const iconUp = document.getElementById('globalIconScrollUp');
+            if (!nav || !btn) return;
+
+            function updateScrollState() {
+                const scrollY = window.scrollY || document.documentElement.scrollTop;
+                const maxScroll = Math.max(0, (document.documentElement.scrollHeight || document.body.scrollHeight) - window.innerHeight);
+
+                if (maxScroll < 80) {
+                    nav.classList.remove('opacity-100', 'pointer-events-auto');
+                    nav.classList.add('opacity-0', 'pointer-events-none');
+                    return;
+                }
+
+                nav.classList.remove('opacity-0', 'pointer-events-none');
+                nav.classList.add('opacity-100', 'pointer-events-auto');
+
+                const threshold = Math.min(220, maxScroll * 0.35);
+                const isAtTop = scrollY < threshold;
+
+                if (isAtTop) {
+                    btn.setAttribute('data-direction', 'down');
+                    btn.setAttribute('title', 'Rolar para o final da página');
+                    btn.setAttribute('aria-label', 'Rolar para o final');
+                    iconDown?.classList.remove('hidden');
+                    iconUp?.classList.add('hidden');
+                } else {
+                    btn.setAttribute('data-direction', 'up');
+                    btn.setAttribute('title', 'Rolar para o topo');
+                    btn.setAttribute('aria-label', 'Rolar para o topo');
+                    iconDown?.classList.add('hidden');
+                    iconUp?.classList.remove('hidden');
+                }
+            }
+
+            window.updateGlobalScrollNav = updateScrollState;
+            window.addEventListener('scroll', updateScrollState, { passive: true });
+            window.addEventListener('resize', updateScrollState, { passive: true });
+            document.addEventListener('DOMContentLoaded', updateScrollState);
+            window.addEventListener('load', updateScrollState);
+
+            btn.addEventListener('click', () => {
+                const dir = btn.getAttribute('data-direction');
+                if (dir === 'down') {
+                    window.scrollTo({
+                        top: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
+                        behavior: 'smooth'
+                    });
+                } else {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            });
+
+            setTimeout(updateScrollState, 200);
+            setTimeout(updateScrollState, 800);
+        })();
+    </script>
 </body>
 </html>

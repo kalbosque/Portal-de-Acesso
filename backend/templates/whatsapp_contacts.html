@@ -29,7 +29,7 @@
                 <option value="">Inst&#226;ncia padr&#227;o</option>
             </select>
         </label>
-        <input id="contact-search" oninput="renderContacts()" placeholder="Buscar por nome ou telefone..." class="w-full max-w-md rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
+        <input id="contact-search" oninput="renderContacts(true)" placeholder="Buscar por nome ou telefone..." class="w-full max-w-md rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
         <span id="contact-count" class="text-xs text-slate-500"></span>
     </div>
     <div id="contacts-grid" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><div class="col-span-full py-20 text-center text-sm text-slate-500">Clique em sincronizar para carregar seus contatos.</div></div>
@@ -128,10 +128,22 @@ function normalizeImportedNumber(value) {
     if (!raw || raw.toLowerCase().includes('@lid') || raw.toLowerCase().includes('@g.us')) return '';
     return raw.split('@')[0].split(':')[0].replace(/\D/g, '');
 }
+let visibleCount = 60;
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text).replace(/[&<>"']/g, function(m) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+    });
+}
+
 function contactAvatar(c) {
     const initials = (c.name || 'WA').slice(0, 2).toUpperCase();
     const pictureUrl = c.profile_picture || `/api/whatsapp/contact/profile-picture?number=${encodeURIComponent(c.number || '')}&instance=${encodeURIComponent(c.instance || '')}`;
-    return c.number ? `<img src="${pictureUrl}" alt="" title="Clique para ampliar a foto" class="h-full w-full cursor-zoom-in rounded-full object-cover" onclick="event.stopPropagation(); openImagePreview(this.src)" onerror="this.replaceWith(Object.assign(document.createElement('span'), {textContent:'${initials}'}))">` : initials;
+    return `
+        <span class="text-xs font-black text-indigo-300 select-none">${escapeHtml(initials)}</span>
+        ${c.number ? `<img src="${pictureUrl}" loading="lazy" alt="" title="Clique para ampliar" class="absolute inset-0 h-full w-full cursor-zoom-in rounded-full object-cover opacity-0 transition-opacity duration-300" onload="this.classList.remove('opacity-0')" onerror="this.remove()" onclick="event.stopPropagation(); openImagePreview(this.src)">` : ''}
+    `;
 }
 async function importContactsFile(event) {
     const input = event.target;
@@ -172,15 +184,74 @@ function openNewContact() { document.getElementById('new-contact-modal').classLi
 function closeNewContact() { document.getElementById('new-contact-modal').classList.add('hidden'); document.getElementById('new-contact-modal').classList.remove('flex'); }
 async function saveNewContact(event) { event.preventDefault(); const res = await fetch('/api/whatsapp/contacts/local', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:document.getElementById('new-name').value,number:document.getElementById('new-number').value,company:document.getElementById('new-company').value,note:document.getElementById('new-note').value})}); if (!res.ok) { alert('Não foi possível salvar o contato.'); return; } closeNewContact(); await syncContacts(); }
 function addEditButtonsForSynced() { document.querySelectorAll('#contacts-grid > div').forEach((card, index) => { const contact = contacts.filter(c => `${c.name} ${c.number}`.toLowerCase().includes((document.getElementById('contact-search').value || '').toLowerCase()))[index]; if (!contact || contact.local) return; const actions = card.querySelector('div.flex.shrink-0.gap-2'); if (!actions) return; const button = document.createElement('button'); button.className = 'rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-300'; button.textContent = 'Editar'; button.onclick = () => openNewContact(contact); actions.prepend(button); }); }
-function renderContacts() {
-    const query = (document.getElementById('contact-search').value || '').toLowerCase();
-    const list = contacts.filter(c => `${c.name} ${c.number}`.toLowerCase().includes(query));
-    document.getElementById('contact-count').textContent = `${list.length} contato(s)`;
-    document.getElementById('contacts-grid').innerHTML = list.length ? list.map(c => {
+
+function renderContacts(resetPagination = false) {
+    if (resetPagination) visibleCount = 60;
+    const query = (document.getElementById('contact-search').value || '').trim().toLowerCase();
+    const filtered = contacts.filter(c => `${c.name} ${c.number}`.toLowerCase().includes(query));
+    const total = filtered.length;
+    const displayed = Math.min(visibleCount, total);
+    
+    document.getElementById('contact-count').textContent = total > displayed ? `${total} contato(s) · exibindo ${displayed}` : `${total} contato(s)`;
+
+    if (!total) {
+        document.getElementById('contacts-grid').innerHTML = '<div class="col-span-full py-20 text-center text-sm text-slate-500">Nenhum contato encontrado.</div>';
+        return;
+    }
+
+    const list = filtered.slice(0, visibleCount);
+    const hasMore = total > visibleCount;
+
+    const cardsHtml = list.map(c => {
         const isLocalContact = Boolean(c.local || c.is_local);
-        return `<div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/50 p-4"><div class="flex min-w-0 items-center gap-3"><div class="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-500/15 font-black text-indigo-300">${contactAvatar(c)}</div><div class="min-w-0"><div class="truncate text-sm font-bold text-white">${c.name}</div><div class="text-xs text-slate-500">${formatContactPhone(c.number)}</div></div></div><div class="flex shrink-0 gap-2">${isLocalContact ? `<button onclick='openNewContact(${JSON.stringify(c)})' class="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-300">Editar</button><button onclick='deleteLocalContact(${c.id})' class="rounded-lg bg-rose-500/15 px-3 py-2 text-[10px] font-black uppercase text-rose-300 hover:bg-rose-500/25">Excluir</button>` : ''}<button onclick='openStartModal(${JSON.stringify(c)})' class="shrink-0 rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black uppercase text-emerald-300 hover:bg-emerald-500/25">Conversar</button></div></div>`;
-    }).join('') : '<div class="col-span-full py-20 text-center text-sm text-slate-500">Nenhum contato encontrado.</div>';
+        return `
+        <div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-950/50 p-4 transition-colors hover:border-white/10 hover:bg-slate-900/60">
+            <div class="flex min-w-0 items-center gap-3">
+                <div class="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-500/15 font-black">
+                    ${contactAvatar(c)}
+                </div>
+                <div class="min-w-0">
+                    <div class="truncate text-sm font-bold text-white">${escapeHtml(c.name || 'Sem nome')}</div>
+                    <div class="text-xs font-mono text-slate-500">${formatContactPhone(c.number)}</div>
+                </div>
+            </div>
+            <div class="flex shrink-0 gap-2">
+                ${isLocalContact ? `
+                    <button onclick='openNewContact(${JSON.stringify(c)})' class="rounded-lg bg-white/10 px-3 py-2 text-[10px] font-black uppercase text-slate-300 hover:bg-white/20">Editar</button>
+                    <button onclick='deleteLocalContact(${c.id})' class="rounded-lg bg-rose-500/15 px-3 py-2 text-[10px] font-black uppercase text-rose-300 hover:bg-rose-500/25">Excluir</button>
+                ` : ''}
+                <button onclick='openStartModal(${JSON.stringify(c)})' class="shrink-0 rounded-lg bg-emerald-500/15 px-3 py-2 text-[10px] font-black uppercase text-emerald-300 hover:bg-emerald-500/25">Conversar</button>
+            </div>
+        </div>`;
+    }).join('');
+
+    const moreBtnHtml = hasMore ? `
+        <div class="col-span-full py-6 text-center">
+            <button onclick="loadMoreContacts()" class="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-xs font-black uppercase tracking-wider text-slate-300 transition hover:bg-emerald-500/15 hover:border-emerald-500/30 hover:text-emerald-300">
+                Carregar mais contatos (+60) · Restam ${total - visibleCount}
+            </button>
+        </div>
+    ` : '';
+
+    document.getElementById('contacts-grid').innerHTML = cardsHtml + moreBtnHtml;
 }
+
+function loadMoreContacts() {
+    visibleCount += 60;
+    renderContacts(false);
+}
+
+// Scroll infinito automático ao rolar até o final da página
+window.addEventListener('scroll', () => {
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+        const query = (document.getElementById('contact-search')?.value || '').trim().toLowerCase();
+        const filtered = contacts.filter(c => `${c.name} ${c.number}`.toLowerCase().includes(query));
+        if (filtered.length > visibleCount) {
+            visibleCount += 60;
+            renderContacts(false);
+        }
+    }
+}, { passive: true });
 function openNewContact(contact = null) { editingContactId = contact?.local ? contact.id : null; const modal = document.getElementById('new-contact-modal'); modal.querySelector('h3').textContent = contact ? 'Editar contato' : 'Novo contato'; document.getElementById('new-name').value = contact?.name || ''; document.getElementById('new-number').value = contact?.number || ''; document.getElementById('new-company').value = contact?.company || ''; document.getElementById('new-note').value = contact?.note || ''; modal.classList.remove('hidden'); modal.classList.add('flex'); document.getElementById('new-name').focus(); }
 function closeNewContact() { editingContactId = null; const modal = document.getElementById('new-contact-modal'); modal.classList.add('hidden'); modal.classList.remove('flex'); }
 async function deleteLocalContact(contactId) {

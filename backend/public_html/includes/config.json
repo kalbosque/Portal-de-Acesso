@@ -1,23 +1,70 @@
 {
-    "APP_NAME":  "Atual Contabilidade",
-    "APP_TAGLINE":  "Core System",
-    "APP_LOGO_URL":  "uploads/logo_customizada.jpg",
-    "APP_COLOR":  "#142ef5",
-    "APP_PRICE_BW":  0.5,
-    "APP_PRICE_COLOR":  1.0,
-    "MODULO_IMPRESSAO":  true,
-    "MODULO_SUPORTE":  true,
-    "MODULO_ATENDIMENTO":  true,
-    "URL_ATENDIMENTO":  "http://192.168.1.230:3001/central-atendimento",
-    "GUIA_SUPORTE_URL":  "uploads/guia_suporte_usuario.pdf",
-    "WHATSAPP_WEBHOOK_URL":  "http://evolution-api:8080",
-    "WHATSAPP_WEBHOOK_TOKEN":  "printdash_evo_key_2024",
-    "WHATSAPP_WEBHOOK_TARGET":  "http://192.168.1.230:8000/api/whatsapp/webhook",
+    "APP_NAME": "PORTAL DE ACESSO",
+    "APP_TAGLINE": "Core System",
+    "APP_LOGO_URL": "uploads/logo_customizada.jpg?v=1787936503",
+    "APP_COLOR": "#142ef5",
+    "APP_PRICE_BW": 0.5,
+    "APP_PRICE_COLOR": 1.0,
+    "MODULO_IMPRESSAO": true,
+    "MODULO_SUPORTE": true,
+    "MODULO_ATENDIMENTO": true,
+    "URL_ATENDIMENTO": "http://192.168.1.230:3001/central-atendimento",
+    "GUIA_SUPORTE_URL": "uploads/guia_suporte_usuario.pdf",
+    "WHATSAPP_WEBHOOK_URL": "http://evolution-api:8080",
+    "WHATSAPP_WEBHOOK_TOKEN": "printdash_evo_key_2024",
     "WHATSAPP_INSTANCES": [
         {
-            "instanceName": "kalbosque-chip2",
-            "label": "WhatsApp principal"
+            "instanceName": "atual-contabilidade",
+            "label": "atual-contabilidade"
+        },
+        {
+            "instanceName": "portal-do-acessos",
+            "label": "portal-do-acessos"
         }
     ],
-    "WHATSAPP_DEFAULT_INSTANCE": "kalbosque-chip2"
+    "WHATSAPP_SHOW_GROUPS": true,
+    "WHATSAPP_AUTO_CREATE_TICKETS": false,
+    "WHATSAPP_CHAT_BACKGROUND_IMAGE": "",
+    "WHATSAPP_CHAT_BACKGROUND_COLOR": "#0b141a",
+    "WHATSAPP_DEFAULT_INSTANCE": "portaldoacessos",
+    "WHATSAPP_INSTANCE_ACCESS": {},
+    "WHATSAPP_INSTANCE_COLORS": {
+        "portal-de-acesso": "#00a884",
+        "atual-contabilidade": "#00a884"
+    },
+    "ATENDIMENTO_AGENDAMENTOS_ENABLED": true,
+    "AGENDA_ESTABELECIMENTO_NOME": "Barbearia Atual",
+    "AGENDA_MENSAGEM_BOAS_VINDAS": "Olá! Bem-vindo(a) ao nosso atendimento! Como podemos te ajudar hoje?",
+    "AGENDA_SERVICOS_PRECOS": "• Corte de Cabelo: R$ 35,00\n• Barba Terapia: R$ 25,00\n• Combo Corte + Barba: R$ 50,00\n• Sobrancelha: R$ 15,00",
+    "AGENDA_ENDERECO": "Rua; Salgado Filho, 2186, Bairro : São Cristovão",
+    "AGENDA_HORARIOS_INFO": "Segunda á Sabado das 09:00 ate as 21:00 .",
+    "AGENDA_DURACAO_MINUTOS": 45,
+    "AGENDA_HORA_ABERTURA": "09:00",
+    "AGENDA_HORA_FECHAMENTO": "21:00",
+    "AGENDA_ALMOCO_INICIO": "12:00",
+    "AGENDA_ALMOCO_FIM": "13:00",
+    "AGENDA_DIAS_SEMANA": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+    ],
+    "AGENDA_TENANTS_CONFIG": {
+        "2": {
+            "enabled": true,
+            "estabelecimento_nome": "Barbearia Atual",
+            "mensagem_boas_vindas": "Olá! Bem-vindo(a) ao nosso atendimento! Como podemos te ajudar hoje?",
+            "servicos_precos": "• Corte de Cabelo: R$ 35,00\n• Barba Terapia: R$ 25,00\n• Combo Corte + Barba: R$ 50,00\n• Sobrancelha: R$ 15,00",
+            "endereco": "Rua; Salgado Filho, 2186, Bairro : São Cristovão",
+            "horarios_info": "Segunda á Sabado das 09:00 ate as 21:00 .",
+            "duracao_minutos": 45,
+            "hora_abertura": "09:00",
+            "hora_fechamento": "21:00",
+            "almoco_inicio": "12:00",
+            "almoco_fim": "13:00",
+            "dias_semana": [0, 1, 2, 3, 4, 5]
+        }
+    }
 }

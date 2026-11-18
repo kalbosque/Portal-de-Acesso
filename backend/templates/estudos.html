@@ -1790,7 +1790,7 @@
             if (!registroAssunto || !tipoRegistro) return;
             registroAssunto.required = tipoRegistro.value !== 'simulado';
             if (tipoRegistro.value === 'simulado' && !registroAssunto.value) {
-                registroAssunto.title = 'Opcional para simulados; será registrado como Geral.';
+                registroAssunto.title = 'Opcional para simulados; será registrado como Simulados.';
             } else {
                 registroAssunto.removeAttribute('title');
             }
@@ -1919,6 +1919,7 @@
             if (registroLayout) registroLayout.style.gridTemplateColumns = viewName === 'historico' ? 'minmax(0, 1fr)' : '';
             if (history) history.classList.toggle('hidden', viewName !== 'historico');
             if (form) form.classList.toggle('hidden', viewName !== 'registro');
+            setTimeout(() => window.updateGlobalScrollNav?.(), 50);
             tabs.forEach((tab) => {
                 const active = tab.dataset.tab === viewName;
                 tab.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -1957,7 +1958,7 @@
         // Se tem editar_id ou hash #registro, prioriza a aba registro
         if (hasEditarId || hash === '#registro') {
             initialView = 'registro';
-        } else if (hash === '#historico') {
+        } else if (hash === '#historico' || searchParams.has('assunto') || searchParams.has('data_inicio') || searchParams.has('data_fim')) {
             initialView = 'historico';
         } else if (hash === '#desempenho') {
             initialView = 'desempenho';

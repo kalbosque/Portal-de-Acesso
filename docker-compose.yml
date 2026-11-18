@@ -116,6 +116,7 @@ services:
       - SMTP_FROM=${SMTP_FROM:-}
     volumes:
       - ./backend:/app
+      - ./public_html:/app/public_html
     depends_on:
       db:
         condition: service_healthy

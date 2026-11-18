@@ -649,7 +649,12 @@
     <!-- COLUNA 1: FILA DE CHATS -->
     <div class="col-sidebar glass-panel rounded-[2rem] border border-white/5 bg-slate-900/20 overflow-hidden">
         <div class="sidebar-compact-profile min-h-[92px] flex-col items-center justify-center gap-1 border-b border-white/10 bg-slate-950/45 px-2 py-2 text-center" title="Perfil do atendente">
-            <button type="button" onclick="toggleSidebarCompact()" class="sidebar-compact-menu-button absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-slate-300 hover:bg-emerald-500/20 hover:text-white" title="Mostrar lista completa" aria-label="Mostrar lista completa">☰</button>
+            <button type="button" onclick="toggleSidebarCompact()" class="sidebar-compact-menu-button absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-slate-300 transition hover:bg-emerald-500/20 hover:text-white" title="Mostrar lista completa" aria-label="Mostrar lista completa">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="13 17 18 12 13 7"/>
+                    <polyline points="6 17 11 12 6 7"/>
+                </svg>
+            </button>
             {% if config.APP_LOGO_URL %}<img id="compact-company-logo" src="/{{ config.APP_LOGO_URL }}" alt="Logo da empresa" class="h-10 w-10 rounded-full border-2 border-emerald-400/50 bg-slate-950 object-cover shadow-lg">{% else %}<span id="compact-company-logo" class="flex h-10 w-10 items-center justify-center rounded-full border-2 border-emerald-400/50 bg-emerald-500/10 text-lg text-emerald-300">💬</span>{% endif %}
             <span id="compact-attendant-name" class="max-w-full truncate text-[9px] font-black uppercase tracking-wide text-white">{{ profile_name or 'Atendente' }}</span>
             <span class="flex items-center gap-1 text-[8px] font-bold text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>Online</span>
@@ -674,7 +679,12 @@
                     </p>
                     {% if can_edit_identity %}<p class="mt-1 text-[8px] text-slate-500">Clique na imagem para editar</p>{% endif %}
                 </div>
-                <button type="button" onclick="toggleSidebarCompact()" class="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-slate-300 hover:bg-emerald-500/15 hover:text-white" title="Recolher lista de conversas" aria-label="Recolher lista de conversas">☰</button>
+                <button type="button" onclick="toggleSidebarCompact()" class="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-slate-300 transition hover:bg-emerald-500/15 hover:text-white" title="Recolher lista de conversas" aria-label="Recolher lista de conversas">
+                    <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="11 17 6 12 11 7"/>
+                        <polyline points="18 17 13 12 18 7"/>
+                    </svg>
+                </button>
             </div>
             <div class="flex items-center justify-between">
                 <div class="flex min-w-0 items-center gap-2">

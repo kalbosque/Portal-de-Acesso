@@ -179,6 +179,24 @@ class MensagemWhatsAppAgendada(SQLModel, table=True):
     enviado_em: Optional[datetime] = Field(default=None, sa_type=DateTime(timezone=True))
     empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
 
+class AtendimentoAgendaConfig(SQLModel, table=True):
+    __tablename__ = "atendimento_agenda_config"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    empresa_atendimento_id: Optional[int] = Field(default=None, index=True)
+    enabled: bool = Field(default=False, index=True)
+    estabelecimento_nome: Optional[str] = Field(default=None, max_length=180)
+    mensagem_boas_vindas: Optional[str] = None
+    servicos_precos: Optional[str] = None
+    endereco: Optional[str] = None
+    horarios_info: Optional[str] = None
+    duracao_minutos: int = Field(default=60)
+    hora_abertura: str = Field(default="08:00", max_length=10)
+    hora_fechamento: str = Field(default="18:00", max_length=10)
+    almoco_inicio: Optional[str] = Field(default="12:00", max_length=10)
+    almoco_fim: Optional[str] = Field(default="13:00", max_length=10)
+    dias_semana: Optional[str] = Field(default="[0, 1, 2, 3, 4, 5]")
+    atualizado_em: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_type=DateTime(timezone=True))
+
 class StatusMaquina(SQLModel, table=True):
     __tablename__ = "status_maquinas"
     ip: str = Field(primary_key=True)
