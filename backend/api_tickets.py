@@ -333,6 +333,7 @@ def _ensure_typing_schema():
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_quantidade INTEGER DEFAULT 0"))
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS reacao_detalhes TEXT NULL"))
         conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS favorito BOOLEAN DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_status VARCHAR(20) DEFAULT 'sent'"))
     _typing_schema_ready = True
 
 
@@ -579,8 +580,11 @@ async def send_chat_message(
             chamado.data_resolucao = None
             reopened = True
 
-        # Incrementar unread para o outro lado
-        if user_role == "admin":
+        # Respostas enviadas pelo atendimento WhatsApp não são mensagens
+        # recebidas. Nunca marque a própria fila como não lida ao responder.
+        if chamado.origem == "WhatsApp":
+            chamado.unread_admin = 0
+        elif user_role == "admin":
             chamado.unread_user = (chamado.unread_user or 0) + 1
         else:
             chamado.unread_admin = (chamado.unread_admin or 0) + 1
@@ -646,6 +650,7 @@ async def send_chat_message(
             "mensagem": msg_text,
             "data_hora": _display_datetime(msg.data_hora).strftime("%d/%m/%Y %H:%M:%S"),
             "is_me": True,
+            "whatsapp_status": "failed" if media_send_result is False else (msg.whatsapp_status or "sent"),
         },
     )
 
@@ -1000,8 +1005,11 @@ async def post_chat(chamado_id: int, request: Request, background_tasks: Backgro
         msg = ChamadoInteracao(chamado_id=chamado_id, usuario=user_name, mensagem=msg_text)
         session.add(msg)
 
-        # Incrementar unread para o outro lado
-        if user_role == "admin":
+        # Respostas enviadas pelo atendimento WhatsApp não são mensagens
+        # recebidas. Nunca marque a própria fila como não lida ao responder.
+        if chamado.origem == "WhatsApp":
+            chamado.unread_admin = 0
+        elif user_role == "admin":
             chamado.unread_user = (chamado.unread_user or 0) + 1
         else:
             chamado.unread_admin = (chamado.unread_admin or 0) + 1

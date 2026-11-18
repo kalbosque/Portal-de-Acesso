@@ -332,27 +332,47 @@
     .chat-transfer-bar #btn-resolver { height: 34px; width: auto; padding: 0 .9rem; background: #059669; color: #fff; border: 1px solid rgba(16,185,129,.3); border-radius: .55rem; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; transition: all .15s ease; white-space: nowrap; }
     .chat-transfer-bar #btn-resolver:hover:not(:disabled) { background: #10b981; }
     .chat-transfer-bar #btn-resolver:disabled { background: #334155; color: #94a3b8; border-color: transparent; }
-    .col-chat > #chat-transfer-bar { position: absolute; top: .7rem; left: 250px; z-index: 25; min-height: 0; padding: 0; background: transparent; border: 0; }
+    .chat-transfer-bar { display: inline-flex; align-items: center; gap: .4rem; position: static; min-height: 0; padding: 0; background: transparent; border: 0; }
+    .chat-transfer-bar.hidden { display: none !important; }
     .chat-main-header.hidden,
     #chat-main-header.hidden { display: none !important; }
-    .chat-main-header { position: relative; z-index: 25; background: #111f28 !important; display: none; align-items: center; justify-content: space-between; gap: .75rem; padding: .6rem 1rem !important; min-height: 56px; }
+    .chat-main-header { position: relative; z-index: 25; background: #111f28 !important; display: none; align-items: center; justify-content: space-between; gap: .5rem; padding: .6rem 1rem !important; min-height: 56px; flex-wrap: wrap; }
     .chat-main-header.flex,
     .chat-main-header:not(.hidden) { display: flex !important; }
     .chat-main-header.hidden { display: none !important; }
-    .chat-main-header > .chat-transfer-bar { position: static; min-height: 0; padding: 0; background: transparent; border: 0; }
     .chat-main-header #chat-header-operator,
     .chat-main-header #chat-header-operator *,
     .chat-main-header .desktop-details-button { white-space: nowrap; }
     .chat-main-header #chat-header-operator { min-width: max-content; }
     .chat-main-header .desktop-details-button { min-width: max-content; height: 34px; padding: 0 .8rem; border-radius: .55rem; background: rgba(255,255,255,.06) !important; color: #cbd5e1 !important; border: 1px solid rgba(255,255,255,.08) !important; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; transition: all .15s ease; }
     .chat-main-header .desktop-details-button:hover { background: rgba(255,255,255,.12) !important; color: #fff !important; }
-    body.desktop-focus .chat-main-header { flex-wrap: nowrap; align-items: center; gap: .75rem; justify-content: space-between; }
-    body.desktop-focus .chat-main-header > div:first-child { min-width: 0; flex: 0 1 auto; }
+    /* ── Desktop focus: cabeçalho responsivo ── */
+    body.desktop-focus .chat-main-header { flex-wrap: wrap; align-items: center; gap: .5rem; justify-content: space-between; }
+    /* Bloco esquerdo (avatar + nome) — sempre visível, nunca sobreposto */
+    body.desktop-focus .chat-main-header > div:first-child { min-width: 160px; flex: 1 1 160px; overflow: hidden; }
     body.desktop-focus .chat-main-header > div:first-child > div:last-child { min-width: 0; }
-    #chat-header-instance { display: none !important; }
-    body.desktop-focus #chat-header-name { max-width: min(40vw, 450px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
-    body.desktop-focus .chat-main-header > div:nth-child(2) { min-width: 0; flex: 0 0 auto; display: flex; align-items: center; gap: .4rem; }
-    body.desktop-focus .chat-main-header > .chat-transfer-bar { position: static; order: 0; flex: 0 0 auto; width: auto; min-width: 0; display: inline-flex; align-items: center; gap: .4rem; padding: 0; min-height: 0; }
+    #chat-header-name, #chat-header-phone, #chat-header-sender-info, #chat-header-instance { white-space: nowrap !important; }
+    body.desktop-focus #chat-header-name { max-width: min(30vw, 320px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+    /* Bloco direito (botões de ação) — encolhe e pode ir para segunda linha */
+    body.desktop-focus .chat-main-header > div:nth-child(2) { min-width: 0; flex: 0 1 auto; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+    /* Quando a coluna do chat fica muito estreita (agenda aberta), compacta o select e botões */
+    @container (max-width: 650px) {
+        body.desktop-focus .chat-main-header > div:nth-child(2) { flex-basis: 100%; justify-content: flex-start; margin-top: .25rem; }
+    }
+    /* Fallback com media query para telas onde a agenda + lista já ocupam muito */
+    @media (max-width: 1400px) {
+        body.desktop-focus:not(.desktop-agenda-hidden) .chat-main-header #transfer-operator { max-width: 110px; }
+        body.desktop-focus:not(.desktop-agenda-hidden) .chat-main-header #transfer-button,
+        body.desktop-focus:not(.desktop-agenda-hidden) .chat-main-header #btn-resolver { padding-left: .4rem; padding-right: .4rem; font-size: 8px; }
+        body.desktop-focus:not(.desktop-agenda-hidden) .chat-main-header .desktop-details-button { padding: 0 .5rem; font-size: 9px; }
+        body.desktop-focus:not(.desktop-agenda-hidden) #chat-header-name { max-width: 180px; font-size: 13px; }
+    }
+    @media (max-width: 1200px) {
+        body.desktop-focus:not(.desktop-agenda-hidden) .chat-main-header > div:nth-child(2) { flex-wrap: wrap; justify-content: flex-end; }
+        body.desktop-focus:not(.desktop-agenda-hidden) .chat-main-header #transfer-operator { max-width: 100px; }
+        body.desktop-focus:not(.desktop-agenda-hidden) #chat-header-name { max-width: 140px; font-size: 12px; }
+        body.desktop-focus:not(.desktop-agenda-hidden) #chat-header-instance { display: none; }
+    }
     #chat-header-operator { color: #f8fafc; opacity: 1 !important; }
     #chat-header-operator span { height: 34px; display: inline-flex; align-items: center; border-radius: .55rem; padding: 0 .75rem !important; font-size: 10px !important; font-weight: 800 !important; letter-spacing: .08em; color: #d1fae5 !important; background: #12352f !important; border: 1px solid rgba(52,211,153,.35) !important; }
     .mobile-transfer-panel { display: none; }
@@ -744,21 +764,37 @@
         </div>
 
         <!-- Chat Header -->
-        <div id="chat-main-header" style="display: none !important;" class="chat-main-header hidden p-4 border-b border-white/5 bg-slate-950/30 flex-shrink-0 items-center justify-between">
-            <div class="flex items-center gap-3 min-w-0">
+        <div id="chat-main-header" style="display: none !important;" class="chat-main-header hidden p-3 border-b border-white/5 bg-slate-950/30 flex-shrink-0 items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0 flex-shrink-0">
                 <div class="w-10 h-10 shrink-0 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-black text-sm overflow-hidden" id="chat-header-avatar">
                     WA
                 </div>
                 <div class="min-w-0 flex flex-col justify-center">
                     <div class="flex items-center gap-2 min-w-0">
-                        <h4 id="chat-header-name" class="truncate text-[15px] font-bold text-white tracking-normal leading-tight">Cliente</h4>
-                        <span id="chat-header-instance" class="hidden">--</span>
+                        <h4 id="chat-header-name" class="truncate text-[15px] font-bold text-white tracking-normal leading-tight whitespace-nowrap">Cliente</h4>
+                        <span id="chat-header-instance" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shrink-0 whitespace-nowrap">--</span>
                     </div>
-                    <span id="chat-header-phone" class="hidden text-[10px] text-slate-500 font-mono">Carregando...</span>
+                    <div class="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap">
+                        <span id="chat-header-phone" class="whitespace-nowrap">Carregando...</span>
+                        <span id="chat-header-sender-info" class="hidden text-emerald-400 text-[10px] font-sans font-bold whitespace-nowrap"></span>
+                    </div>
                 </div>
             </div>
             
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 shrink-0 ml-auto">
+                <!-- Botão de Assumir Conversa Direto no Header quando desatribuído -->
+                <button id="header-btn-assumir" type="button" onclick="assumirTicket(activeTicketId)" class="hidden items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-[10px] font-black uppercase text-white shadow transition-all whitespace-nowrap">
+                    <span>🙋‍♂️</span> Assumir Conversa
+                </button>
+
+                <div id="chat-transfer-bar" class="chat-transfer-bar hidden flex items-center gap-1.5">
+                    <select id="transfer-operator" class="rounded-lg border border-white/10 bg-slate-900 px-2 py-1.5 text-[10px] font-bold text-slate-300 max-w-[140px] truncate" disabled>
+                        <option value="">Transferir para...</option>
+                    </select>
+                    <button id="transfer-button" onclick="transferirTicket(activeTicketId)" class="rounded-lg bg-indigo-500 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40" disabled>Transferir</button>
+                    <button onclick="openSolutionModal()" id="btn-resolver" disabled class="rounded-lg px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wide transition-all disabled:cursor-not-allowed">✓ Resolver</button>
+                </div>
+
                 <button onclick="toggleMobileDrawer('queue')" class="lg:hidden rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300" title="Conversas">☰</button>
                 <button onclick="toggleMobileDrawer('details')" class="lg:hidden rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300" title="Detalhes">ⓘ</button>
                 <button onclick="toggleDesktopDetails()" class="desktop-details-button hidden items-center gap-1 rounded-xl bg-white/5 px-3 py-2 text-[10px] font-black text-slate-300 hover:bg-emerald-500/15" title="Histórico e detalhes">☰ Histórico</button>
@@ -766,15 +802,6 @@
                     <!-- Mostra operador atual ou status -->
                 </div>
             </div>
-        </div>
-
-        <div id="chat-transfer-bar" class="chat-transfer-bar hidden">
-            <span class="text-[9px] font-black uppercase tracking-widest text-emerald-200">Ações do atendimento</span>
-            <select id="transfer-operator" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-[10px] font-bold text-slate-300" disabled>
-                <option value="">Selecione uma conversa</option>
-            </select>
-            <button id="transfer-button" onclick="transferirTicket(activeTicketId)" class="rounded-lg bg-indigo-500 px-3 py-2 text-[9px] font-black uppercase tracking-wide text-white hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40" disabled>Transferir</button>
-            <button onclick="openSolutionModal()" id="btn-resolver" disabled class="rounded-lg px-3 py-2 text-[9px] font-black uppercase tracking-wide transition-all disabled:cursor-not-allowed">✓ Resolver</button>
         </div>
         
         <!-- Timeline das Mensagens -->
@@ -2044,7 +2071,7 @@
             const nameInitial = displayName.substring(0, 2).toUpperCase();
             const photoUrl = c.profile_picture || contactPhotoMap.get(contactPhoneKey(c.whatsapp_cliente)) || contactPictureUrl(c.whatsapp_cliente, c.whatsapp_instance);
             const avatarContent = photoUrl
-                ? `<img src="${photoUrl}" alt="" class="h-full w-full cursor-zoom-in rounded-full object-cover" onclick="event.stopPropagation(); document.querySelector('.atend-container')?.classList.contains('sidebar-collapsed') ? openChat(${c.id}) : openImagePreview(this.src)" onerror="this.replaceWith(Object.assign(document.createElement('span'), {textContent:'${nameInitial}'}))">`
+                ? `<img src="${photoUrl}" loading="lazy" alt="" class="h-full w-full cursor-zoom-in rounded-full object-cover" onclick="event.stopPropagation(); document.querySelector('.atend-container')?.classList.contains('sidebar-collapsed') ? openChat(${c.id}) : openImagePreview(this.src)" onerror="this.replaceWith(Object.assign(document.createElement('span'), {textContent:'${nameInitial}'}))">`
                 : nameInitial;
             const isConnected = !!(c.connected || c.is_connected || c.presence === 'connected');
             const groupName = c.status === 'Resolvido'
@@ -2084,14 +2111,15 @@
                             <span class="text-[10px] text-[#8696a0] flex-shrink-0 ml-2 font-medium" id="time-${c.id}">${c.data_ultima_mensagem}</span>
                         </div>
 
-                        <!-- Linha 2: Badges compactos (Instância + Setor + Prioridade) -->
+                        <!-- Linha 2: Badges compactos (Instância/Número remetente + Setor + Prioridade) -->
                         <div class="flex items-center gap-1.5 w-full mb-1 overflow-hidden">
-
-                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider whitespace-nowrap truncate max-w-[125px]" style="color:${instColor}; background:${instColor}15; border: 1px solid ${instColor}30;" title="${c.whatsapp_instance || 'Principal'}">
-                                ${c.whatsapp_instance || 'Principal'}
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider whitespace-nowrap truncate max-w-[160px]" style="color:${instColor}; background:${instColor}18; border: 1px solid ${instColor}35;" title="Enviará por: ${c.whatsapp_instance_label || c.whatsapp_instance || 'Principal'}${c.instance_owner_number ? ' (' + formatDisplayPhone(c.instance_owner_number) + ')' : ''}">
+                                <span>📱</span>
+                                <span class="truncate">${c.whatsapp_instance_label || c.whatsapp_instance || 'Principal'}</span>
+                                ${c.instance_owner_number ? `<span class="opacity-75 font-mono text-[7px] truncate">· ${formatDisplayPhone(c.instance_owner_number).slice(-9)}</span>` : ''}
                             </span>
                             ${c.setor && !isGroupChat(c) ? `
-                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider whitespace-nowrap truncate max-w-[100px]" style="color:#38bdf8; background:rgba(56,189,248,0.10); border: 1px solid rgba(56,189,248,0.22);" title="${c.setor}">
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider whitespace-nowrap truncate max-w-[90px]" style="color:#38bdf8; background:rgba(56,189,248,0.10); border: 1px solid rgba(56,189,248,0.22);" title="${c.setor}">
                                 ${c.setor}
                             </span>` : ''}
                             ${c.prioridade && c.prioridade !== 'Media' ? `
@@ -2467,7 +2495,6 @@
             mainHdr.classList.add('flex');
             mainHdr.style.removeProperty('display');
         }
-        document.getElementById('chat-transfer-bar')?.classList.remove('hidden');
         const messageInput = document.getElementById('msg-input');
         const sendButton = document.getElementById('send-message');
         if (messageInput) {
@@ -2497,40 +2524,61 @@
             phoneElem.innerText = displayPhone;
         }
         setAvatar('chat-header-avatar', displayName, chat.empresa_logo || chat.profile_picture || contactPhotoMap.get(contactPhoneKey(chat.whatsapp_cliente)) || contactPictureUrl(chat.whatsapp_cliente, chat.whatsapp_instance));
-        // Instância e presença
+        // Instância e número de envio
         const instanceBadge = document.getElementById('chat-header-instance');
+        const senderInfo = document.getElementById('chat-header-sender-info');
+        const instLabel = chat.whatsapp_instance_label || chat.whatsapp_instance || 'Principal';
         if (instanceBadge) {
-            instanceBadge.innerText = chat.whatsapp_instance || '--';
+            instanceBadge.innerHTML = `<span>📱</span> ${escapeHtml(instLabel)}`;
             instanceBadge.style.color = chat.instance_color || '#00a884';
             instanceBadge.style.borderColor = `${chat.instance_color || '#00a884'}44`;
             instanceBadge.style.backgroundColor = `${chat.instance_color || '#00a884'}18`;
+            instanceBadge.title = `Mensagens serão enviadas por: ${instLabel}${chat.instance_owner_number ? ' (' + formatDisplayPhone(chat.instance_owner_number) + ')' : ''}`;
+        }
+        if (senderInfo) {
+            if (chat.instance_owner_number) {
+                senderInfo.innerText = `• Enviando por: ${formatDisplayPhone(chat.instance_owner_number)}`;
+                senderInfo.classList.remove('hidden');
+            } else {
+                senderInfo.innerText = `• Canal: ${instLabel}`;
+                senderInfo.classList.remove('hidden');
+            }
         }
         
         const operatorSpan = document.getElementById('chat-header-operator');
         const transferBar = document.getElementById('chat-transfer-bar');
         const transferSelect = document.getElementById('transfer-operator');
         const transferButton = document.getElementById('transfer-button');
+        const btnResolver = document.getElementById('btn-resolver');
+        const headerBtnAssumir = document.getElementById('header-btn-assumir');
         const mobileTransferSelect = document.getElementById('transfer-operator-mobile');
         const mobileTransferButton = document.getElementById('transfer-button-mobile');
         const isGroupConversation = _isGroupChat(chat);
-        const header = document.getElementById('chat-main-header');
-        if (header && transferBar && transferBar.parentElement !== header) header.appendChild(transferBar);
-        if (isGroupConversation) transferBar?.classList.add('hidden');
+
+        // Reset inicial de visibilidade
+        if (transferBar) transferBar.classList.add('hidden');
+        if (headerBtnAssumir) {
+            headerBtnAssumir.classList.add('hidden');
+            headerBtnAssumir.classList.remove('inline-flex');
+        }
+        if (btnResolver) btnResolver.disabled = true;
+
         if (chat.status === 'Resolvido') {
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full text-[9px] font-black text-rose-400 uppercase tracking-widest">Finalizado</span>`;
-            if (transferBar) transferBar.classList.add('hidden');
         } else if (chat.assigned_user) {
-            operatorSpan.innerHTML = `<span class="px-3 py-1 bg-white/5 border border-white/5 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">Operador: ${chat.assigned_user}</span>`;
-            if (!isGroupConversation) transferBar?.classList.remove('hidden');
-            if (transferSelect) transferSelect.disabled = false;
-            if (transferButton) transferButton.disabled = false;
-            if (mobileTransferSelect) mobileTransferSelect.disabled = false;
-            if (mobileTransferButton) mobileTransferButton.disabled = false;
-            fillTransferOperators(chat.assigned_user);
+            operatorSpan.innerHTML = `<span class="px-3 py-1 bg-white/5 border border-white/5 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-widest">Operador: ${escapeHtml(chat.assigned_user)}</span>`;
+            if (!isGroupConversation) {
+                transferBar?.classList.remove('hidden');
+                if (transferSelect) transferSelect.disabled = false;
+                if (transferButton) transferButton.disabled = false;
+                if (btnResolver) btnResolver.disabled = false;
+                if (mobileTransferSelect) mobileTransferSelect.disabled = false;
+                if (mobileTransferButton) mobileTransferButton.disabled = false;
+                fillTransferOperators(chat.assigned_user);
+            }
         } else if (isGroupConversation) {
             // Grupos ficam abertos e podem receber respostas sem assumir atendimento.
             operatorSpan.innerHTML = `<span class="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[9px] font-black text-emerald-300 uppercase tracking-widest">Grupo aberto</span>`;
-            if (transferBar) transferBar.classList.add('hidden');
             if (transferSelect) transferSelect.disabled = true;
             if (transferButton) transferButton.disabled = true;
             if (mobileTransferSelect) mobileTransferSelect.disabled = true;
@@ -2544,11 +2592,12 @@
                 if (transferButton) transferButton.disabled = false;
                 if (mobileTransferSelect) mobileTransferSelect.disabled = false;
                 if (mobileTransferButton) mobileTransferButton.disabled = false;
-            } else {
-                if (transferSelect) { transferSelect.disabled = true; transferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
-                if (transferButton) transferButton.disabled = true;
-                if (mobileTransferSelect) { mobileTransferSelect.disabled = true; mobileTransferSelect.innerHTML = '<option value="">Assuma a conversa primeiro</option>'; }
-                if (mobileTransferButton) mobileTransferButton.disabled = true;
+            } else if (!isGroupConversation) {
+                // Operador comum: exibe botão limpo de assumir no header
+                if (headerBtnAssumir) {
+                    headerBtnAssumir.classList.remove('hidden');
+                    headerBtnAssumir.classList.add('inline-flex');
+                }
             }
         }
         
@@ -2790,7 +2839,7 @@
             ? '<path fill="currentColor" d="M5.2 12.2 1.4 8.4l1.2-1.2 2.6 2.6L13.5 1.5l1.2 1.2z"></path>'
             : '<path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 00-.51.063L8.666 9.879a.32.32 0 01-.484.033l-.358-.325a.319.319 0 00-.484.032l-.378.483a.418.418 0 00.036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 00-.064-.512zm-4.1 0l-.478-.372a.365.365 0 00-.51.063L4.566 9.879a.32.32 0 01-.484.033L1.891 7.769a.366.366 0 00-.515.006l-.423.433a.364.364 0 00.006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 00-.063-.51z"></path>';
         const label = normalizedStatus === 'read' ? 'Lida' : normalizedStatus === 'delivered' ? 'Entregue' : normalizedStatus === 'failed' ? 'Falha no envio' : 'Enviada';
-        return `<svg viewBox="0 0 16 15" width="16" height="15" class="ml-1 ${colorClass}" aria-label="${label}" title="${label}">${paths}</svg>`;
+        return `<svg viewBox="0 0 16 15" width="16" height="15" class="wa-tick-icon ml-1 inline-block align-middle shrink-0 ${colorClass}" aria-label="${label}" title="${label}">${paths}</svg>`;
     }
 
     function updateTimelineMessageStatus(messageId, status) {
@@ -2802,8 +2851,14 @@
         const previousStatus = String(cachedMessage?.whatsapp_status || '').toLowerCase();
         if (previousStatus === 'read' && normalizedStatus === 'delivered') return;
         if (cachedMessage) cachedMessage.whatsapp_status = normalizedStatus;
-        const tick = msgRow.querySelector('.bubble-meta svg');
-        if (tick) tick.outerHTML = renderWhatsAppStatusIcon(normalizedStatus);
+        const meta = msgRow.querySelector('.bubble-meta');
+        if (!meta) return;
+        const tick = meta.querySelector('.wa-tick-icon') || meta.querySelector('svg');
+        if (tick) {
+            tick.outerHTML = renderWhatsAppStatusIcon(normalizedStatus);
+        } else {
+            meta.insertAdjacentHTML('beforeend', renderWhatsAppStatusIcon(normalizedStatus));
+        }
     }
 
     function formatMediaFileSize(size) {
@@ -4086,6 +4141,8 @@
                     try { ws.close(); } catch (_) {}
                 }
             }, 10000);
+            loadChats();
+            if (activeTicketId) loadMessages(activeTicketId);
         };
         
         ws.onmessage = function(event) {
@@ -4145,9 +4202,10 @@
                         if (!existingRow) {
                             appendMessageToTimeline({
                                 id: activeMessageId,
-                                is_me: data.usuario === currentUser,
+                                is_me: data.is_me || data.usuario === currentUser,
                                 usuario: data.usuario || 'Cliente',
                                 mensagem: data.preview || data.mensagem || '...',
+                                whatsapp_status: data.whatsapp_status || (data.is_me || data.usuario === currentUser ? 'sent' : ''),
                                 data_hora: new Date().toLocaleString('pt-BR', {
                                     day: '2-digit', month: '2-digit', year: 'numeric',
                                     hour: '2-digit', minute: '2-digit'
@@ -4386,11 +4444,42 @@
         }, {once: true});
 
         // Solicita permissão de notificação assim que a página carrega
-        function pedirPermissaoNotificacao() {
+        function notificationsWereConfigured() {
+            try {
+                if (localStorage.getItem('central_atendimento_native_notifications') === '1') return true;
+            } catch (_) {}
+            return document.cookie.split(';').some(item => item.trim().startsWith('central_atendimento_native_notifications=1'));
+        }
+
+        function rememberNotificationPermission() {
+            try { localStorage.setItem('central_atendimento_native_notifications', '1'); } catch (_) {}
+            document.cookie = 'central_atendimento_native_notifications=1; Max-Age=31536000; Path=/; SameSite=Lax';
+        }
+
+        async function pedirPermissaoNotificacao() {
             if (isDesktopApp) {
-                let nativeEnabled = false;
-                try { nativeEnabled = localStorage.getItem('central_atendimento_native_notifications') === '1'; } catch (_) {}
-                if (!nativeEnabled) document.getElementById('notif-permission-banner')?.classList.remove('hidden');
+                const banner = document.getElementById('notif-permission-banner');
+                const nativeNotifications = window.__TAURI__?.notification;
+                try {
+                    if (nativeNotifications?.isPermissionGranted) {
+                        const granted = await nativeNotifications.isPermissionGranted();
+                        if (granted) {
+                            rememberNotificationPermission();
+                            banner?.classList.add('hidden');
+                        } else {
+                            if (!notificationsWereConfigured()) banner?.classList.remove('hidden');
+                        }
+                    } else {
+                        // Algumas versões do Tauri não expõem a consulta do
+                        // plugin no WebView remoto. Nesse caso, respeitamos
+                        // a autorização persistida para não pedir toda vez.
+                        let nativeEnabled = false;
+                        try { nativeEnabled = localStorage.getItem('central_atendimento_native_notifications') === '1'; } catch (_) {}
+                        if (!notificationsWereConfigured()) banner?.classList.remove('hidden');
+                    }
+                } catch (_) {
+                    if (!notificationsWereConfigured()) banner?.classList.remove('hidden');
+                }
                 return;
             }
             if (!('Notification' in window)) return;
@@ -4435,7 +4524,7 @@
                 if (nativeNotifications || typeof invoke === 'function') {
                     enableNativeNotifications()
                         .then(() => {
-                            try { localStorage.setItem('central_atendimento_native_notifications', '1'); } catch (_) {}
+                            rememberNotificationPermission();
                             document.getElementById('notif-permission-banner')?.remove();
                             mostrarToast('✅ Notificações do Windows ativadas!');
                         })
@@ -4486,8 +4575,9 @@
             if (!wsConnected) {
                 pollTyping();
                 pollActiveMessages();
+                loadChats();
             }
-        }, 20000);
+        }, 7000);
 
         // Atualizacao periodica de conversas (mais espaçada para evitar lentidao no Tauri)
         chatsRefreshTimer = setInterval(() => {
@@ -4496,7 +4586,7 @@
                 loadChats();
                 if (!wsConnected) pollActiveMessages();
             }
-        }, 30000);
+        }, 12000);
         activeMessagesRefreshTimer = setInterval(() => {
             const isDesktop = isTauriDesktopApp() || isDesktopApp;
             if (activeTicketId && (!document.hidden || isDesktop)) pollActiveMessages();

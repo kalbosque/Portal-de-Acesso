@@ -111,7 +111,13 @@
         </div>
 
         <div>
-            <h4 class="wa-text-muted text-sm font-semibold uppercase tracking-wider mb-4 px-2">Aparelhos vinculados</h4>
+            <div class="mb-4 px-2 flex items-center justify-between gap-3">
+                <h4 class="wa-text-muted text-sm font-semibold uppercase tracking-wider">Aparelhos vinculados</h4>
+                <button id="refresh-instances-button" type="button" onclick="refreshInstances(event)" class="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-[11px] font-semibold text-slate-300 transition hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300" title="Atualizar status dos aparelhos">
+                    <svg id="refresh-instances-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    <span>Atualizar</span>
+                </button>
+            </div>
             
             <!-- Lista de Aparelhos -->
             <div id="instances-list" class="wa-card rounded-2xl overflow-hidden divide-y divide-white/5 shadow-md">
@@ -224,6 +230,20 @@
             }
         } catch(e) {
             console.error("Erro ao carregar instâncias", e);
+        }
+    }
+
+    async function refreshInstances(event) {
+        event?.stopPropagation();
+        const button = document.getElementById('refresh-instances-button');
+        const icon = document.getElementById('refresh-instances-icon');
+        if (button) button.disabled = true;
+        if (icon) icon.classList.add('animate-spin');
+        try {
+            await loadInstances();
+        } finally {
+            if (icon) icon.classList.remove('animate-spin');
+            if (button) button.disabled = false;
         }
     }
 
@@ -480,7 +500,10 @@
 
     async function proceedToQR() {
         let name = document.getElementById('instance-name-input').value.trim();
-        if (!name) name = 'printdash'; // fallback
+        if (!name) {
+            alert('Informe o nome da instância/empresa antes de gerar o QR Code.');
+            return;
+        }
         
         // Formata para lowercase sem espaços (ideal para API)
         const safeName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
