@@ -343,8 +343,8 @@
     .chat-main-header #chat-header-operator,
     .chat-main-header #chat-header-operator *,
     .chat-main-header .desktop-details-button { white-space: nowrap; }
-    .chat-main-header #chat-header-operator { min-width: max-content; }
-    .chat-main-header .desktop-details-button { min-width: max-content; height: 34px; padding: 0 .8rem; border-radius: .55rem; background: rgba(255,255,255,.06) !important; color: #cbd5e1 !important; border: 1px solid rgba(255,255,255,.08) !important; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; transition: all .15s ease; }
+    .chat-main-header #chat-header-operator { display: none !important; min-width: max-content; }
+    .chat-main-header .desktop-details-button { display: none !important; min-width: max-content; height: 34px; padding: 0 .8rem; border-radius: .55rem; background: rgba(255,255,255,.06) !important; color: #cbd5e1 !important; border: 1px solid rgba(255,255,255,.08) !important; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; transition: all .15s ease; }
     .chat-main-header .desktop-details-button:hover { background: rgba(255,255,255,.12) !important; color: #fff !important; }
     /* ── Desktop focus: cabeçalho responsivo ── */
     body.desktop-focus .chat-main-header { flex-wrap: wrap; align-items: center; gap: .5rem; justify-content: space-between; }
@@ -568,7 +568,7 @@
     body.desktop-focus .col-agenda { display: flex !important; grid-column: 3; }
     body.desktop-focus .mobile-transfer-panel { display: none !important; }
     body.desktop-focus .col-chat { min-width: 0; grid-column: 2; }
-    body.desktop-focus .desktop-details-button { display: inline-flex !important; }
+    body.desktop-focus .desktop-details-button { display: none !important; }
     @media (max-width: 1100px) {
         body.desktop-focus .atend-container { grid-template-columns: 260px minmax(0, 1fr) 250px; }
         body.desktop-focus .atend-container.sidebar-collapsed { grid-template-columns: 112px minmax(0, 1fr) 250px; }
@@ -726,6 +726,11 @@
                 </button>{% endif %}
 
                 <div class="qm-divider"></div>
+
+                <button type="button" onclick="toggleDesktopDetails()" class="qm-item">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg>
+                    Histórico
+                </button>
 
                 <!-- Exit -->
                 <button type="button" onclick="sairDaCentral(event)" class="qm-item qm-exit">
@@ -1225,6 +1230,7 @@
     const contactPhotoMap = new Map();
     let contactPhotosLoaded = false;
     let allWhatsAppContacts = [];
+    let contactSearchRefreshDone = false;
     let contactsLoadingPromise = null;
 
     function markSessionExpired() {
@@ -1258,10 +1264,21 @@
         if (contactsLoadingPromise) return contactsLoadingPromise;
         contactsLoadingPromise = (async () => {
             try {
-                const res = await fetch('/api/whatsapp/contacts', { credentials: 'include', cache: 'no-store' });
-                if (!res.ok) return;
-                const data = await res.json();
-                allWhatsAppContacts = Array.isArray(data) ? data : [];
+                const instancesRes = await fetch('/api/whatsapp/instances', { credentials: 'include', cache: 'no-store' });
+                const instancesData = instancesRes.ok ? await instancesRes.json().catch(() => ({})) : {};
+                const instanceNames = [...new Set([
+                    instancesData.default_instance,
+                    ...(instancesData.instances || []).map(item => item.instanceName)
+                ].filter(Boolean))];
+                const contactResponses = instanceNames.length
+                    ? await Promise.all(instanceNames.map(instance => fetch(`/api/whatsapp/contacts?instance=${encodeURIComponent(instance)}`, { credentials: 'include', cache: 'no-store' }).then(response => response.ok ? response.json() : [])))
+                    : [await fetch('/api/whatsapp/contacts', { credentials: 'include', cache: 'no-store' }).then(response => response.ok ? response.json() : [])];
+                const contactMap = new Map();
+                contactResponses.flat().forEach(contact => {
+                    const key = contactPhoneKey(contact?.number);
+                    if (key && !contactMap.has(key)) contactMap.set(key, contact);
+                });
+                allWhatsAppContacts = Array.from(contactMap.values());
                 allWhatsAppContacts.forEach(contact => {
                     if (!contact.number) return;
                     const pictureUrl = contact.profile_picture || `/api/whatsapp/contact/profile-picture?number=${encodeURIComponent(contact.number)}&instance=${encodeURIComponent(contact.instance || '')}`;
@@ -1593,6 +1610,10 @@
     }
 
     async function notifyIncomingMessage(data, isNewChat = false) {
+        const incomingText = String(data.preview || data.mensagem || '').trim();
+        // As opções numéricas do robô são apenas etapas do menu e não devem
+        // interromper o operador com uma notificação do Windows.
+        if (/^[0-5]$/.test(incomingText)) return;
         playNotificationSound();
         const name = data.usuario || 'Cliente';
         const rawPreview = data.preview || data.mensagem || 'Nova mensagem recebida';
@@ -1622,7 +1643,7 @@
         // Notificação nativa do Windows via Tauri (funciona mesmo com app minimizado)
         if (isTauriApp) {
             // Evita que o Windows coalesça várias fotos idênticas do mesmo álbum.
-            const nativePreview = `${preview}\u200b${++nativeAlertSequence}`;
+            const nativePreview = preview;
             nativeNotificationQueue = nativeNotificationQueue
                 .catch(() => {})
                 .then(async () => {
@@ -1653,6 +1674,25 @@
                 });
             }
         }
+    }
+
+    function notifyAppointmentConfirmation(data, action = 'confirmado') {
+        const preview = `Agendamento automático ${action}: ${data.nome_cliente || 'Cliente'} — ${data.data_hora || ''} — ${data.servico || 'Atendimento'}`;
+        const tauri = window.__TAURI_INTERNALS__ || window.__TAURI__;
+        if (tauri) {
+            const invoke = window.__TAURI_INTERNALS__
+                ? (command, args) => window.__TAURI_INTERNALS__.invoke(command, args)
+                : (command, args) => window.__TAURI__.core.invoke(command, args);
+            Promise.resolve(invoke('trigger_message_alert', {
+                sender: 'Agendamento automático',
+                preview
+            })).catch(() => notifyIncomingMessage({
+                usuario: 'Agendamento automático',
+                preview
+            }));
+            return;
+        }
+        notifyIncomingMessage({ usuario: 'Agendamento automático', preview });
     }
 
     const groupCatalog = [
@@ -2000,17 +2040,14 @@
 
         if (query) {
             // Com uma busca ativa, pesquisa em todas as conversas abertas
-            filtered = chatsData.filter(c => [
-                c.usuario,
-                c.whatsapp_cliente,
-                c.ultima_mensagem,
-                c.assigned_user,
-                c.categoria,
-                c.prioridade
-            ].some(value => String(value || '').toLowerCase().includes(query)));
-            if (currentGroup !== 'todos') {
-                filtered = filtered.filter(c => getChatGroup(c) === currentGroup);
-            }
+            // A pesquisa não deve retornar conversas resolvidas/antigas.
+            // Para iniciar um novo atendimento, o operador deve usar o contato.
+            // A busca digitada serve para localizar contatos e iniciar conversa.
+            // Não exibe conversas da fila nem do histórico resolvido.
+            filtered = currentQueue === 'aguardando'
+                ? []
+                : filtered.filter(chat => [chat.usuario, chat.whatsapp_cliente, chat.ultima_mensagem, chat.assigned_user, chat.categoria, chat.prioridade]
+                    .some(value => String(value || '').toLowerCase().includes(query)));
 
             // Pesquisa também nos contatos da agenda do WhatsApp
             // Apenas evita duplicar contatos que já possuem conversa ATIVA (não finalizada) exibida
@@ -2025,6 +2062,7 @@
                 // Exibe contato se não houver conversa ativa com ele
                 return !activePhones.has(contactPhoneKey(contact.number));
             });
+            if (currentQueue !== 'aguardando') matchingContacts = [];
         }
 
         // Mantém qualquer fila ordenada pela atividade mais recente
@@ -2148,9 +2186,9 @@
 
                         <!-- Linha 4: Rodapé unificado (Telefone/Operador à esquerda, Ações à direita sem espaço vazio) -->
                         <div class="pt-1 border-t border-white/[0.04] flex items-center justify-between text-[10px] text-slate-500">
-                            <div class="flex items-center gap-1.5 min-w-0 truncate text-[9px]">
+                            <div class="flex flex-col items-start gap-0.5 min-w-0 truncate text-[9px]">
                                 <span class="font-mono text-slate-400 truncate">${c.whatsapp_cliente ? formatDisplayPhone(c.whatsapp_cliente) : 'Sem número'}</span>
-                                ${c.assigned_user ? `<span class="text-slate-500 truncate">• <span class="text-slate-300 font-semibold">${c.assigned_user}</span></span>` : '<span class="text-amber-400/90 font-bold truncate">• Fila</span>'}
+                                ${isGroupChat(c) ? '<span class="text-emerald-400/90 font-bold truncate">• Aberto</span>' : (c.assigned_user ? `<span class="text-slate-500 truncate">Operador: <span class="text-slate-300 font-semibold">${c.assigned_user}</span></span>` : '<span class="text-amber-400/90 font-bold truncate">• Fila</span>')}
                             </div>
                             <div class="chat-card-actions shrink-0">
                                 ${(currentQueue === 'resolvidos' || (query && c.status === 'Resolvido')) && !isGroupChat(c) ? `<button type="button" class="chat-card-action reopen" title="Reabrir atendimento" aria-label="Reabrir atendimento" onclick="reabrirAtendimentoCard(${c.id}, event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v8h8"/><path d="M12 8v4l3 2"/></svg></button>` : ''}
@@ -2329,7 +2367,13 @@
     }
 
     function filterChatList() {
-        if (!allWhatsAppContacts.length && !contactPhotosLoaded) {
+        const query = (document.getElementById('chat-search')?.value || '').trim();
+        // Atualiza a agenda uma vez ao iniciar uma pesquisa, evitando lista antiga em cache.
+        if (query && !contactSearchRefreshDone) {
+            contactPhotosLoaded = false;
+            contactSearchRefreshDone = true;
+        }
+        if (!contactPhotosLoaded) {
             loadContactPhotos().then(() => renderChatsList());
         }
         renderChatsList();
@@ -2341,6 +2385,7 @@
             input.value = '';
             input.focus();
         }
+        contactSearchRefreshDone = false;
         filterChatList();
     }
 
@@ -4195,6 +4240,23 @@
                     if (sameTicket(data.chamado_id, activeTicketId)) loadMessages(activeTicketId);
                     loadChats();
                 }
+                else if (data.event === "new_appointment") {
+                    if (currentTenantId != null && data.empresa_atendimento_id != null && Number(data.empresa_atendimento_id) !== Number(currentTenantId)) {
+                        return;
+                    }
+                    notifyAppointmentConfirmation(data, 'confirmado');
+                    focusDesktopAgendaAppointment(data.data_hora);
+                    loadChats();
+                }
+                else if (data.event === "appointment_rescheduled") {
+                    if (currentTenantId != null && data.empresa_atendimento_id != null && Number(data.empresa_atendimento_id) !== Number(currentTenantId)) {
+                        return;
+                    }
+                    notifyAppointmentConfirmation(data, 'remarcado');
+                    focusDesktopAgendaAppointment(data.data_hora);
+                    loadDesktopAgenda().catch(() => {});
+                    loadChats();
+                }
                 else if (data.event === "new_whatsapp_message" || data.event === "new_message") {
                     if (currentTenantId != null && data.empresa_atendimento_id != null && Number(data.empresa_atendimento_id) !== Number(currentTenantId)) {
                         return;
@@ -4388,6 +4450,18 @@
             days: desktopAgendaDays
         };
         renderDesktopAgenda(data);
+    }
+
+    function focusDesktopAgendaAppointment(dateTimeText) {
+        const value = String(dateTimeText || '');
+        const match = value.match(/(\d{2})\/(\d{2})(?:\/(\d{4}))?/);
+        if (!match) return;
+        const year = Number(match[3] || new Date().getFullYear());
+        const month = Number(match[2]) - 1;
+        const day = Number(match[1]);
+        desktopAgendaMonth = new Date(year, month, 1);
+        desktopAgendaSelectedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        loadDesktopAgenda().catch(() => {});
     }
 
     async function loadDesktopAgenda() {

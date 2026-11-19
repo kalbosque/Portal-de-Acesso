@@ -8,13 +8,13 @@
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
     <main class="mx-auto max-w-7xl px-4 py-8">
-        <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div class="mb-8 flex flex-wrap items-center justify-between gap-6 rounded-2xl border border-indigo-400/20 bg-gradient-to-r from-indigo-500/10 via-slate-900/70 to-slate-950/70 px-5 py-5 shadow-[0_18px_60px_rgba(2,6,23,.35)]">
             <div>
                 <p class="text-xs font-bold uppercase tracking-[.25em] text-indigo-400">Atendimento</p>
                 <h1 class="mt-2 text-3xl font-black">Empresas e planos</h1>
                 <p class="mt-2 text-sm text-slate-400">Fundação multiempresa. O isolamento será ativado somente após validação.</p>
             </div>
-            <a href="/central-atendimento" class="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5">Voltar ao atendimento</a>
+            <a href="/central-atendimento" class="inline-flex items-center gap-2 rounded-xl border border-indigo-300/20 bg-slate-950/60 px-5 py-3 text-sm font-bold text-slate-200 shadow-lg shadow-slate-950/30 transition hover:border-indigo-300/50 hover:bg-indigo-500/15 hover:text-white"><span aria-hidden="true">←</span> Voltar ao atendimento</a>
         </div>
 
         <div id="mensagem" class="mb-6 hidden rounded-xl border px-4 py-3 text-sm"></div>
@@ -25,11 +25,11 @@
             <p id="empresaNome" class="mt-1 text-sm text-slate-400">Carregando...</p>
             <div id="tenantMensagem" class="mt-4 hidden rounded-xl border px-4 py-3 text-sm"></div>
             <div class="mt-5 grid gap-5 lg:grid-cols-2">
-                <form id="tenantSetor" class="rounded-xl border border-white/10 bg-slate-950/40 p-4">
+                <form id="tenantSetor" class="order-2 rounded-xl border border-white/10 bg-slate-950/40 p-4 lg:order-2">
                     <h3 class="font-bold">Novo setor</h3>
                     <div class="mt-3 flex gap-2"><input name="nome" required placeholder="Ex.: Financeiro" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><button class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold">Adicionar</button></div>
                 </form>
-                <form id="tenantUsuario" class="rounded-xl border border-white/10 bg-slate-950/40 p-4">
+                <form id="tenantUsuario" class="order-1 rounded-xl border border-white/10 bg-slate-950/40 p-4 lg:order-1">
                     <h3 class="font-bold">Novo usuário</h3>
                     <div class="mt-3 grid gap-2 sm:grid-cols-2"><input name="nome" required placeholder="Nome" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><input name="email" type="email" required placeholder="E-mail" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><input name="username" required placeholder="Usuário" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><input name="password" type="password" minlength="6" required placeholder="Senha" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><select name="papel" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><option value="operador">Operador</option><option value="tenant_admin">Administrador</option></select><button class="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-bold">Criar usuário</button></div>
                 </form>

@@ -3753,10 +3753,11 @@ async def view_estudos_login(request: Request):
 @app.get("/atendimento/login", response_class=HTMLResponse)
 async def view_atendimento_login(request: Request):
     desktop_mode = request.query_params.get("desktop") == "1" or request.cookies.get("central_atendimento_tauri") == "1"
+    login_config = load_app_config()
     return templates.TemplateResponse(
         request=request,
         name="atendimento_login.html",
-        context={"config": APP_CONFIG, "desktop_mode": desktop_mode}
+        context={"config": login_config, "desktop_mode": desktop_mode}
     )
 
 def _can_access_atendimento(request: Request) -> bool:
@@ -3815,6 +3816,21 @@ async def view_central_atendimento(request: Request):
                 config = dict(config)
                 config["APP_NAME"] = cliente.empresa_nome or cliente.nome or config.get("APP_NAME", "Central de Atendimento")
                 config["APP_LOGO_URL"] = cliente.empresa_logo_url or ""
+            # A identificação editada na Central fica na empresa vinculada
+            # ao usuário. Prioriza essa fonte para refletir o novo upload.
+            try:
+                tenant_ctx = resolve_context(request)
+                if tenant_ctx.tenant_id is not None:
+                    with Session(engine) as session:
+                        company = session.exec(text("""
+                            SELECT nome, logo_url FROM empresas_atendimento
+                            WHERE id = :tenant_id
+                        """).bindparams(tenant_id=tenant_ctx.tenant_id)).first()
+                    if company:
+                        config["APP_NAME"] = company[0] or config.get("APP_NAME", "Central de Atendimento")
+                        config["APP_LOGO_URL"] = company[1] or config.get("APP_LOGO_URL", "")
+            except Exception as exc:
+                logger.warning("Não foi possível carregar a identificação da empresa: %s", exc)
         except Exception as exc:
             print(f"[CENTRAL] Não foi possível carregar a marca do cliente: {exc}")
     if not config.get("MODULO_ATENDIMENTO", False):
@@ -4062,6 +4078,19 @@ async def view_whatsapp_config(request: Request):
     config = load_app_config()
     with Session(engine) as session:
         current_user = session.get(Usuario, int(user_id))
+    profile_photo_url = current_user.foto_perfil_url if current_user else ""
+    if user_role == "cliente_atendimento" and tenant_admin_identity:
+        try:
+            tenant_ctx = resolve_context(request)
+            with Session(engine) as session:
+                company = session.exec(text("""
+                    SELECT logo_url FROM empresas_atendimento
+                    WHERE id = :tenant_id
+                """).bindparams(tenant_id=tenant_ctx.tenant_id)).first()
+            if company and company[0]:
+                profile_photo_url = company[0]
+        except Exception as exc:
+            logger.warning("Não foi possível carregar a foto da empresa: %s", exc)
     return templates.TemplateResponse(
         request=request,
         name="whatsapp_config.html",
@@ -4073,7 +4102,7 @@ async def view_whatsapp_config(request: Request):
             "desktop_mode": desktop_mode,
             "can_edit_identity": user_role in allowed_roles or tenant_admin_identity,
             "profile_name": (current_user.nome or current_user.username) if current_user else "",
-            "profile_photo_url": current_user.foto_perfil_url if current_user else "",
+            "profile_photo_url": profile_photo_url,
         }
     )
 

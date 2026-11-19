@@ -73,6 +73,7 @@ _connected_map_cache = {"expires_at": 0.0, "value": {}}
 _group_name_cache = {}
 _GROUP_NAME_CACHE_TTL = 600
 DISPLAY_TIMEZONE = ZoneInfo("America/Porto_Velho")
+_agenda_pending_slots: dict[str, tuple[str, str, float]] = {}
 
 
 def _get_instance_presence(instance: dict) -> tuple[str, set]:
@@ -412,6 +413,39 @@ async def update_attendance_identity(
         session.add(user)
         session.commit()
         return {"success": True, "nome": user.nome or user.username, "logo_url": user.foto_perfil_url or ""}
+
+
+@router.post("/identity/login-logo")
+async def update_attendance_login_logo(
+    request: Request,
+    logo: Optional[UploadFile] = File(None),
+):
+    """Atualiza somente a logo exibida na tela inicial de login da Central."""
+    if not _can_edit_identity(request):
+        raise HTTPException(status_code=403, detail="Sem permissão para alterar a logo da tela de login.")
+    if not logo or not logo.filename:
+        raise HTTPException(status_code=400, detail="Selecione uma imagem para a tela de login.")
+
+    allowed = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif", "image/svg+xml": ".svg"}
+    ext = allowed.get(logo.content_type or "") or os.path.splitext(logo.filename)[1].lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}:
+        raise HTTPException(status_code=400, detail="Use uma imagem JPG, PNG, WEBP, GIF ou SVG.")
+    content = await logo.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="A imagem deve ter no máximo 5 MB.")
+
+    folder = os.path.join(_BASE_DIR, "public_html", "uploads")
+    os.makedirs(folder, exist_ok=True)
+    filename = f"atendimento-login-logo{ext}"
+    with open(os.path.join(folder, filename), "wb") as output:
+        output.write(content)
+
+    config = get_whatsapp_config()
+    config["APP_ATENDIMENTO_LOGIN_LOGO_URL"] = f"uploads/{filename}?v={int(time.time())}"
+    with open(CONFIG_FILE, "w", encoding="utf-8") as output:
+        json.dump(config, output, indent=4, ensure_ascii=False)
+        output.write("\n")
+    return {"success": True, "logo_url": config["APP_ATENDIMENTO_LOGIN_LOGO_URL"]}
 
 
 @router.get("/identity/me")
@@ -774,6 +808,90 @@ def send_whatsapp_text(number: str, text: str, instance: Optional[str] = None) -
     return False
 
 
+def send_whatsapp_agenda_menu(number: str, welcome_text: str, instance: Optional[str] = None) -> bool:
+    """Envia o menu da agenda como lista clicável, com fallback para texto."""
+    resolved_instance = resolve_configured_instance(instance)
+    base_url, wa_token, resolved_instance = get_evolution_api_endpoints(resolved_instance)
+    if not base_url or not resolved_instance:
+        return send_whatsapp_text(number, welcome_text, instance)
+
+    headers = {"Content-Type": "application/json"}
+    if wa_token:
+        headers["apikey"] = wa_token
+    payload = {
+        "number": number,
+        "title": "Menu de atendimento",
+        "description": welcome_text,
+        "buttonText": "Ver opções",
+        "footerText": "Escolha uma opção para continuar",
+        "sections": [{
+            "title": "Opções",
+            "rows": [
+                {"title": "Agendar um horário", "description": "Escolha um dia e horário", "rowId": "1"},
+                {"title": "Ver serviços e valores", "description": "Confira os serviços disponíveis", "rowId": "2"},
+                {"title": "Consultar meu agendamento", "description": "Veja seus agendamentos ativos", "rowId": "3"},
+                {"title": "Endereço e horários", "description": "Consulte localização e funcionamento", "rowId": "4"},
+                {"title": "Falar com a recepção", "description": "Solicite atendimento humano", "rowId": "5"},
+            ],
+        }],
+        "delay": 1200,
+    }
+    try:
+        response = requests.post(f"{base_url}/message/sendList/{resolved_instance}", json=payload, headers=headers, timeout=8)
+        if response.status_code in (200, 201):
+            return True
+        print(f"[AgendamentoBot] Lista interativa indisponível ({response.status_code}): {response.text[:500]}; usando texto.")
+    except Exception as exc:
+        print(f"[AgendamentoBot] Falha na lista interativa; usando texto: {exc}")
+    return send_whatsapp_text(number, welcome_text, instance)
+
+
+def send_whatsapp_agenda_slots(number: str, intro: str, days: list[dict], instance: Optional[str] = None) -> bool:
+    """Envia os horários como opções selecionáveis e mantém fallback em texto."""
+    resolved_instance = resolve_configured_instance(instance)
+    base_url, wa_token, resolved_instance = get_evolution_api_endpoints(resolved_instance)
+    if not base_url or not resolved_instance:
+        return send_whatsapp_text(number, intro, instance)
+
+    rows = []
+    for day in days:
+        for slot in day.get("slots", []):
+            rows.append({
+                "title": f"{day.get('label', day.get('data', ''))} — {slot}",
+                "description": "Toque para selecionar este horário",
+                "rowId": f"agenda_slot|{day.get('data')}|{slot}",
+            })
+    rows = rows[:10]
+    if not rows:
+        return send_whatsapp_text(number, intro, instance)
+
+    headers = {"Content-Type": "application/json"}
+    if wa_token:
+        headers["apikey"] = wa_token
+    payload = {
+        "number": number,
+        "title": "Escolha um horário",
+        "description": intro,
+        "buttonText": "Ver horários",
+        "footerText": "Toque em um horário para selecionar",
+        "sections": [{"title": "Horários disponíveis", "rows": rows}],
+        "delay": 1200,
+    }
+    try:
+        response = requests.post(
+            f"{base_url}/message/sendList/{resolved_instance}",
+            json=payload,
+            headers=headers,
+            timeout=8,
+        )
+        if response.status_code in (200, 201):
+            return True
+        print(f"[AgendamentoBot] Lista de horários indisponível ({response.status_code}): {response.text[:500]}; usando texto.")
+    except Exception as exc:
+        print(f"[AgendamentoBot] Falha na lista de horários; usando texto: {exc}")
+    return send_whatsapp_text(number, intro, instance)
+
+
 def _instance_connected_numbers(instance: Optional[str]) -> set[str]:
     """Obtém os números da própria instância para bloquear auto-mensagens.
 
@@ -918,8 +1036,9 @@ def send_whatsapp_reaction(number: str, message_id: str, reaction: str, instance
     key = {"remoteJid": target_jid, "fromMe": bool(from_me), "id": message_id}
     if participant:
         key["participant"] = str(participant)
-    # Evolution v2 espera estes nomes; o formato key/reaction gera 400.
-    payload = {"reactionKey": key, "reactionMessage": reaction}
+    # O endpoint sendReaction da Evolution exige exatamente as propriedades
+    # `key` e `reaction`. Os nomes reactionKey/reactionMessage geram HTTP 400.
+    payload = {"key": key, "reaction": reaction}
     last_error = ""
     for attempt in range(2):
         try:
@@ -2533,13 +2652,52 @@ def get_whatsapp_chats(request: Request):
         return resultado
 
 
+def _get_local_whatsapp_contacts(instance: Optional[str] = None):
+    """Retorna contatos locais quando a sincronização externa não estiver disponível."""
+    with Session(engine) as session:
+        local = session.exec(select(ContatoWhatsApp).order_by(ContatoWhatsApp.nome)).all()
+    result = []
+    for item in local:
+        if instance and item.whatsapp_instance and item.whatsapp_instance != instance:
+            continue
+        number = _real_contact_number({"number": item.numero})
+        if not number:
+            continue
+        result.append({
+            "id": item.id,
+            "name": item.nome or "Sem nome",
+            "number": item.numero,
+            "company": item.empresa or "",
+            "note": item.observacao or "",
+            "instance": item.whatsapp_instance or instance or get_default_whatsapp_instance(get_whatsapp_config()) or "",
+            "local": True,
+            "is_local": True,
+        })
+    return result
+
+
 @router.get("/contacts")
 def get_whatsapp_contacts(request: Request, instance: Optional[str] = None):
     _require_atendimento_access(request)
     _ensure_whatsapp_columns()
+    if not instance and atendimento_multiempresa_enabled() and get_signed_cookie(request, "user_role") != "admin":
+        try:
+            context = resolve_context(request)
+            with Session(engine) as session:
+                tenant_instance = session.exec(text("""
+                    SELECT instance_name
+                    FROM instancias_whatsapp_tenant
+                    WHERE empresa_atendimento_id = :tenant_id AND ativa = TRUE
+                    ORDER BY padrao DESC, instance_name
+                    LIMIT 1
+                """).bindparams(tenant_id=context.tenant_id)).first()
+            if tenant_instance:
+                instance = str(tenant_instance[0])
+        except Exception:
+            pass
     base_url, wa_token, resolved = get_evolution_api_endpoints(instance)
     if not base_url:
-        raise HTTPException(status_code=400, detail="WhatsApp não configurado")
+        return _get_local_whatsapp_contacts(instance)
     try:
         response = requests.post(
             f"{base_url}/chat/findContacts/{resolved}",
@@ -2548,7 +2706,7 @@ def get_whatsapp_contacts(request: Request, instance: Optional[str] = None):
             timeout=20,
         )
         if not response.ok:
-            raise HTTPException(status_code=502, detail="Não foi possível sincronizar os contatos")
+            return _get_local_whatsapp_contacts(instance or resolved)
         payload = response.json()
         if isinstance(payload, list):
             contacts = payload
@@ -2607,7 +2765,10 @@ def get_whatsapp_contacts(request: Request, instance: Optional[str] = None):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Erro ao sincronizar contatos: {exc}")
+        try:
+            return _get_local_whatsapp_contacts(instance or resolved)
+        except Exception:
+            raise HTTPException(status_code=502, detail=f"Erro ao sincronizar contatos: {exc}")
 
 
 @router.post("/contacts/start")
@@ -2953,6 +3114,7 @@ def _extract_whatsapp_text(message_obj: dict) -> str:
         ("extendedTextMessage", "text"),
         ("textMessage", "text"),
         ("buttonsResponseMessage", "selectedDisplayText"),
+        ("listResponseMessage", "singleSelectReply"),
         ("listResponseMessage", "title"),
         ("templateButtonReplyMessage", "selectedDisplayText"),
         ("pollUpdateMessage", "name"),
@@ -2960,6 +3122,11 @@ def _extract_whatsapp_text(message_obj: dict) -> str:
     for parent, child in nested_keys:
         node = message_obj.get(parent)
         if isinstance(node, dict):
+            if parent == "listResponseMessage" and isinstance(node.get(child), dict):
+                selected = node[child]
+                value = selected.get("selectedRowId") or selected.get("selectedDisplayText")
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
             value = node.get(child)
             if isinstance(value, str) and value.strip():
                 return value.strip()
@@ -2983,7 +3150,167 @@ def _handle_agendamento_bot_interaction(
 
         nome_loja = settings.get("estabelecimento_nome") or "Nosso Estabelecimento"
         texto = (msg_text or "").strip()
+        # O WhatsApp pode entregar o comando formatado com asteriscos e
+        # alguns clientes colocam ';' depois do horário.
+        texto = re.sub(r"^[*_`]+|[*_`]+$", "", texto).strip()
+        texto = texto.replace("*", "").replace("_", "").replace("`", "").strip()
         texto_lower = texto.lower()
+        comando_agenda = bool(re.match(r"^agenda(?:r)?\b", texto_lower))
+
+        pending_key = f"{tenant_id}:{phone_number}"
+        pending = _agenda_pending_slots.get(pending_key)
+        if pending and pending[2] < time.time():
+            _agenda_pending_slots.pop(pending_key, None)
+            pending = None
+
+        if texto_lower.startswith("agenda_slot|"):
+            partes_slot = texto.split("|", 2)
+            if len(partes_slot) == 3:
+                _, data_selecionada, hora_selecionada = partes_slot
+                _agenda_pending_slots[pending_key] = (data_selecionada, hora_selecionada, time.time() + 900)
+                resposta = (
+                    f"✅ Horário selecionado: *{data_selecionada} às {hora_selecionada}*\n\n"
+                    "Agora informe o serviço desejado (ex.: *Corte*).\n"
+                    "Digite *0* para escolher outro horário."
+                )
+                background_tasks.add_task(send_whatsapp_text, phone_number, resposta, instance)
+                return True
+
+        if pending and texto_lower not in ("0", "5") and not comando_agenda:
+            data_selecionada, hora_selecionada, _ = pending
+            sucesso, msg_resultado, dt_agendado = api_atendimento_agenda.agendar_horario_bot(
+                nome_cliente=customer_name,
+                telefone=phone_number,
+                data_str=data_selecionada,
+                hora_str=hora_selecionada,
+                servico=texto,
+                tenant_id=tenant_id,
+            )
+            _agenda_pending_slots.pop(pending_key, None)
+            if sucesso and dt_agendado:
+                resposta = (
+                    "🎉 *Agendamento confirmado com sucesso!*\n\n"
+                    f"👤 *Cliente:* {customer_name}\n"
+                    f"📅 *Data:* {dt_agendado.strftime('%d/%m/%Y')} às {dt_agendado.strftime('%H:%M')}\n"
+                    f"✂️ *Serviço:* {texto}\n\n"
+                    "Se precisar de ajuda, digite *5* para falar com a recepção."
+                )
+                background_tasks.add_task(
+                    manager.broadcast,
+                    {
+                        "event": "new_appointment",
+                        "empresa_atendimento_id": tenant_id,
+                        "nome_cliente": customer_name,
+                        "telefone": phone_number,
+                        "servico": texto,
+                        "data_hora": dt_agendado.strftime("%d/%m/%Y %H:%M"),
+                    },
+                )
+            else:
+                resposta = f"⚠️ *Não foi possível confirmar o agendamento:*\n{msg_resultado}\n\nDigite *1* para escolher outro horário."
+            background_tasks.add_task(send_whatsapp_text, phone_number, resposta, instance)
+            return True
+        if texto_lower == "0":
+            _agenda_pending_slots.pop(pending_key, None)
+
+        if texto_lower.startswith("cancelar"):
+            partes_cancelar = texto.split()
+            if len(partes_cancelar) < 3:
+                resposta = "Para cancelar, envie: *CANCELAR [data] [horário]*\nExemplo: *CANCELAR 19/11 19:30*"
+            else:
+                encontrados = api_atendimento_agenda.localizar_agendamentos_cliente(
+                    phone_number, partes_cancelar[1], partes_cancelar[2], tenant_id=tenant_id
+                )
+                if len(encontrados) != 1:
+                    resposta = "⚠️ Não encontrei um agendamento exatamente nesse dia e horário."
+                else:
+                    cancelado, detalhe, _ = api_atendimento_agenda.cancelar_agendamento_cliente(
+                        phone_number, encontrados[0]["id"], tenant_id=tenant_id
+                    )
+                    resposta = ("✅ " if cancelado else "⚠️ ") + detalhe
+            background_tasks.add_task(send_whatsapp_text, phone_number, resposta, instance)
+            return True
+
+        if texto_lower.startswith(("remarcar", "remacar", "reagendar")):
+            partes_remarcar = texto.split()
+            remarcado = False
+            detalhe = "Formato de remarcação inválido."
+            agendamento_remarcado = None
+            data_nova = None
+            hora_nova = None
+
+            # Formato curto: quando existe somente um agendamento ativo,
+            # o cliente pode informar apenas o novo dia e horário.
+            if len(partes_remarcar) == 3:
+                ativos = api_atendimento_agenda.consultar_agendamentos_cliente(
+                    phone_number, tenant_id=tenant_id
+                )
+                if len(ativos) == 1:
+                    agendamento_id = ativos[0]["id"]
+                    data_nova, hora_nova = partes_remarcar[1], partes_remarcar[2]
+                    remarcado, detalhe, agendamento_remarcado = api_atendimento_agenda.remarcar_agendamento_cliente(
+                        phone_number, agendamento_id, data_nova, hora_nova, tenant_id=tenant_id
+                    )
+                elif not ativos:
+                    detalhe = "Não encontrei nenhum agendamento ativo para este número."
+                else:
+                    detalhe = (
+                        "Você possui mais de um agendamento. Para eu identificar o correto, "
+                        "envie: *REMARCAR [data atual] [horário atual] [nova data] [novo horário]*"
+                    )
+            # Formato completo e sem números de identificação:
+            # REMARCAR [data atual] [horário atual] [nova data] [novo horário]
+            elif len(partes_remarcar) >= 5:
+                encontrados = api_atendimento_agenda.localizar_agendamentos_cliente(
+                    phone_number, partes_remarcar[1], partes_remarcar[2], tenant_id=tenant_id
+                )
+                data_nova, hora_nova = partes_remarcar[3], partes_remarcar[4]
+                if len(encontrados) != 1:
+                    detalhe = "Não encontrei um agendamento exatamente nesse dia e horário."
+                else:
+                    remarcado, detalhe, agendamento_remarcado = api_atendimento_agenda.remarcar_agendamento_cliente(
+                        phone_number,
+                        encontrados[0]["id"],
+                        data_nova,
+                        hora_nova,
+                        tenant_id=tenant_id,
+                    )
+            else:
+                detalhe = (
+                    "Para remarcar, envie: *REMARCAR [nova data] [novo horário]*.\n"
+                    "Se tiver mais de um agendamento, envie: *REMARCAR [data atual] [horário atual] [nova data] [novo horário]*"
+                )
+
+            print(
+                f"[AgendamentoBot] Remarcação telefone={phone_number} "
+                f"comando={texto!r} sucesso={remarcado} detalhe={detalhe}"
+            )
+            if remarcado:
+                data_confirmacao = data_nova or ""
+                hora_confirmacao = hora_nova or ""
+                titulo_confirmacao = (agendamento_remarcado or {}).get("titulo") or "Atendimento"
+                resposta = (
+                    f"✅ Agendamento remarcado com sucesso!\n\n"
+                    f"Novo horário: *{data_confirmacao} às {hora_confirmacao}*\n"
+                    f"Serviço: *{titulo_confirmacao}*\n\n"
+                    "O horário anterior foi liberado e este novo horário foi reservado para você."
+                )
+                background_tasks.add_task(
+                    manager.broadcast,
+                    {
+                        "event": "appointment_rescheduled",
+                        "empresa_atendimento_id": tenant_id,
+                        "nome_cliente": customer_name,
+                        "telefone": phone_number,
+                        "servico": titulo_confirmacao,
+                        "data_hora": f"{data_confirmacao} {hora_confirmacao}",
+                        "acao": "remarcado",
+                    },
+                )
+            else:
+                resposta = "⚠️ " + detalhe
+            background_tasks.add_task(send_whatsapp_text, phone_number, resposta, instance)
+            return True
 
         gatilhos_menu = (
             "menu", "inicio", "início", "oi", "ola", "olá", "bom dia", "boa tarde",
@@ -2996,15 +3323,16 @@ def _handle_agendamento_bot_interaction(
                 f"Digite o *número* da opção desejada:\n\n"
                 f"1️⃣ - 📅 *Agendar um horário*\n"
                 f"2️⃣ - 💇‍♂️ *Ver serviços e valores*\n"
-                f"3️⃣ - 🔍 *Consultar meu agendamento*\n"
+                f"3️⃣ - 🔍 *Consultar, cancelar ou remarcar*\n"
                 f"4️⃣ - 📍 *Endereço e horários*\n"
                 f"5️⃣ - 👤 *Falar com a recepção*"
             )
-            background_tasks.add_task(send_whatsapp_text, phone_number, menu_msg, instance)
+            background_tasks.add_task(send_whatsapp_agenda_menu, phone_number, menu_msg, instance)
             return True
 
         if texto_lower in ("1", "agendar", "agendamento", "marcar", "marcar horario", "marcar horário"):
             horarios = api_atendimento_agenda.proximos_horarios_formatados(dias_desejados=3, tenant_id=tenant_id)
+            dias_interativos = api_atendimento_agenda.proximos_horarios_interativos(dias_desejados=3, tenant_id=tenant_id)
             agenda_msg = (
                 f"📅 *Próximos horários disponíveis em {nome_loja}:*\n\n"
                 f"{horarios}\n\n"
@@ -3014,15 +3342,15 @@ def _handle_agendamento_bot_interaction(
                 f"*AGENDAR 20/11 14:00 Corte*\n\n"
                 f"*(Ou digite 5 para falar com nossa recepção, ou 0 para voltar ao menu)*"
             )
-            background_tasks.add_task(send_whatsapp_text, phone_number, agenda_msg, instance)
+            background_tasks.add_task(send_whatsapp_agenda_slots, phone_number, agenda_msg, dias_interativos, instance)
             return True
 
-        if texto_lower.startswith("agendar"):
+        if comando_agenda:
             partes = texto.split()
             if len(partes) >= 3:
                 data_input = partes[1]
-                hora_input = partes[2]
-                servico_input = " ".join(partes[3:]) if len(partes) > 3 else "Atendimento"
+                hora_input = re.sub(r"[;,]+$", "", partes[2]).strip()
+                servico_input = " ".join(partes[3:]).strip(" ;,*_`") if len(partes) > 3 else "Atendimento"
                 sucesso, msg_resultado, dt_agendado = api_atendimento_agenda.agendar_horario_bot(
                     nome_cliente=customer_name,
                     telefone=phone_number,
@@ -3089,8 +3417,10 @@ def _handle_agendamento_bot_interaction(
                 resp = (
                     f"🔍 *Seu(s) agendamento(s) ativo(s):*\n\n"
                     f"{lista_str}\n\n"
+                    f"Para cancelar, envie *CANCELAR [data] [horário]*.\n"
+                    f"Para remarcar, envie *REMARCAR [data atual] [horário atual] [nova data] [novo horário]*.\n"
+                    f"Exemplo: *REMARCAR 19/11 19:30 20/11 09:45*\n\n"
                     f"📍 *Local:* {settings.get('endereco')}\n\n"
-                    f"Se precisar remarcar ou cancelar, digite *5* para falar com nossa recepção."
                 )
             else:
                 resp = (

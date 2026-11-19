@@ -1,167 +1,42 @@
 <!doctype html>
 <html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Central de Atendimento</title>
-    <style>
-      html, body { margin: 0; width: 100%; height: 100%; background: #07131a; }
-      body { color: #e2e8f0; font: 14px Arial, sans-serif; }
-      .loading {
-        display: grid;
-        place-items: center;
-        height: 100%;
-        color: #a7f3d0;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-      }
-      .panel { width: min(440px, calc(100% - 40px)); padding: 30px; border: 1px solid #1e3a46; border-radius: 18px; background: #0d2029; box-shadow: 0 20px 60px #0008; }
-      h1 { margin: 0 0 8px; font-size: 20px; color: #f8fafc; }
-      p { margin: 0 0 22px; color: #94a3b8; line-height: 1.5; font-weight: 400; }
-      label { display: block; margin: 14px 0 6px; color: #a7f3d0; font-size: 12px; }
-      input { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #294653; border-radius: 9px; outline: 0; background: #07131a; color: #f8fafc; font-size: 14px; }
-      input:focus { border-color: #10b981; }
-      button { width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 9px; background: #059669; color: white; font-weight: 700; cursor: pointer; }
-      button:hover { background: #10b981; }
-      .config-link { position: fixed; right: 18px; bottom: 15px; width: auto; margin: 0; padding: 7px 10px; background: transparent; color: #64748b; font-size: 11px; font-weight: 400; }
-      .config-link:hover { color: #a7f3d0; background: transparent; }
-      .error { min-height: 18px; margin-top: 10px; color: #fda4af; font-size: 12px; }
-      .loading-card {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 16px 18px;
-        border: 1px solid rgba(16, 185, 129, 0.25);
-        border-radius: 12px;
-        background: rgba(15, 23, 42, 0.7);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-      }
-      .spinner {
-        width: 16px;
-        height: 16px;
-        border: 2px solid rgba(167, 243, 208, 0.3);
-        border-top-color: #a7f3d0;
-        border-radius: 50%;
-        animation: spin 0.7s linear infinite;
-      }
-      @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
-  </head>
-  <body>
-    <div id="app" class="loading">Abrindo a Central de Atendimento...</div>
-    <script>
-      const isTauriRuntime = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
-      const SERVER_KEY = 'central_atendimento_server_url';
-      // Mantém o comportamento anterior: abre automaticamente no servidor
-      // atual quando ainda não existe uma configuração salva.
-      // Servidor padrão da Central de Atendimento
-      const DEFAULT_SERVER = 'https://portaldoacessos.taildb5af5.ts.net:8443';
-      const STARTUP_DELAY_MS = 200;
-      let redirectTimer;
-
-      function getSavedServer() {
-        const stored = localStorage.getItem(SERVER_KEY);
-        if (
-          stored &&
-          (/trycloudflare\.com|ngrok-free\.dev|crust-backroom-jolt|servidor-xml\.taildbf5af\.ts\.net/i.test(stored) ||
-           (stored.includes('portaldoacessos.taildb5af5.ts.net') && !stored.includes(':8443')) ||
-           (stored.includes('portaldoacessos.taildbf5af.ts.net') && !stored.includes(':8443')))
-        ) {
-          localStorage.setItem(SERVER_KEY, DEFAULT_SERVER);
-          return DEFAULT_SERVER;
-        }
-        return stored || DEFAULT_SERVER;
-      }
-
-      function normalizeServer(value) {
-        let server = String(value || '').trim().replace(/\/+$/, '');
-        server = server.replace(/\/(central-atendimento|atendimento)(\/.*)?$/i, '');
-        return server;
-      }
-
-      function isValidServer(value) {
-        try {
-          const parsed = new URL(value);
-          return ['http:', 'https:'].includes(parsed.protocol) && !!parsed.hostname;
-        } catch (_) {
-          return false;
-        }
-      }
-
-      function renderSetup(message = '') {
-        clearTimeout(redirectTimer);
-        const saved = getSavedServer();
-        const inputValue = saved && isValidServer(saved) ? saved : DEFAULT_SERVER;
-
-        document.getElementById('app').innerHTML = `
-          <form class="panel" id="server-form">
-            <h1>Configurar servidor</h1>
-            <p>Informe o IP ou nome do servidor da Central. Esta configuração fica salva somente neste computador.</p>
-            <label for="server-url">Endereço do servidor</label>
-            <input id="server-url" value="${inputValue.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" placeholder="http://192.168.10.50:8080" autocomplete="url">
-            <div class="error" id="server-error">${message}</div>
-            <button type="submit">Salvar e abrir Central</button>
-          </form>
-          <button class="config-link" id="cancel-config" type="button">Cancelar</button>`;
-
-        document.getElementById('server-form').addEventListener('submit', event => {
-          event.preventDefault();
-          const input = document.getElementById('server-url');
-          const server = normalizeServer(input.value);
-
-          if (!isValidServer(server)) {
-            document.getElementById('server-error').textContent = 'Informe um endereço válido, como http://192.168.10.50:8080';
-            return;
-          }
-
-          localStorage.setItem(SERVER_KEY, server);
-          openServer(server);
-        });
-
-        document.getElementById('cancel-config').addEventListener('click', () => {
-          const server = normalizeServer(localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER);
-          if (isValidServer(server)) openServer(server);
-        });
-      }
-
-      function openServer(server) {
-        const normalized = normalizeServer(server);
-        if (!isValidServer(normalized)) {
-          renderSetup('Servidor inválido. Verifique o endereço e tente novamente.');
-          return;
-        }
-
-        const target = `${normalized}/atendimento/login?desktop=1`;
-        window.location.replace(target);
-      }
-
-      if (isTauriRuntime) {
-        try {
-          localStorage.setItem('central_atendimento_tauri', '1');
-        } catch (_) {}
-      }
-
-      const savedServer = normalizeServer(getSavedServer());
-      if (new URLSearchParams(window.location.search).has('config')) {
-        renderSetup();
-      } else {
-        document.getElementById('app').innerHTML = `
-          <div class="loading-card">
-            <span class="spinner" aria-hidden="true"></span>
-            <span>Abrindo a Central de Atendimento...</span>
-          </div>
-          <button class="config-link" id="change-server" type="button">Configurar servidor</button>
-        `;
-
-        document.getElementById('change-server').addEventListener('click', renderSetup);
-
-        if (!isValidServer(savedServer)) {
-          renderSetup('Não foi possível localizar um servidor válido. Configure o endereço da Central.');
-          return;
-        }
-
-        redirectTimer = setTimeout(() => openServer(savedServer), STARTUP_DELAY_MS);
-      }
-    </script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Central de Atendimento v0.1.3</title>
+  <style>
+    :root{color-scheme:dark;--green:#10b981;--mint:#6ee7b7;--text:#f8fafc;--muted:#aab7c9;--line:rgba(190,220,230,.28)}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;margin:0}
+    body{overflow:hidden;color:var(--text);font-family:"Segoe UI",Roboto,Arial,sans-serif;background:#061326;user-select:none}
+    .titlebar{position:relative;z-index:20;height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 14px;background:rgba(5,13,27,.82);border-bottom:1px solid rgba(255,255,255,.08);font-size:12px;color:#d7e0ea;-webkit-app-region:drag}
+    .titlebar-left{display:flex;align-items:center;gap:8px}.titlebar-icon{width:13px;height:13px;color:#b5c1d0}.status{width:9px;height:9px;border-radius:50%;background:#2bc684;box-shadow:0 0 9px #2bc684}.window-controls{display:flex;align-items:center;gap:3px;-webkit-app-region:no-drag}.window-control{width:31px;height:25px;padding:0;border:0;border-radius:4px;color:#aab5c5;background:transparent;cursor:pointer;font-size:15px;line-height:1}.window-control:hover{color:#fff;background:rgba(255,255,255,.12)}.window-control.close:hover{background:#d43b4d}
+    .stage{position:relative;isolation:isolate;min-height:calc(100vh - 36px);display:grid;place-items:center;overflow:hidden;padding:30px;background:radial-gradient(ellipse at 28% 24%,rgba(4,121,101,.72) 0%,rgba(7,47,61,.52) 30%,transparent 58%),radial-gradient(ellipse at 84% 80%,rgba(8,105,84,.62) 0%,rgba(6,35,52,.42) 35%,transparent 66%),linear-gradient(120deg,#061c31 0%,#071326 48%,#061c34 100%)}
+    .stage:before{content:"";position:absolute;inset:-8%;z-index:-2;opacity:.8;background:radial-gradient(circle at 16% 18%,rgba(66,232,193,.12) 0 4px,transparent 5px),radial-gradient(circle at 32% 22%,rgba(106,255,211,.13) 0 9px,transparent 11px),radial-gradient(circle at 51% 9%,rgba(70,231,255,.13) 0 8px,transparent 10px),radial-gradient(circle at 78% 15%,rgba(62,239,167,.15) 0 8px,transparent 10px),radial-gradient(circle at 88% 57%,rgba(55,235,202,.15) 0 8px,transparent 10px),radial-gradient(circle at 28% 67%,rgba(58,229,187,.14) 0 5px,transparent 7px);filter:blur(5px);animation:lights 13s ease-in-out infinite alternate}.stage:after{content:"";position:absolute;inset:0;z-index:-1;opacity:.42;background:linear-gradient(116deg,transparent 0 24%,rgba(35,142,138,.18) 24.2%,transparent 24.5% 53%,rgba(25,128,143,.13) 53.2%,transparent 53.5%),radial-gradient(ellipse at 50% 50%,transparent 20%,rgba(1,8,26,.36) 100%)}
+    @keyframes lights{to{transform:translate(18px,-12px) scale(1.04);filter:blur(8px)}}
+    .ambient{position:absolute;z-index:-1;border-radius:50%;filter:blur(90px);pointer-events:none}.ambient.one{width:430px;height:430px;top:-180px;left:-110px;background:rgba(0,178,145,.18)}.ambient.two{width:500px;height:500px;right:-180px;bottom:-220px;background:rgba(8,157,118,.2)}.ambient.three{width:260px;height:260px;right:18%;top:-100px;background:rgba(25,145,192,.12)}
+    .node{position:absolute;z-index:0;width:168px;height:47px;padding:10px 14px;display:flex;align-items:center;gap:10px;border:1px solid rgba(175,221,229,.12);border-radius:10px;background:rgba(125,170,180,.07);box-shadow:0 0 25px rgba(0,0,0,.16);filter:blur(3px);opacity:.6;animation:float 10s ease-in-out infinite alternate}.node.one{right:7%;top:16%}.node.two{right:8%;top:27%;animation-delay:-4s}.node.three{left:7%;bottom:28%;animation-delay:-7s}.node-dot{width:9px;height:9px;border-radius:50%;background:#10c999;box-shadow:0 0 12px #10c999}.node-lines{display:grid;gap:5px}.node-line{height:5px;border-radius:4px;background:rgba(220,245,249,.16)}@keyframes float{to{transform:translateY(-15px)}}
+    .card{position:relative;z-index:5;width:min(566px,calc(100vw - 40px));min-height:558px;padding:39px 39px 37px;display:flex;flex-direction:column;justify-content:center;text-align:center;border:1px solid rgba(211,238,239,.31);border-radius:17px;background:linear-gradient(145deg,rgba(132,163,170,.38),rgba(24,43,70,.57) 47%,rgba(29,69,75,.48));box-shadow:0 26px 65px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.2);backdrop-filter:blur(21px);-webkit-backdrop-filter:blur(21px)}
+    .logo{width:80px;height:80px;margin:0 auto 25px;display:grid;place-items:center;border:1px solid rgba(79,245,204,.82);border-radius:20px;background:linear-gradient(145deg,rgba(25,130,129,.47),rgba(4,31,67,.84));box-shadow:0 0 29px rgba(63,240,190,.46),inset 0 0 18px rgba(71,235,199,.18)}.logo svg{width:57px;height:57px;filter:drop-shadow(0 0 5px rgba(68,245,195,.6))}.card h1{margin:0 0 9px;font-size:29px;line-height:1.2;letter-spacing:-.8px;font-weight:750}.subtitle{margin:0 0 33px;color:#bac4d1;font-size:14px;letter-spacing:.05px}
+    .form{display:grid;gap:19px;text-align:left}.field label{display:block;margin:0 0 8px 1px;color:#a7b1c1;font-size:11px;font-weight:800;letter-spacing:2px}.input-wrap{position:relative}.input{width:100%;height:53px;padding:0 19px;border:1px solid var(--line);border-radius:28px;outline:none;color:#edf5fb;background:linear-gradient(100deg,rgba(76,104,130,.22),rgba(63,103,114,.2));box-shadow:inset 0 1px 8px rgba(0,0,0,.06);font:15px inherit;transition:.2s}.input::placeholder{color:#a3adbd}.input:focus{border-color:#54dfbd;box-shadow:0 0 0 3px rgba(16,185,129,.13),0 0 20px rgba(26,215,166,.12)}.password{padding-right:57px}.toggle{position:absolute;right:13px;top:50%;width:34px;height:34px;display:grid;place-items:center;transform:translateY(-50%);border:0;border-radius:50%;color:#a4bdc9;background:transparent;cursor:pointer}.toggle:hover{color:#6ee7b7;background:rgba(255,255,255,.08)}.toggle svg{width:20px;height:20px}
+    .submit{width:100%;height:50px;margin-top:1px;border:1px solid rgba(122,250,213,.55);border-radius:28px;color:#eafff8;background:linear-gradient(90deg,#16bd85 0%,#16bb91 48%,#168b99 100%);box-shadow:0 0 22px rgba(22,226,171,.62),inset 0 1px 0 rgba(255,255,255,.27);cursor:pointer;font-size:13px;font-weight:850;letter-spacing:2px;transition:.2s}.submit:hover{transform:translateY(-2px);filter:brightness(1.09);box-shadow:0 0 32px rgba(22,226,171,.8)}.submit:active{transform:translateY(0)}.message{min-height:17px;margin:1px 0 0;color:#fda4af;text-align:center;font-size:12px}.back{margin:27px 0 0;color:#9eabba;font-size:12px}.back a{color:#36cfa8;font-weight:700;text-decoration:none}.back a:hover{text-decoration:underline}
+    @media(max-width:650px){.stage{padding:18px}.card{min-height:0;padding:31px 22px}.card h1{font-size:24px}.node{display:none}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+  </style>
+</head>
+<body>
+  <header class="titlebar" data-tauri-drag-region><div class="titlebar-left" data-tauri-drag-region><svg class="titlebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>Central de Atendimento v0.1.3</span><span class="status" title="Sistema online"></span></div><nav class="window-controls" aria-label="Controles da janela"><button class="window-control" data-window="minimize" title="Minimizar">−</button><button class="window-control" data-window="maximize" title="Maximizar">□</button><button class="window-control close" data-window="close" title="Fechar">×</button></nav></header>
+  <main class="stage"><div class="ambient one"></div><div class="ambient two"></div><div class="ambient three"></div><div class="node one"><span class="node-dot"></span><div class="node-lines"><span class="node-line" style="width:105px"></span><span class="node-line" style="width:68px"></span></div></div><div class="node two"><span class="node-dot" style="background:#7b7df2;box-shadow:0 0 12px #7b7df2"></span><div class="node-lines"><span class="node-line" style="width:93px"></span><span class="node-line" style="width:57px"></span></div></div><div class="node three"><span class="node-dot"></span><div class="node-lines"><span class="node-line" style="width:96px"></span><span class="node-line" style="width:61px"></span></div></div>
+    <section class="card" aria-labelledby="title"><div class="logo" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="#74f1ca" stroke-width="3"><path d="M11 34a21 21 0 0 1 42 0v7a5 5 0 0 1-5 5h-5V29h10M11 34v7a5 5 0 0 0 5 5h5V29H11"/><path d="M22 45c2 5 7 8 14 8h4"/><circle cx="32" cy="34" r="13"/><path d="M26 29c1 7 5 11 11 12l3-3M26 29l3 3"/></svg></div><h1 id="title">Login Central de Atendimento</h1><p class="subtitle">Entre com usuário e senha para acessar o atendimento WhatsApp.</p>
+      <form class="form" id="login-form"><div class="field"><label for="username">USUÁRIO OU E-MAIL</label><input class="input" id="username" name="username" type="text" placeholder="Digite seu usuário ou e-mail" autocomplete="username" required></div><div class="field"><label for="password">SENHA</label><div class="input-wrap"><input class="input password" id="password" name="password" type="password" placeholder="••••••••" autocomplete="current-password" required><button class="toggle" id="toggle-password" type="button" aria-label="Mostrar senha"><svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div></div><div class="message" id="message" aria-live="polite"></div><button class="submit" type="submit">ACESSAR ATENDIMENTO</button></form><p class="back">Voltar ao portal geral? <a id="portal-link" href="https://portaldoacessos.taildbf5af.ts.net:8443/atendimento/login">Clique aqui</a></p></section>
+  </main>
+  <script>
+    const portalUrl='https://portaldoacessos.taildbf5af.ts.net:8443/atendimento/login';
+    const form=document.getElementById('login-form'), password=document.getElementById('password'), message=document.getElementById('message');
+    document.getElementById('toggle-password').addEventListener('click',()=>{const visible=password.type==='text';password.type=visible?'password':'text';document.getElementById('toggle-password').setAttribute('aria-label',visible?'Mostrar senha':'Ocultar senha')});
+    form.addEventListener('submit',event=>{event.preventDefault();message.textContent='';window.location.href=portalUrl});
+    async function windowAction(action){const win=window.__TAURI__?.window;if(win?.getCurrentWindow){const current=win.getCurrentWindow();if(action==='minimize')await current.minimize();if(action==='maximize')await current.toggleMaximize();if(action==='close')await current.close();return}if(action==='close')window.close()}
+    document.querySelectorAll('[data-window]').forEach(button=>button.addEventListener('click',()=>windowAction(button.dataset.window)));
+  </script>
+</body>
 </html>

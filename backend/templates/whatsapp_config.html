@@ -10,6 +10,9 @@
         document.documentElement.classList.add('tauri-config-mode');
     }
 </script>
+<div id="config-top-navigation" class="mx-auto mb-4 flex max-w-7xl flex-wrap justify-between gap-3 px-4">
+    <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-300">← Voltar para conversas</a>
+</div>
 <div class="profile-identity-card mx-auto mb-5 max-w-7xl rounded-2xl border border-emerald-400/20 bg-slate-900/70 p-5">
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3">
@@ -19,12 +22,23 @@
         {% if can_edit_identity %}<div class="flex flex-wrap items-center justify-end gap-2"><input id="tauri-identity-name" value="{{ config.APP_NAME or '' }}" class="w-48 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-xs text-white" placeholder="Nome da empresa"><input id="tauri-logo-upload" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" class="max-w-[230px] text-xs text-slate-400"><button type="button" onclick="saveTauriLogo()" class="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-emerald-500">Salvar identificação</button></div>{% endif %}
     </div>
 </div>
+<div class="mx-auto mb-5 max-w-7xl rounded-2xl border border-cyan-400/20 bg-slate-900/70 p-5">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            {% if config.APP_ATENDIMENTO_LOGIN_LOGO_URL %}<img id="login-logo-preview" src="/{{ config.APP_ATENDIMENTO_LOGIN_LOGO_URL }}" alt="Logo da tela de login" class="h-12 w-12 rounded-2xl border border-cyan-400/30 object-contain bg-slate-950">{% else %}<div id="login-logo-preview" class="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-500/10 text-xl">🔐</div>{% endif %}
+            <div><h3 class="text-sm font-bold text-white">Logo da tela inicial</h3><p class="text-xs text-slate-400">Esta logo aparece somente na tela de login da Central.</p></div>
+        </div>
+        {% if can_edit_identity %}<div class="flex flex-wrap items-center justify-end gap-2"><input id="login-logo-upload" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" class="max-w-[230px] text-xs text-slate-400"><button type="button" onclick="saveLoginLogo()" class="rounded-xl bg-cyan-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-cyan-500">Salvar logo do login</button></div>{% endif %}
+    </div>
+</div>
 <style>
     html.tauri-config-mode body > header { display: none !important; }
     html.tauri-config-mode body > main { max-width: none !important; width: 100%; padding: 1.25rem !important; }
     html.tauri-config-mode body > main > div:first-child { margin-bottom: 1rem; }
+    /* Na configuração da Central, o retorno para o Portal inicial não é necessário. */
+    body:has(.profile-identity-card) a[href="/"] { display: none !important; }
 </style>
-<div class="mx-auto mb-4 flex max-w-7xl flex-wrap justify-between gap-3 px-4">
+<div style="display:none" class="mx-auto mb-4 flex max-w-7xl flex-wrap justify-between gap-3 px-4">
     <a href="/central-atendimento" class="rounded-xl bg-emerald-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-300">← Voltar para conversas</a>
     <a href="/" class="rounded-xl bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300">⌂ Portal inicial</a>
 </div>
@@ -725,9 +739,37 @@
             return;
         }
         const data = await response.json().catch(() => ({}));
-        if (response.ok && data.success) alert('Perfil salvo com sucesso.');
         if (!response.ok || !data.success) { alert(data.detail || 'Não foi possível salvar a logo.'); return; }
-        window.location.href = '/central-atendimento/configuracoes' + (isTauriConfig ? '?desktop=1' : '');
+
+        // Atualiza a imagem na própria tela, sem recarregar a Central.
+        // A recarga disparava chamadas independentes da Evolution API e
+        // fazia o salvamento parecer travado.
+        const savedPhoto = String(data.logo_url || data.foto_url || '').trim();
+        const profileImage = document.querySelector('.profile-identity-card img');
+        if (savedPhoto && profileImage) {
+            profileImage.src = '/' + savedPhoto.replace(/^\/+/, '');
+        }
+        if (input) input.value = '';
+        alert('Perfil salvo com sucesso.');
+    }
+
+    async function saveLoginLogo() {
+        const input = document.getElementById('login-logo-upload');
+        if (!input?.files?.[0]) { alert('Selecione a logo da tela de login.'); return; }
+        const form = new FormData();
+        form.append('logo', input.files[0]);
+        try {
+            const response = await fetch('/api/whatsapp/identity/login-logo', { method: 'POST', body: form });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.success) { alert(data.detail || 'Não foi possível salvar a logo do login.'); return; }
+            const preview = document.getElementById('login-logo-preview');
+            if (preview && preview.tagName === 'IMG') preview.src = '/' + String(data.logo_url).replace(/^\/+/, '');
+            else if (preview) preview.outerHTML = '<img id="login-logo-preview" src="/' + String(data.logo_url).replace(/^\/+/, '') + '" alt="Logo da tela de login" class="h-12 w-12 rounded-2xl border border-cyan-400/30 object-contain bg-slate-950">';
+            input.value = '';
+            alert('Logo da tela de login salva com sucesso.');
+        } catch (_) {
+            alert('Não foi possível conectar ao servidor para salvar a logo do login.');
+        }
     }
 </script>
 {% endblock %}

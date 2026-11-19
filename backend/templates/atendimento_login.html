@@ -3,12 +3,148 @@
 {% block title %}Login | Central de Atendimento{% endblock %}
 
 {% block content %}
-<div class="max-w-xl mx-auto py-16">
+<style>
+    /* Visual exclusivo da tela de login; não altera as telas internas da Central. */
+    body:has(.attendance-login-page) {
+        background: #020817;
+        overflow-x: hidden;
+    }
+
+    .attendance-login-page {
+        position: relative;
+        isolation: isolate;
+    }
+
+    .attendance-login-page::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        pointer-events: none;
+        background:
+            linear-gradient(115deg, rgba(2, 8, 23, .98) 0%, rgba(3, 25, 42, .93) 48%, rgba(2, 8, 23, .98) 100%),
+            linear-gradient(rgba(45, 212, 191, .035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(45, 212, 191, .035) 1px, transparent 1px);
+        background-size: auto, 54px 54px, 54px 54px;
+    }
+
+    .attendance-login-page::after {
+        content: "";
+        position: fixed;
+        inset: -20%;
+        z-index: -1;
+        pointer-events: none;
+        opacity: .72;
+        background:
+            radial-gradient(circle at 12% 28%, rgba(16, 185, 129, .24) 0, transparent 18%),
+            radial-gradient(circle at 88% 18%, rgba(14, 165, 233, .20) 0, transparent 20%),
+            radial-gradient(circle at 78% 84%, rgba(20, 184, 166, .16) 0, transparent 22%),
+            radial-gradient(circle at 26% 88%, rgba(37, 99, 235, .14) 0, transparent 20%);
+        filter: blur(28px);
+        animation: attendance-login-glow 14s ease-in-out infinite alternate;
+    }
+
+    .login-network-art {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        overflow: hidden;
+        pointer-events: none;
+        opacity: .78;
+    }
+
+    .login-network-art::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+            linear-gradient(132deg, transparent 0 25%, rgba(5, 21, 43, .52) 25.2% 25.6%, transparent 25.8%),
+            linear-gradient(151deg, transparent 0 39%, rgba(7, 32, 55, .42) 39.2% 39.55%, transparent 39.8%),
+            linear-gradient(18deg, transparent 0 67%, rgba(6, 44, 58, .38) 67.2% 67.45%, transparent 67.7%);
+        filter: blur(1px);
+    }
+
+    .login-network-node {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #38e8c0;
+        box-shadow: 0 0 9px 3px rgba(45, 232, 192, .72), 0 0 34px 9px rgba(45, 232, 192, .24);
+        filter: blur(.7px);
+        animation: login-network-pulse 4.5s ease-in-out infinite alternate;
+    }
+
+    .login-network-node::after {
+        content: "";
+        position: absolute;
+        inset: -5px;
+        border-radius: inherit;
+        background: inherit;
+        opacity: .22;
+        filter: blur(8px);
+    }
+
+    .login-network-node.n1 { left: 11%; top: 24%; }
+    .login-network-node.n2 { left: 28%; top: 16%; animation-delay: -1.2s; }
+    .login-network-node.n3 { left: 8%; top: 64%; animation-delay: -2.1s; }
+    .login-network-node.n4 { left: 22%; top: 79%; animation-delay: -3.2s; }
+    .login-network-node.n5 { right: 17%; top: 30%; animation-delay: -1.7s; }
+    .login-network-node.n6 { right: 8%; top: 70%; animation-delay: -.6s; }
+
+    .login-network-card {
+        position: absolute;
+        width: 112px;
+        height: 48px;
+        border: 1px solid rgba(93, 241, 211, .16);
+        border-radius: 10px;
+        background: linear-gradient(135deg, rgba(33, 67, 79, .52), rgba(16, 31, 60, .42));
+        box-shadow: 0 12px 35px rgba(0, 0, 0, .24);
+        filter: blur(2px);
+    }
+
+    .login-network-card::before,
+    .login-network-card::after {
+        content: "";
+        position: absolute;
+        left: 24px;
+        height: 5px;
+        border-radius: 6px;
+        background: rgba(120, 255, 223, .32);
+    }
+
+    .login-network-card::before { top: 15px; width: 55px; }
+    .login-network-card::after { top: 27px; width: 35px; opacity: .55; }
+    .login-network-card.c1 { left: 7%; top: 66%; }
+    .login-network-card.c2 { right: 8%; top: 21%; opacity: .45; }
+
+    @keyframes login-network-pulse {
+        from { transform: scale(.8); opacity: .48; }
+        to { transform: scale(1.18); opacity: .9; }
+    }
+
+    @keyframes attendance-login-glow {
+        from { transform: scale(1) translate3d(-1%, 0, 0); }
+        to { transform: scale(1.08) translate3d(1%, -1%, 0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .attendance-login-page::after { animation: none; }
+    }
+</style>
+<div class="attendance-login-page max-w-xl mx-auto py-16">
+    <div class="login-network-art" aria-hidden="true">
+        <span class="login-network-node n1"></span><span class="login-network-node n2"></span>
+        <span class="login-network-node n3"></span><span class="login-network-node n4"></span>
+        <span class="login-network-node n5"></span><span class="login-network-node n6"></span>
+        <span class="login-network-card c1"></span><span class="login-network-card c2"></span>
+    </div>
     <div class="glass-panel rounded-[2rem] p-10 shadow-[0_40px_120px_-40px_rgba(0,0,0,0.6)]">
         <div class="mb-8 text-center">
-            {% if config.APP_LOGO_URL %}
+            {% set login_logo = config.APP_ATENDIMENTO_LOGIN_LOGO_URL or config.APP_LOGO_URL %}
+            {% if login_logo %}
                 <div class="mx-auto mb-5 flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl border border-emerald-500/20 bg-white/5 p-2 shadow-lg shadow-emerald-500/10">
-                    <img src="/static/{{ config.APP_LOGO_URL }}" alt="Logo da empresa" class="h-full w-full object-contain rounded-2xl" />
+                    <img src="/{{ login_logo }}" alt="Logo da tela de login" class="h-full w-full object-contain rounded-2xl" />
                 </div>
             {% else %}
                 <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-500/15 text-emerald-300 mb-5 border border-emerald-500/20">
@@ -44,7 +180,7 @@
         </a>
         {% endif %}
 
-        <div class="mt-8 text-center text-xs text-slate-500">
+        <div class="hidden mt-8 text-center text-xs text-slate-500">
             <p>Voltar ao portal geral? <a href="/login" class="text-emerald-400 hover:text-white font-black">Clique aqui</a></p>
         </div>
     </div>

@@ -709,6 +709,34 @@ def proximos_horarios_formatados(dias_desejados: int = 3, tenant_id: Optional[in
     return "\n".join(dias_encontrados)
 
 
+def proximos_horarios_interativos(dias_desejados: int = 3, tenant_id: Optional[int] = None) -> list[dict]:
+    """Retorna os horários livres em formato próprio para uma lista clicável."""
+    settings = get_agenda_settings(tenant_id=tenant_id)
+    local_tz = _local_timezone()
+    now_utc = datetime.now(timezone.utc)
+    hoje = now_utc.astimezone(local_tz).date()
+    nomes_semana = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    dias_encontrados = []
+
+    with Session(engine) as session:
+        for offset in range(0, 10):
+            dia = hoje + timedelta(days=offset)
+            booked = _booked_starts(session, dia, tenant_id)
+            slots = _available_slots(dia, booked, now_utc, settings)
+            if not slots:
+                continue
+            if dia == hoje:
+                label = f"Hoje ({dia.strftime('%d/%m')})"
+            elif dia == hoje + timedelta(days=1):
+                label = f"Amanhã ({dia.strftime('%d/%m')})"
+            else:
+                label = f"{nomes_semana[dia.weekday()]} ({dia.strftime('%d/%m')})"
+            dias_encontrados.append({"label": label, "data": dia.strftime("%d/%m"), "slots": slots})
+            if len(dias_encontrados) >= dias_desejados:
+                break
+    return dias_encontrados
+
+
 def agendar_horario_bot(
     nome_cliente: str,
     telefone: str,
@@ -753,6 +781,15 @@ def agendar_horario_bot(
         return False, "Esse horário já passou. Por favor, escolha uma data e horário futuros.", None
 
     with Session(engine) as session:
+        existing_query = select(AtendimentoAgendamento).where(
+            AtendimentoAgendamento.status == "agendado",
+            AtendimentoAgendamento.data_hora == dt_utc,
+        )
+        if tenant_id is not None:
+            existing_query = existing_query.where(AtendimentoAgendamento.empresa_atendimento_id == tenant_id)
+        if session.exec(existing_query).first():
+            return False, "Esse horário já foi reservado. Escolha outro horário disponível.", None
+
         booked = _booked_starts(session, data_agendamento, tenant_id)
         slots = _available_slots(data_agendamento, booked, now_utc, settings)
         hora_fmt = horario.strftime("%H:%M")
@@ -805,4 +842,110 @@ def consultar_agendamentos_cliente(
                     "hora": local_dt.strftime("%H:%M"),
                 })
         return result
+
+
+def localizar_agendamentos_cliente(
+    telefone: str,
+    data_str: str,
+    hora_str: str,
+    tenant_id: Optional[int] = None,
+) -> list[dict]:
+    """Localiza agendamentos pelo dia e horário, sem depender do ID interno."""
+    data_ref = str(data_str or "").strip().replace("-", "/")
+    hora_ref = re.sub(r"[;,]+$", "", str(hora_str or "").strip())
+    encontrados = []
+    for item in consultar_agendamentos_cliente(telefone, tenant_id=tenant_id):
+        data_item = item.get("data", "")
+        if len(data_ref.split("/")) == 2:
+            data_ok = data_item[:5] == data_ref.zfill(5)
+        else:
+            data_ok = data_item == data_ref
+        if data_ok and item.get("hora") == hora_ref:
+            encontrados.append(item)
+    return encontrados
+
+
+def cancelar_agendamento_cliente(
+    telefone: str,
+    appointment_id: int,
+    tenant_id: Optional[int] = None,
+) -> tuple[bool, str, Optional[dict]]:
+    """Cancela somente um agendamento ativo pertencente ao telefone informado."""
+    clean_phone = re.sub(r"\D", "", telefone)
+    with Session(engine) as session:
+        item = session.get(AtendimentoAgendamento, appointment_id)
+        if not item or (tenant_id is not None and item.empresa_atendimento_id != tenant_id):
+            return False, "Agendamento não encontrado.", None
+        item_phone = re.sub(r"\D", "", item.telefone or "")
+        if not (item_phone.endswith(clean_phone[-8:]) or clean_phone.endswith(item_phone[-8:])):
+            return False, "Esse agendamento não pertence a este número.", None
+        if item.status != "agendado":
+            return False, "Esse agendamento já não está ativo.", None
+        item.status = "cancelado"
+        session.add(item)
+        session.commit()
+        return True, "Agendamento cancelado com sucesso.", _serialize_appointment(item)
+
+
+def remarcar_agendamento_cliente(
+    telefone: str,
+    appointment_id: int,
+    data_str: str,
+    hora_str: str,
+    tenant_id: Optional[int] = None,
+) -> tuple[bool, str, Optional[dict]]:
+    """Remarca um agendamento do cliente, validando disponibilidade e evitando duplicidade."""
+    clean_phone = re.sub(r"\D", "", telefone)
+    local_tz = _local_timezone()
+    now_utc = datetime.now(timezone.utc)
+    now_local = now_utc.astimezone(local_tz)
+    data_limpa = str(data_str).strip().replace("-", "/")
+    partes_data = data_limpa.split("/")
+    try:
+        dia = int(partes_data[0])
+        mes = int(partes_data[1])
+        ano = int(partes_data[2]) if len(partes_data) > 2 else now_local.year
+        if len(partes_data) <= 2 and (mes < now_local.month or (mes == now_local.month and dia < now_local.day)):
+            ano += 1
+        data_nova = date(ano, mes, dia)
+        hora_limpa = re.sub(r"[;,]+$", "", str(hora_str).strip())
+        hora_partes = hora_limpa.split(":")
+        hora_nova = time(int(hora_partes[0]), int(hora_partes[1]) if len(hora_partes) > 1 else 0)
+    except Exception:
+        return False, "Data ou horário inválido. Use DD/MM HH:MM.", None
+
+    dt_local = datetime.combine(data_nova, hora_nova, tzinfo=local_tz)
+    dt_utc = dt_local.astimezone(timezone.utc)
+    if dt_utc <= now_utc:
+        return False, "Escolha uma data e horário futuros.", None
+
+    settings = get_agenda_settings(tenant_id=tenant_id)
+    with Session(engine) as session:
+        item = session.get(AtendimentoAgendamento, appointment_id)
+        if not item or (tenant_id is not None and item.empresa_atendimento_id != tenant_id):
+            return False, "Agendamento não encontrado.", None
+        item_phone = re.sub(r"\D", "", item.telefone or "")
+        if not (item_phone.endswith(clean_phone[-8:]) or clean_phone.endswith(item_phone[-8:])):
+            return False, "Esse agendamento não pertence a este número.", None
+        if item.status != "agendado":
+            return False, "Esse agendamento já não está ativo.", None
+
+        duplicate_query = select(AtendimentoAgendamento).where(
+            AtendimentoAgendamento.status == "agendado",
+            AtendimentoAgendamento.data_hora == dt_utc,
+            AtendimentoAgendamento.id != appointment_id,
+        )
+        if tenant_id is not None:
+            duplicate_query = duplicate_query.where(AtendimentoAgendamento.empresa_atendimento_id == tenant_id)
+        if session.exec(duplicate_query).first():
+            return False, "Esse horário já está reservado. Escolha outro horário.", None
+
+        booked = [value for value in _booked_starts(session, data_nova, tenant_id) if value != item.data_hora]
+        if hora_nova.strftime("%H:%M") not in _available_slots(data_nova, booked, now_utc, settings):
+            return False, "Esse horário não está disponível. Escolha outro horário.", None
+        item.data_hora = dt_utc
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return True, "Agendamento remarcado com sucesso.", _serialize_appointment(item)
 
