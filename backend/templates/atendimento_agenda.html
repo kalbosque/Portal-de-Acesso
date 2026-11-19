@@ -7,25 +7,37 @@
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
             <p class="text-[10px] font-black uppercase tracking-[.25em] text-emerald-300">Central de Atendimento</p>
-            <h2 class="mt-1 text-2xl font-black text-white">Agendamentos</h2>
-            <p class="mt-2 text-sm text-slate-400">Organize atendimentos e programe mensagens pelo WhatsApp.</p>
+            <div class="mt-1 flex flex-wrap items-center gap-3">
+                <h2 class="text-2xl font-black text-white">Agendamentos</h2>
+                <span id="agenda-status" class="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[11px] font-bold text-amber-200">
+                    <span class="inline-block h-2 w-2 rounded-full bg-amber-400"></span>
+                    Carregando...
+                </span>
+            </div>
+            <p class="mt-1.5 text-xs text-slate-400">Organize atendimentos e programe mensagens pelo WhatsApp.</p>
         </div>
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2.5">
             {% if user_role == 'admin' %}
-            <div class="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-1.5">
+            <div class="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-1.5 h-10">
                 <label for="admin-tenant-selector" class="text-xs font-bold text-slate-300">Empresa:</label>
-                <input id="admin-tenant-search" type="search" placeholder="Buscar empresa..." class="glass-input w-40 rounded-lg px-2.5 py-1 text-xs text-white bg-slate-800 border-0 focus:ring-1 focus:ring-emerald-400">
+                <input id="admin-tenant-search" type="search" placeholder="Buscar empresa..." class="glass-input w-36 rounded-lg px-2.5 py-1 text-xs text-white bg-slate-800 border-0 focus:ring-1 focus:ring-emerald-400">
                 <select id="admin-tenant-selector" onchange="onAdminTenantChange(this.value)" class="glass-input rounded-lg px-2.5 py-1 text-xs text-white bg-slate-800 border-0 focus:ring-1 focus:ring-emerald-400">
-                    <option value="">Carregando empresas...</option>
+                    <option value="">Carregando...</option>
                 </select>
             </div>
             {% endif %}
-            <span id="agenda-status" class="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-200">Carregando...</span>
-            <button id="btn-config-comercio" type="button" onclick="openComercioModal()" class="rounded-xl border border-sky-400/30 bg-sky-500/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-sky-200 hover:bg-sky-500/20 transition flex items-center gap-1.5">
-                <span>⚙️</span> Configurar Estabelecimento
+            <button id="btn-config-comercio" type="button" onclick="openComercioModal()" class="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-slate-800/80 px-3.5 text-xs font-bold text-slate-200 transition hover:bg-slate-700/80 hover:text-white" title="Configurar horários e serviços">
+                <svg viewBox="0 0 24 24" class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Configurar Estabelecimento
             </button>
-            <button id="agenda-toggle" type="button" onclick="toggleAgenda()" class="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500">Ativar agenda</button>
-            <a href="/central-atendimento" class="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-300 hover:bg-white/5">Voltar às conversas</a>
+            <button id="agenda-toggle" type="button" onclick="toggleAgenda()" class="flex h-10 items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3.5 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/25">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Ativar agenda
+            </button>
+            <a href="/central-atendimento" class="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white" title="Voltar para a tela de conversas">
+                <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Voltar às conversas
+            </a>
         </div>
     </div>
 
@@ -365,16 +377,20 @@
         });
         updateAppointmentSelection();
         agendaPaused.classList.toggle('hidden', agendaEnabled.value);
-        agendaStatus.textContent = agendaEnabled.value ? 'Agenda ativada' : 'Agenda desativada';
+        agendaStatus.innerHTML = agendaEnabled.value
+            ? '<span class="inline-block h-2 w-2 rounded-full bg-emerald-400"></span> Agenda ativada'
+            : '<span class="inline-block h-2 w-2 rounded-full bg-amber-400"></span> Agenda desativada';
         agendaStatus.className = agendaEnabled.value
-            ? 'rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-emerald-200'
-            : 'rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-amber-200';
+            ? 'inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-bold text-emerald-200'
+            : 'inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[11px] font-bold text-amber-200';
         const button = document.getElementById('agenda-toggle');
         if (button) {
-            button.textContent = agendaEnabled.value ? 'Desativar agenda' : 'Ativar agenda';
+            button.innerHTML = agendaEnabled.value
+                ? '<svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Desativar agenda'
+                : '<svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Ativar agenda';
             button.className = agendaEnabled.value
-                ? 'rounded-xl border border-rose-400/40 bg-rose-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-rose-500'
-                : 'rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-500';
+                ? 'flex h-10 items-center gap-2 rounded-xl border border-rose-400/40 bg-rose-500/15 px-3.5 text-xs font-bold text-rose-300 transition hover:bg-rose-500/25'
+                : 'flex h-10 items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3.5 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/25';
         }
     }
 
