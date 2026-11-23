@@ -3917,7 +3917,26 @@ async def _process_whatsapp_webhook_payload(
         elif "locationMessage" in message_obj:
             msg_text = "[Localização]"
         elif "contactMessage" in message_obj:
-            msg_text = "[Contato]"
+            import re as _re
+            _contact = message_obj.get("contactMessage") or {}
+            _display_name = _contact.get("displayName", "")
+            _vcard = _contact.get("vcard", "")
+            _phone = ""
+            for _line in _vcard.splitlines():
+                if _line.upper().startswith("TEL"):
+                    _waid = _re.search(r'waid=(\d+)', _line)
+                    if _waid:
+                        _phone = _waid.group(1)
+                    else:
+                        _parts = _line.split(":")
+                        if len(_parts) > 1:
+                            _phone = _re.sub(r'\D', '', _parts[-1])
+                    break
+            _contact_payload = json.dumps(
+                {"name": _display_name, "phone": _phone, "vcard": _vcard},
+                ensure_ascii=False
+            )
+            msg_text = f"[Contato:{_contact_payload}]"
         elif "reactionMessage" in message_obj:
             # Reações não criam chamado
             print(f"[Webhook] Reação ignorada de {phone_number}")

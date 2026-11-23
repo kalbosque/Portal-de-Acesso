@@ -411,6 +411,15 @@
     .link-preview-card .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     /* Indicador de Encaminhada */
     .forwarded-label { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; font-size: 10px; color: #94a3b8; font-style: italic; opacity: 0.9; }
+    /* Contact card bubble */
+    .contact-card-bubble { display: flex; flex-direction: column; overflow: hidden; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.25); min-width: 210px; max-width: 280px; }
+    .contact-card-header { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .contact-card-avatar { width: 42px; height: 42px; border-radius: 50%; background: rgba(16,185,129,0.25); border: 1.5px solid rgba(16,185,129,0.4); display: flex; align-items: center; justify-content: center; color: #6ee7b7; font-weight: 900; font-size: 14px; flex-shrink: 0; }
+    .contact-card-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .contact-card-name { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contact-card-phone { font-size: 11px; color: #94a3b8; font-family: monospace; }
+    .contact-card-action { width: 100%; padding: 8px 0; font-size: 12px; font-weight: 700; color: #34d399; background: transparent; border: none; cursor: pointer; transition: background 0.15s; letter-spacing: 0.02em; }
+    .contact-card-action:hover { background: rgba(255,255,255,0.06); }
 
     /* Emojis devem permanecer estÃ¡ticos; somente GIFs usam movimento. */
     #emoji-picker, #emoji-picker button {
@@ -2464,6 +2473,11 @@
         filterChatList();
     }
 
+    function iniciarConversaContato(phone, name) {
+        if (!phone) return;
+        iniciarAtendimentoComContato({ number: phone, name: name || `Contato ${phone}` });
+    }
+
     async function iniciarAtendimentoComContato(contact) {
         if (!contact || !contact.number) return;
 
@@ -3090,6 +3104,35 @@
             ? `<div class="message-actions absolute right-2 top-2 z-20"><button type="button" onclick="toggleMessageMenu(${m.id}, event)" class="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-white/10 hover:text-white" title="Opções"><svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg></button><div id="message-menu-${m.id}" class="message-menu hidden min-w-[175px] max-w-[240px] overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-2xl py-1.5 backdrop-blur-md"></div></div>`
             : '';
         if (isDeleted) formattedMsg = '<span class="italic text-slate-500">Mensagem excluída</span>';
+
+        // ── Contact card rendering ──────────────────────────────────────────
+        if (!isDeleted && !media && messageText.startsWith('[Contato:')) {
+            try {
+                const contactJson = messageText.slice(9, -1);
+                const ct = JSON.parse(contactJson);
+                const ctName = escapeHtml(ct.name || 'Contato');
+                const ctPhone = ct.phone || '';
+                const initials = (ct.name || 'C').trim().split(/\s+/).slice(0, 2)
+                    .map(w => w[0]).join('').toUpperCase();
+                formattedMsg = `
+                <div class="contact-card-bubble">
+                    <div class="contact-card-header">
+                        <div class="contact-card-avatar">${initials}</div>
+                        <div class="contact-card-info">
+                            <div class="contact-card-name">${ctName}</div>
+                            ${ctPhone ? `<div class="contact-card-phone">${escapeHtml(ctPhone)}</div>` : ''}
+                        </div>
+                    </div>
+                    ${ctPhone ? `<button type="button"
+                        class="contact-card-action"
+                        onclick="iniciarConversaContato('${escapeHtml(ct.phone)}','${escapeHtml(ct.name || '')}')">
+                        💬 Conversar
+                    </button>` : ''}
+                </div>`;
+            } catch (_) {
+                formattedMsg = '<span class="text-slate-400">📇 Contato recebido</span>';
+            }
+        }
 
         // Monta preview de link (extendedTextMessage com OG data)
         let linkPreviewHtml = '';
