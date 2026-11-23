@@ -856,12 +856,12 @@
             <!-- Botões de Ações Rápidas -->
             <div class="flex items-center gap-1 pb-0.5">
                 <!-- Emojis -->
-                <button type="button" onclick="toggleEmojiPicker()" class="w-9 h-9 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-white/5 rounded-xl transition-all" title="Emojis">
+                <button id="emoji-picker-btn" type="button" onclick="toggleEmojiPicker()" class="w-9 h-9 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-white/5 rounded-xl transition-all" title="Emojis">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </button>
                 
                 <!-- GIF Estilizado -->
-                <button type="button" onclick="toggleGifPicker()" class="h-9 px-2.5 flex-shrink-0 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-[11px] font-black tracking-wider text-slate-400 hover:text-emerald-400 hover:bg-white/10 hover:border-emerald-500/30 transition-all" title="GIFs">GIF</button>
+                <button id="gif-picker-btn" type="button" onclick="toggleGifPicker()" class="h-9 px-2.5 flex-shrink-0 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-[11px] font-black tracking-wider text-slate-400 hover:text-emerald-400 hover:bg-white/10 hover:border-emerald-500/30 transition-all" title="GIFs">GIF</button>
                 
                 <!-- Anexo -->
                 <input id="attachment-input" type="file" multiple class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
@@ -878,9 +878,28 @@
             </div>
 
             <!-- Modais Flutuantes (Emoji e GIF) -->
-            <div id="emoji-picker" class="hidden absolute bottom-16 left-3 z-30 grid w-72 grid-cols-8 gap-1 rounded-2xl border border-white/10 bg-slate-900 p-3 shadow-2xl backdrop-blur-xl"></div>
-            <div id="gif-picker" class="hidden absolute bottom-16 left-12 z-30 w-96 rounded-2xl border border-white/10 bg-slate-900 p-3 shadow-2xl backdrop-blur-xl">
-                <div class="mb-2 flex items-center justify-between"><span class="text-[10px] font-black uppercase tracking-widest text-slate-300">Mais GIFs</span><span class="text-[9px] text-slate-500">Clique para enviar</span></div>
+            <div id="emoji-picker" class="hidden absolute bottom-16 left-3 z-30 flex flex-col w-80 sm:w-96 rounded-2xl border border-white/10 bg-slate-900/98 shadow-2xl backdrop-blur-2xl overflow-hidden" style="height: 380px;">
+                <!-- Cabeçalho com Busca e Fechar -->
+                <div class="p-2.5 pb-2 border-b border-white/10 bg-slate-950/60 flex flex-col gap-2">
+                    <div class="flex items-center gap-2">
+                        <div class="relative flex-1">
+                            <input id="emoji-search-input" type="text" placeholder="Buscar emojis..." oninput="onEmojiSearch(this.value)" class="w-full h-8 pl-8 pr-3 text-xs rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500/50">
+                            <svg class="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <button type="button" onclick="document.getElementById('emoji-picker').classList.add('hidden')" class="w-7 h-7 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 text-sm transition-all" title="Fechar">✕</button>
+                    </div>
+                    <!-- Abas de Categorias -->
+                    <div id="emoji-category-tabs" class="flex items-center justify-between gap-1 px-0.5 pt-0.5"></div>
+                </div>
+                <!-- Lista de Emojis Scrollável -->
+                <div id="emoji-list-scroll" class="flex-1 p-2.5 overflow-y-auto custom-scroll space-y-3"></div>
+            </div>
+
+            <div id="gif-picker" class="hidden absolute bottom-16 left-12 z-30 w-96 rounded-2xl border border-white/10 bg-slate-900/98 p-3 shadow-2xl backdrop-blur-2xl">
+                <div class="mb-2 flex items-center justify-between">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-300">Mais GIFs</span>
+                    <button type="button" onclick="document.getElementById('gif-picker').classList.add('hidden')" class="w-6 h-6 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 text-xs transition-all" title="Fechar">✕</button>
+                </div>
                 <div id="gif-grid" class="grid max-h-80 grid-cols-4 gap-2 overflow-y-auto custom-scroll"></div>
             </div>
 
@@ -3666,30 +3685,176 @@
 
     // --- Envio de Mensagens e Ações ---
 
-    const emojiCatalog = ['😀','😂','😉','😍','🤔','😎','👍','👎','👏','🙏','✅','❌','⚠️','💡','🚀','📄','🛠️','📅','⏰','💬','❤️','🙌','🙂','😅','😢','😡','🎉','📌','🔧','💻','📦','👋'];
+    const emojiCategories = [
+        {
+            id: 'faces',
+            name: 'Expressões',
+            icon: '😀',
+            emojis: [
+                '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','🫠','😉','😊','😇',
+                '🥰','😍','🤩','😘','😗','😚','😙','😋','😛','😜','🤪','😝','🤑','🤗',
+                '🤭','🤫','🤔','🫣','🫡','🤐','🤨','😐','😑','😶','🫥','😏','😒','🙄',
+                '😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵',
+                '🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','🫤','😟','🙁',
+                '😮','😯','😲','😳','🥺','🥹','😦','😧','😨','😰','😥','😢','😭','😱',
+                '😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀',
+                '☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'
+            ]
+        },
+        {
+            id: 'gestures',
+            name: 'Mãos & Gestos',
+            icon: '👍',
+            emojis: [
+                '👍','👎','👌','🤌','🤏','✌️','🤞','🫰','🤟','🤘','🤙','👈','👉','👆',
+                '👇','☝️','🫵','👋','🤚','🖐️','✋','🖖','🫱','🫲','🫳','🫴','✊','👊',
+                '🤛','🤜','👏','🙌','🫶','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾',
+                '🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','👀','👁️','👅','👄','💋'
+            ]
+        },
+        {
+            id: 'work',
+            name: 'Atendimento & Escritório',
+            icon: '💼',
+            emojis: [
+                '✅','✔️','☑️','❌','✖️','⚠️','🚨','💡','📌','📍','📎','📄','📑','🧾',
+                '📊','📈','📉','📅','📆','⏰','⏱️','⏳','⌛','💬','🗨️','💭','📢','📣',
+                '🔔','🔕','✉️','📧','📦','📬','📮','💼','📁','📂','🗂️','📋','📝','✏️',
+                '✒️','🖋️','🖊️','🔍','🔎','🔒','🔓','🔑','🗝️','🛠️','🔧','🔨','⚙️','💻',
+                '🖥️','🖨️','⌨️','🖱️','📱','☎️','📞','📠','🔋','🔌','💰','💳','💵'
+            ]
+        },
+        {
+            id: 'hearts',
+            name: 'Corações & Reações',
+            icon: '❤️',
+            emojis: [
+                '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','❣️','💕',
+                '💞','💓','💗','💖','💘','💝','💟','✨','⭐','🌟','💫','💥','🔥','💯',
+                '💢','💨','💤','🎉','🎊','🎈','🎁','🏆','🥇','🥈','🥉','🎯'
+            ]
+        },
+        {
+            id: 'objects',
+            name: 'Objetos & Símbolos',
+            icon: '☕',
+            emojis: [
+                '☕','🍵','🥤','🧃','🍺','🍻','🥂','🍷','🍾','🍕','🍔','🍟','🥪','🌮',
+                '🍣','🍫','🍿','🍩','🎂','🍰','🍦','🚀','✈️','🚗','🚕','🚙','🚌','🛵',
+                '🚲','🛴','🛒','☀️','🌤️','⛅','☁️','🌧️','⛈️','⚡','❄️','🌈','☂️','⛱️'
+            ]
+        }
+    ];
+
+    function initEmojiPicker() {
+        const picker = document.getElementById('emoji-picker');
+        if (!picker || picker.dataset.initialized) return;
+        picker.dataset.initialized = 'true';
+
+        const tabsContainer = document.getElementById('emoji-category-tabs');
+        const scrollContainer = document.getElementById('emoji-list-scroll');
+        if (!tabsContainer || !scrollContainer) return;
+
+        tabsContainer.innerHTML = '';
+        scrollContainer.innerHTML = '';
+
+        emojiCategories.forEach((cat, index) => {
+            // Tab button
+            const tabBtn = document.createElement('button');
+            tabBtn.type = 'button';
+            tabBtn.className = `flex-1 py-1 rounded-lg text-sm text-center transition-all ${index === 0 ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`;
+            tabBtn.title = cat.name;
+            tabBtn.textContent = cat.icon;
+            tabBtn.onclick = () => {
+                const section = document.getElementById(`cat-${cat.id}`);
+                if (section) {
+                    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+                tabsContainer.querySelectorAll('button').forEach(b => {
+                    b.className = 'flex-1 py-1 rounded-lg text-sm text-center transition-all text-slate-400 hover:text-white hover:bg-white/5';
+                });
+                tabBtn.className = 'flex-1 py-1 rounded-lg text-sm text-center transition-all bg-white/10 text-white';
+            };
+            tabsContainer.appendChild(tabBtn);
+
+            // Category section
+            const section = document.createElement('div');
+            section.id = `cat-${cat.id}`;
+            section.className = 'emoji-category-section';
+
+            const header = document.createElement('div');
+            header.className = 'text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5';
+            header.innerHTML = `<span>${cat.icon}</span> <span>${cat.name}</span>`;
+            section.appendChild(header);
+
+            const grid = document.createElement('div');
+            grid.className = 'grid grid-cols-8 gap-1';
+
+            cat.emojis.forEach(emoji => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'h-8 w-8 flex items-center justify-center text-lg rounded-lg hover:bg-white/10 transition-all select-none cursor-pointer';
+                btn.textContent = emoji;
+                btn.onclick = () => insertEmoji(emoji);
+                grid.appendChild(btn);
+            });
+
+            section.appendChild(grid);
+            scrollContainer.appendChild(section);
+        });
+    }
+
+    function insertEmoji(emoji) {
+        const input = document.getElementById('msg-input');
+        if (!input || input.disabled) return;
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+        input.focus();
+        input.selectionStart = input.selectionEnd = start + emoji.length;
+    }
+
+    function onEmojiSearch(query) {
+        const q = (query || '').trim().toLowerCase();
+        const scrollContainer = document.getElementById('emoji-list-scroll');
+        if (!scrollContainer) return;
+
+        scrollContainer.querySelectorAll('.emoji-category-section').forEach(section => {
+            let hasVisible = false;
+            section.querySelectorAll('.grid > button').forEach(btn => {
+                const emoji = btn.textContent;
+                if (!q || emoji.includes(q)) {
+                    btn.classList.remove('hidden');
+                    hasVisible = true;
+                } else {
+                    btn.classList.add('hidden');
+                }
+            });
+            if (hasVisible) {
+                section.classList.remove('hidden');
+            } else {
+                section.classList.add('hidden');
+            }
+        });
+    }
 
     function toggleEmojiPicker() {
         const picker = document.getElementById('emoji-picker');
         const input = document.getElementById('msg-input');
         if (!picker || !input || input.disabled) return;
-        if (!picker.children.length) {
-            emojiCatalog.forEach(emoji => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'rounded-lg p-1 text-xl transition hover:bg-white/10';
-                button.textContent = emoji;
-                button.onclick = () => {
-                    const start = input.selectionStart ?? input.value.length;
-                    const end = input.selectionEnd ?? input.value.length;
-                    input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
-                    input.focus();
-                    input.selectionStart = input.selectionEnd = start + emoji.length;
-                    picker.classList.add('hidden');
-                };
-                picker.appendChild(button);
-            });
+        document.getElementById('gif-picker')?.classList.add('hidden');
+        if (!picker.dataset.initialized) {
+            initEmojiPicker();
         }
         picker.classList.toggle('hidden');
+        if (!picker.classList.contains('hidden')) {
+            const searchInput = document.getElementById('emoji-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                onEmojiSearch('');
+                setTimeout(() => searchInput.focus(), 50);
+            }
+        }
     }
 
     const gifCatalog = [
@@ -3770,6 +3935,32 @@
             mostrarToast('Não foi possível carregar este GIF.');
         }
     }
+
+    // Fechar modais de Emoji e GIF ao clicar fora ou apertar ESC
+    document.addEventListener('click', (event) => {
+        const emojiPicker = document.getElementById('emoji-picker');
+        const emojiBtn = document.getElementById('emoji-picker-btn');
+        if (emojiPicker && !emojiPicker.classList.contains('hidden')) {
+            if (!emojiPicker.contains(event.target) && !emojiBtn?.contains(event.target)) {
+                emojiPicker.classList.add('hidden');
+            }
+        }
+
+        const gifPicker = document.getElementById('gif-picker');
+        const gifBtn = document.getElementById('gif-picker-btn');
+        if (gifPicker && !gifPicker.classList.contains('hidden')) {
+            if (!gifPicker.contains(event.target) && !gifBtn?.contains(event.target)) {
+                gifPicker.classList.add('hidden');
+            }
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            document.getElementById('emoji-picker')?.classList.add('hidden');
+            document.getElementById('gif-picker')?.classList.add('hidden');
+        }
+    });
 
     async function sendMessage() {
         if (!activeTicketId) return;
