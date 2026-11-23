@@ -135,6 +135,8 @@ class ChamadoInteracao(SQLModel, table=True):
     reacao_quantidade: int = Field(default=0)
     reacao_detalhes: Optional[str] = None
     favorito: bool = Field(default=False, index=True)
+    is_forwarded: bool = Field(default=False)
+    link_preview: Optional[str] = None
     whatsapp_status: str = Field(default="sent")
     data_hora: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     

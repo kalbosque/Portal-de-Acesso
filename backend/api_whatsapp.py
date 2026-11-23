@@ -3851,12 +3851,45 @@ async def _process_whatsapp_webhook_payload(
         if is_group and not customer_name:
             customer_name = get_whatsapp_group_name(phone_number, instance_from_payload) or "Grupo WhatsApp"
 
-        # Extrai o texto de acordo com o tipo da mensagem (Baileys/Evolution v2)
+        # Extrai o texto e metadados de acordo com o tipo da mensagem (Baileys/Evolution v2)
         msg_text = ""
+        is_forwarded_msg = False
+        link_preview_payload = None
+
+        # Detecta se a mensagem foi encaminhada (em grupos ou conversas normais)
+        context_info = (
+            message_obj.get("extendedTextMessage", {}).get("contextInfo")
+            or message_obj.get("imageMessage", {}).get("contextInfo")
+            or message_obj.get("videoMessage", {}).get("contextInfo")
+            or message_obj.get("audioMessage", {}).get("contextInfo")
+            or message_obj.get("documentMessage", {}).get("contextInfo")
+            or message_obj.get("contextInfo")
+            or data.get("contextInfo")
+            or {}
+        )
+        if bool(context_info.get("isForwarded") or (context_info.get("forwardingScore", 0) > 0)):
+            is_forwarded_msg = True
+
         if "conversation" in message_obj:
             msg_text = message_obj["conversation"]
         elif "extendedTextMessage" in message_obj:
-            msg_text = message_obj["extendedTextMessage"].get("text", "")
+            ext = message_obj["extendedTextMessage"] or {}
+            msg_text = ext.get("text", "")
+            ext_title = ext.get("title")
+            ext_desc = ext.get("description")
+            ext_url = ext.get("canonicalUrl") or ext.get("matchedText")
+            ext_thumb = ext.get("jpegThumbnail")
+            if ext_title or ext_desc or ext_url:
+                thumb_data = f"data:image/jpeg;base64,{ext_thumb}" if ext_thumb else None
+                try:
+                    link_preview_payload = json.dumps({
+                        "title": ext_title,
+                        "description": ext_desc,
+                        "url": ext_url,
+                        "image": thumb_data
+                    }, ensure_ascii=False)
+                except Exception:
+                    pass
         elif "albumMessage" in message_obj:
             album = message_obj.get("albumMessage") or {}
             caption = album.get("caption", "") if isinstance(album, dict) else ""
@@ -3989,7 +4022,9 @@ async def _process_whatsapp_webhook_payload(
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
                     whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
-                    data_hora=message_received_at
+                    data_hora=message_received_at,
+                    is_forwarded=is_forwarded_msg,
+                    link_preview=link_preview_payload
                 )
                 session.add(interacao)
 
@@ -4019,6 +4054,8 @@ async def _process_whatsapp_webhook_payload(
                             "empresa_atendimento_id": chamado.empresa_atendimento_id,
                             "usuario": customer_name,
                             "mensagem": msg_text,
+                            "is_forwarded": is_forwarded_msg,
+                            "link_preview": link_preview_payload,
                             "data_hora": _display_datetime(interacao.data_hora).strftime("%d/%m/%Y %H:%M:%S")
                         }
                     )
@@ -4068,7 +4105,9 @@ async def _process_whatsapp_webhook_payload(
                     whatsapp_message_id=key.get("id"),
                     whatsapp_remote_jid=str(remote_jid),
                     whatsapp_participant=str(key.get("senderPn") or key.get("phoneNumber") or key.get("participant") or data.get("senderPn") or data.get("phoneNumber") or data.get("participant") or "") or None,
-                    data_hora=message_received_at
+                    data_hora=message_received_at,
+                    is_forwarded=is_forwarded_msg,
+                    link_preview=link_preview_payload
                 )
                 session.add(interacao)
                 session.commit()
@@ -4084,6 +4123,8 @@ async def _process_whatsapp_webhook_payload(
                             "empresa_atendimento_id": chamado.empresa_atendimento_id,
                             "usuario": customer_name,
                             "mensagem": msg_text,
+                            "is_forwarded": is_forwarded_msg,
+                            "link_preview": link_preview_payload,
                             "prioridade": chamado.prioridade,
                             "data_hora": _display_datetime(chamado.data_abertura).strftime("%d/%m/%Y %H:%M:%S")
                         }

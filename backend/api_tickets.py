@@ -4,6 +4,9 @@ import base64
 import json
 import mimetypes
 import uuid
+import urllib.parse
+from html.parser import HTMLParser
+import requests
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional
@@ -497,6 +500,8 @@ def get_chat_messages(
                     "can_edit": _message_can_edit(m, user_name),
                     "can_delete": _message_can_delete(m, user_name, user_role),
                     "whatsapp_status": m.whatsapp_status or "sent",
+                    "is_forwarded": bool(getattr(m, "is_forwarded", False)),
+                    "link_preview": getattr(m, "link_preview", None),
                     "data_hora": _display_datetime(m.data_hora).strftime("%d/%m/%Y %H:%M:%S"),
                 }
                 for m in unique_msgs

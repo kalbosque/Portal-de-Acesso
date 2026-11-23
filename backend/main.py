@@ -274,6 +274,8 @@ def ensure_schema_compatibility():
         "CREATE INDEX IF NOT EXISTS ix_estudos_recuperacao_email ON estudos_recuperacao_codigos (lower(email), usado)",
         "ALTER TABLE chamados ADD COLUMN IF NOT EXISTS visivel_suporte BOOLEAN DEFAULT TRUE",
         "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS whatsapp_status VARCHAR(20) DEFAULT 'sent'",
+        "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS is_forwarded BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE chamados_interacoes ADD COLUMN IF NOT EXISTS link_preview TEXT NULL",
         "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS limite_usuarios_custom INTEGER",
         "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS limite_instancias_whatsapp_custom INTEGER",
         "ALTER TABLE empresas_atendimento ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
