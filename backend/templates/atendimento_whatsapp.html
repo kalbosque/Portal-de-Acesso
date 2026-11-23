@@ -835,31 +835,61 @@
         </button>
         
         <!-- Chat Input Bar -->
-        <div id="chat-input-bar" class="p-3 border-t border-white/5 bg-[#202c33] flex-shrink-0 relative z-10 flex items-end gap-2">
-            <div id="typing-indicator" class="hidden absolute -top-7 left-4 rounded-t-xl bg-[#202c33] px-3 py-1 text-[10px] font-bold text-emerald-300">digitando...</div>
-            <div id="reply-preview" class="hidden absolute bottom-full left-0 right-0 items-center justify-between gap-3 border-t border-white/10 bg-[#182229] px-4 py-2"><div class="min-w-0 border-l-2 border-emerald-400 pl-3"><div id="reply-preview-user" class="text-[10px] font-black text-emerald-300"></div><div id="reply-preview-text" class="truncate text-xs text-slate-300"></div></div><button type="button" onclick="cancelReply()" class="shrink-0 text-lg text-slate-400 hover:text-white">×</button></div>
-            <div id="attachment-preview" class="hidden absolute bottom-full left-0 right-0 items-center gap-2 border-t border-white/10 bg-[#182229] px-3 py-1"><img id="attachment-preview-image" src="" alt="Prévia do anexo" class="hidden h-10 w-10 rounded object-cover"><div class="min-w-0"><div class="text-[9px] font-black uppercase tracking-widest text-emerald-300">Print anexado</div><div id="attachment-preview-name" class="max-w-xs truncate text-[10px] text-slate-300"></div></div><button type="button" onclick="clearAttachmentPreview()" class="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-base font-bold leading-none text-rose-300 hover:bg-rose-500/40 hover:text-white" title="Remover anexo" aria-label="Remover anexo">X</button></div>
-            <button onclick="toggleEmojiPicker()" class="w-10 h-10 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-colors" title="Emojis">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            </button>
-            <button type="button" onclick="toggleGifPicker()" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black text-slate-400 transition-colors hover:text-white" title="GIF">GIF</button>
-            <input id="attachment-input" type="file" multiple class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
-            <button type="button" onclick="document.getElementById('attachment-input').click()" class="w-10 h-10 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-white rounded-full transition-colors mr-1" title="Anexar arquivo">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
-            </button>
-            <button id="record-audio" type="button" onclick="toggleAudioRecording()" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:text-white" title="Gravar áudio" aria-label="Gravar áudio">
-                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"/><path d="M17.5 11a5.5 5.5 0 0 1-11 0h1.5a4 4 0 0 0 8 0h1.5ZM11.25 17.92V21H8.5v1.5h7V21h-2.75v-3.08A7.01 7.01 0 0 0 19 11h-1.5a5.5 5.5 0 0 1-11 0H5a7.01 7.01 0 0 0 6.25 6.92Z"/></svg>
-            </button>
-            <span id="audio-recording-time" class="hidden min-w-10 text-[10px] font-black text-rose-300">00:00</span>
-            <span id="attachment-name" class="hidden max-w-44 items-center gap-2 truncate rounded-lg bg-white/10 px-2 py-1 text-[10px] text-slate-300"></span>
-            <div id="emoji-picker" class="hidden absolute bottom-16 left-3 z-30 grid w-72 grid-cols-8 gap-1 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl"></div>
-            <div id="gif-picker" class="hidden absolute bottom-16 left-12 z-30 w-96 rounded-2xl border border-white/10 bg-[#202c33] p-3 shadow-2xl">
-                <div class="mb-2 flex items-center justify-between"><span class="text-[10px] font-black uppercase tracking-widest text-slate-300">Mais GIFs</span><span class="text-[9px] text-slate-500">Clique para enviar</span></div>
-                <div id="gif-grid" class="grid max-h-80 grid-cols-4 gap-2 overflow-y-auto"></div>
+        <div id="chat-input-bar" class="p-3 px-4 border-t border-white/5 bg-slate-900/95 backdrop-blur-md flex-shrink-0 relative z-10 flex items-end gap-2.5">
+            <div id="typing-indicator" class="hidden absolute -top-7 left-4 rounded-t-xl bg-slate-900 border-t border-x border-white/10 px-3 py-1 text-[10px] font-bold text-emerald-400 shadow-lg">digitando...</div>
+            <div id="reply-preview" class="hidden absolute bottom-full left-0 right-0 items-center justify-between gap-3 border-t border-white/10 bg-slate-900/95 backdrop-blur-md px-4 py-2.5 shadow-2xl">
+                <div class="min-w-0 border-l-2 border-emerald-400 pl-3">
+                    <div id="reply-preview-user" class="text-[10px] font-black text-emerald-400"></div>
+                    <div id="reply-preview-text" class="truncate text-xs text-slate-300"></div>
+                </div>
+                <button type="button" onclick="cancelReply()" class="flex h-7 w-7 items-center justify-center rounded-full bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white transition-all text-base">×</button>
             </div>
-            <textarea id="msg-input" rows="1" disabled onkeydown="handleInputKeydown(event)" class="flex-grow px-4 py-2.5 rounded-xl text-[#e9edef] text-[15px] bg-[#2a3942] border-none resize-none focus:outline-none disabled:cursor-not-allowed disabled:opacity-60" placeholder="Selecione uma conversa para responder" style="min-height: 44px; max-height: 120px;"></textarea>
-            <button id="send-message" onclick="sendMessage()" disabled class="w-10 h-10 ml-1 flex-shrink-0 bg-[#00a884] text-[#111b21] rounded-full flex items-center justify-center hover:bg-[#00c59b] transition-colors shadow-lg active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
-                <svg class="w-5 h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+            <div id="attachment-preview" class="hidden absolute bottom-full left-0 right-0 items-center gap-3 border-t border-white/10 bg-slate-900/95 backdrop-blur-md px-4 py-2.5 shadow-2xl">
+                <img id="attachment-preview-image" src="" alt="Prévia do anexo" class="hidden h-11 w-11 rounded-xl object-cover border border-white/10">
+                <div class="min-w-0">
+                    <div class="text-[9px] font-black uppercase tracking-widest text-emerald-400">Print Anexado</div>
+                    <div id="attachment-preview-name" class="max-w-xs truncate text-[11px] text-slate-300 font-medium"></div>
+                </div>
+                <button type="button" onclick="clearAttachmentPreview()" class="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-xs font-bold leading-none text-rose-300 hover:bg-rose-500/40 hover:text-white transition-all" title="Remover anexo" aria-label="Remover anexo">✕</button>
+            </div>
+            
+            <!-- Botões de Ações Rápidas -->
+            <div class="flex items-center gap-1 pb-0.5">
+                <!-- Emojis -->
+                <button type="button" onclick="toggleEmojiPicker()" class="w-9 h-9 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-white/5 rounded-xl transition-all" title="Emojis">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </button>
+                
+                <!-- GIF Estilizado -->
+                <button type="button" onclick="toggleGifPicker()" class="h-9 px-2.5 flex-shrink-0 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-[11px] font-black tracking-wider text-slate-400 hover:text-emerald-400 hover:bg-white/10 hover:border-emerald-500/30 transition-all" title="GIFs">GIF</button>
+                
+                <!-- Anexo -->
+                <input id="attachment-input" type="file" multiple class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+                <button type="button" onclick="document.getElementById('attachment-input').click()" class="w-9 h-9 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-white/5 rounded-xl transition-all" title="Anexar arquivo ou imagem">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                </button>
+                
+                <!-- Áudio -->
+                <button id="record-audio" type="button" onclick="toggleAudioRecording()" class="w-9 h-9 flex-shrink-0 flex items-center justify-center text-slate-400 hover:text-emerald-400 hover:bg-white/5 rounded-xl transition-all" title="Gravar áudio" aria-label="Gravar áudio">
+                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"/><path d="M17.5 11a5.5 5.5 0 0 1-11 0h1.5a4 4 0 0 0 8 0h1.5ZM11.25 17.92V21H8.5v1.5h7V21h-2.75v-3.08A7.01 7.01 0 0 0 19 11h-1.5a5.5 5.5 0 0 1-11 0H5a7.01 7.01 0 0 0 6.25 6.92Z"/></svg>
+                </button>
+                <span id="audio-recording-time" class="hidden min-w-10 text-[10px] font-black text-rose-300">00:00</span>
+                <span id="attachment-name" class="hidden max-w-44 items-center gap-2 truncate rounded-lg bg-white/10 px-2 py-1 text-[10px] text-slate-300"></span>
+            </div>
+
+            <!-- Modais Flutuantes (Emoji e GIF) -->
+            <div id="emoji-picker" class="hidden absolute bottom-16 left-3 z-30 grid w-72 grid-cols-8 gap-1 rounded-2xl border border-white/10 bg-slate-900 p-3 shadow-2xl backdrop-blur-xl"></div>
+            <div id="gif-picker" class="hidden absolute bottom-16 left-12 z-30 w-96 rounded-2xl border border-white/10 bg-slate-900 p-3 shadow-2xl backdrop-blur-xl">
+                <div class="mb-2 flex items-center justify-between"><span class="text-[10px] font-black uppercase tracking-widest text-slate-300">Mais GIFs</span><span class="text-[9px] text-slate-500">Clique para enviar</span></div>
+                <div id="gif-grid" class="grid max-h-80 grid-cols-4 gap-2 overflow-y-auto custom-scroll"></div>
+            </div>
+
+            <!-- Caixa de Texto -->
+            <textarea id="msg-input" rows="1" disabled onkeydown="handleInputKeydown(event)" class="flex-grow px-4 py-2.5 rounded-2xl text-white text-[14px] bg-slate-950/70 border border-white/10 resize-none outline-none transition-all focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 placeholder-slate-400" placeholder="Selecione uma conversa para responder" style="min-height: 44px; max-height: 120px;"></textarea>
+
+            <!-- Botão de Envio -->
+            <button id="send-message" onclick="sendMessage()" disabled class="w-11 h-11 flex-shrink-0 bg-gradient-to-tr from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white rounded-2xl flex items-center justify-center transition-all shadow-lg shadow-emerald-950/40 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:shadow-none" title="Enviar mensagem">
+                <svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
             </button>
         </div>
     </div>
