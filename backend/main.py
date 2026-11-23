@@ -6,6 +6,7 @@ import re
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
+from zoneinfo import ZoneInfo
 from urllib.parse import quote
 from fastapi import FastAPI, Header, HTTPException, Request, BackgroundTasks, Form, UploadFile, File
 from fastapi.encoders import jsonable_encoder
@@ -211,6 +212,7 @@ def ensure_schema_compatibility():
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_logo_url VARCHAR(500)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url VARCHAR(500)",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_login TIMESTAMP NULL",
         "ALTER TABLE usuarios DROP CONSTRAINT IF EXISTS usuarios_role_check",
         "ALTER TABLE usuarios ADD CONSTRAINT usuarios_role_check CHECK (role IN ('admin', 'operator', 'estudante', 'gestor', 'gerente', 'supervisor', 'recepcao', 'recepcionista', 'cliente_atendimento'))",
         "ALTER TABLE impressoras ADD COLUMN IF NOT EXISTS localizacao VARCHAR(120)",
@@ -2202,7 +2204,15 @@ async def estudos_admin(request: Request, mensagem: str = None, erro: bool = Fal
         agora_local = datetime.now()
         agora_utc = datetime.now(timezone.utc)
         online_ids = set()
+        horarios_entrada = {}
         for usuario in usuarios:
+            momento_login = usuario.last_login or usuario.last_seen
+            if momento_login:
+                if momento_login.tzinfo is None:
+                    momento_login = momento_login.replace(tzinfo=timezone.utc)
+                horarios_entrada[usuario.id] = momento_login.astimezone(ZoneInfo("America/Manaus")).strftime("%d/%m/%Y às %H:%M")
+            else:
+                horarios_entrada[usuario.id] = "Ainda não entrou"
             if api_auth._is_account_status_denied(usuario) or not usuario.last_seen:
                 continue
             ultimo_acesso = usuario.last_seen
@@ -2212,7 +2222,7 @@ async def estudos_admin(request: Request, mensagem: str = None, erro: bool = Fal
                 esta_online = ultimo_acesso >= agora_utc - timedelta(minutes=2)
             if esta_online:
                 online_ids.add(usuario.id)
-    return templates.TemplateResponse(request=request, name="estudos_admin.html", context={"config": APP_CONFIG, "usuarios": usuarios, "online_ids": online_ids, "mensagem": mensagem, "erro": erro, "estudos_logo_url": _get_study_logo_url()})
+    return templates.TemplateResponse(request=request, name="estudos_admin.html", context={"config": APP_CONFIG, "usuarios": usuarios, "online_ids": online_ids, "horarios_entrada": horarios_entrada, "mensagem": mensagem, "erro": erro, "estudos_logo_url": _get_study_logo_url()})
 
 
 @app.post("/estudos/admin/logo")
@@ -2458,10 +2468,9 @@ async def view_estudos(request: Request, success: str = None, assunto: str = Non
             and (not filtro_data_fim or registro.data_estudo <= filtro_data_fim)
         ]
     else:
-        registros_historico_completo = [
-            registro for registro in registros
-            if registro.data_estudo == hoje
-        ]
+        # Não renderiza todos os cards na abertura. O histórico é carregado
+        # somente quando o usuário escolhe uma matéria ou informa um período.
+        registros_historico_completo = []
     # Mantém a página leve na abertura. Ao pesquisar matéria ou período,
     # todos os resultados correspondentes continuam sendo exibidos.
     limite_historico = 120
@@ -3294,10 +3303,16 @@ async def save_estudos(
             sessao.data_estudo = datetime.strptime(data_estudo, "%Y-%m-%d").date()
             sessao.horario_inicio = horario_inicio or None
             sessao.horario_fim = horario_fim or None
-            sessao.tipo_registro = "simulado" if tipo_registro == "simulado" else "estudo"
+            # O nome do simulado também é um indicador confiável do tipo.
+            # Isso evita que um rascunho restaurado com o select ainda em
+            # "estudo" descarte o nome e grave o registro como "Geral".
+            nome_simulado_limpo = (nome_simulado or "").strip()
+            sessao.tipo_registro = "simulado" if tipo_registro == "simulado" or nome_simulado_limpo else "estudo"
             assunto_limpo = (assunto or "").strip()
-            sessao.assunto = assunto_limpo or ("Geral" if sessao.tipo_registro == "simulado" else "Estudo")
-            sessao.nome_simulado = (nome_simulado.strip() or None) if sessao.tipo_registro == "simulado" else None
+            if sessao.tipo_registro == "simulado" and assunto_limpo.casefold() in {"", "geral", "estudo"}:
+                assunto_limpo = "Simulados"
+            sessao.assunto = assunto_limpo or ("Simulados" if sessao.tipo_registro == "simulado" else "Estudo")
+            sessao.nome_simulado = (nome_simulado_limpo or None) if sessao.tipo_registro == "simulado" else None
             questoes = max(0, quantidade_questoes)
             acertos = min(max(0, total_acertos), questoes)
             erros = max(0, total_erros)

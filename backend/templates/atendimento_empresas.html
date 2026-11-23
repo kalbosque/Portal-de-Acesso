@@ -8,37 +8,176 @@
 </head>
 <body class="min-h-screen bg-slate-950 text-slate-100">
     <main class="mx-auto max-w-7xl px-4 py-8">
-        <div class="mb-8 flex flex-wrap items-center justify-between gap-6 rounded-2xl border border-indigo-400/20 bg-gradient-to-r from-indigo-500/10 via-slate-900/70 to-slate-950/70 px-5 py-5 shadow-[0_18px_60px_rgba(2,6,23,.35)]">
+        <div class="mb-8 flex flex-wrap items-center justify-between gap-6 rounded-3xl border border-white/10 bg-slate-900/60 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
             <div>
-                <p class="text-xs font-bold uppercase tracking-[.25em] text-indigo-400">Atendimento</p>
-                <h1 class="mt-2 text-3xl font-black">Empresas e planos</h1>
-                <p class="mt-2 text-sm text-slate-400">Fundação multiempresa. O isolamento será ativado somente após validação.</p>
+                <div class="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-black uppercase tracking-[.2em] text-emerald-400">
+                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                    Central de Atendimento
+                </div>
+                <h1 class="mt-3 text-3xl md:text-4xl font-black text-white tracking-tight">Gestão da Empresa e Equipe</h1>
+                <p class="mt-2 text-sm text-slate-400 font-medium">Gerencie os membros da sua equipe, setores de suporte e regras de distribuição de mensagens.</p>
             </div>
-            <a href="/central-atendimento" class="inline-flex items-center gap-2 rounded-xl border border-indigo-300/20 bg-slate-950/60 px-5 py-3 text-sm font-bold text-slate-200 shadow-lg shadow-slate-950/30 transition hover:border-indigo-300/50 hover:bg-indigo-500/15 hover:text-white"><span aria-hidden="true">←</span> Voltar ao atendimento</a>
+            <a href="/central-atendimento" class="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 hover:bg-emerald-500/15 hover:border-emerald-500/30 px-5 py-3 text-sm font-bold text-slate-200 hover:text-white shadow-lg transition-all active:scale-95">
+                <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                Voltar ao atendimento
+            </a>
         </div>
 
-        <div id="mensagem" class="mb-6 hidden rounded-xl border px-4 py-3 text-sm"></div>
+        <div id="mensagem" class="mb-6 hidden rounded-xl border px-4 py-3 text-sm font-semibold"></div>
 
         {% if not is_platform_admin %}
-        <section class="rounded-2xl border border-indigo-400/20 bg-indigo-500/5 p-5">
-            <h2 class="text-xl font-bold">Administração da sua empresa</h2>
-            <p id="empresaNome" class="mt-1 text-sm text-slate-400">Carregando...</p>
-            <div id="tenantMensagem" class="mt-4 hidden rounded-xl border px-4 py-3 text-sm"></div>
-            <div class="mt-5 grid gap-5 lg:grid-cols-2">
-                <form id="tenantSetor" class="order-2 rounded-xl border border-white/10 bg-slate-950/40 p-4 lg:order-2">
-                    <h3 class="font-bold">Novo setor</h3>
-                    <div class="mt-3 flex gap-2"><input name="nome" required placeholder="Ex.: Financeiro" class="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><button class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold">Adicionar</button></div>
-                </form>
-                <form id="tenantUsuario" class="order-1 rounded-xl border border-white/10 bg-slate-950/40 p-4 lg:order-1">
-                    <h3 class="font-bold">Novo usuário</h3>
-                    <div class="mt-3 grid gap-2 sm:grid-cols-2"><input name="nome" required placeholder="Nome" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><input name="email" type="email" required placeholder="E-mail" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><input name="username" required placeholder="Usuário" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><input name="password" type="password" minlength="6" required placeholder="Senha" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><select name="papel" class="rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"><option value="operador">Operador</option><option value="tenant_admin">Administrador</option></select><button class="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-bold">Criar usuário</button></div>
-                </form>
+        <section class="rounded-3xl border border-white/10 bg-slate-900/60 p-6 md:p-8 backdrop-blur-xl shadow-2xl space-y-8">
+            <!-- Cabeçalho da Empresa -->
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-6">
+                <div class="flex items-center gap-3.5">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 text-emerald-400 shadow-lg shadow-emerald-950/40">
+                        <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <h2 id="empresaNome" class="text-2xl font-black text-white tracking-tight">Carregando...</h2>
+                            <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                                <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Ativa
+                            </span>
+                        </div>
+                        <p class="text-xs text-slate-400 font-medium mt-0.5">Painel administrativo de controle de usuários e setores vinculados.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="rounded-xl border border-white/5 bg-slate-950/40 px-3.5 py-1.5 text-xs text-slate-300 flex items-center gap-2">
+                        <span class="text-slate-500 font-bold uppercase text-[10px]">Membros:</span>
+                        <span id="countUsers" class="font-black text-emerald-400 text-sm">0</span>
+                    </div>
+                    <div class="rounded-xl border border-white/5 bg-slate-950/40 px-3.5 py-1.5 text-xs text-slate-300 flex items-center gap-2">
+                        <span class="text-slate-500 font-bold uppercase text-[10px]">Setores:</span>
+                        <span id="countSectors" class="font-black text-indigo-400 text-sm">0</span>
+                    </div>
+                </div>
             </div>
-            <div class="mt-5 grid gap-5 lg:grid-cols-2"><div><h3 class="font-bold">Usuários e setores</h3><div id="tenantUsuarios" class="mt-3 space-y-2"></div></div><div><h3 class="font-bold">Setores cadastrados</h3><div id="tenantSetores" class="mt-3 space-y-2"></div></div></div>
-        <div class="mt-5 grid gap-5 lg:grid-cols-2">
-          <form id="tenantVinculoUsuario" class="rounded-xl border border-white/10 bg-slate-950/40 p-4"><h3 class="font-bold">Vincular usuário ao setor</h3><div class="mt-3 flex flex-wrap gap-2"><select id="tenantUserSelect" required class="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"></select><select id="tenantUserSectorSelect" required class="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"></select><button class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold">Vincular</button></div></form>
-          <form id="tenantVinculoNumero" class="rounded-xl border border-white/10 bg-slate-950/40 p-4"><h3 class="font-bold">Vincular número ao setor</h3><div class="mt-3 flex flex-wrap gap-2"><select id="tenantInstanceSelect" required class="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"></select><select id="tenantInstanceSectorSelect" required class="min-w-[180px] flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2.5 text-sm"></select><button class="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold">Vincular</button></div><div id="tenantInstanceSectorMessage" class="mt-2 min-h-4 text-xs text-amber-300"></div><div id="tenantInstanceSectorLinks" class="mt-3 text-xs text-slate-400"></div></form>
-        </div>
+
+            <div id="tenantMensagem" class="hidden rounded-2xl border px-4 py-3 text-sm font-semibold"></div>
+
+            <!-- Grid Principal: Formulários e Listas -->
+            <div class="grid gap-8 lg:grid-cols-2">
+                <!-- COLUNA 1: EQUIPE / USUÁRIOS -->
+                <div class="space-y-6">
+                    <form id="tenantUsuario" class="rounded-2xl border border-white/10 bg-slate-950/50 p-6 shadow-xl space-y-4">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/20 text-emerald-400">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-white text-base">Novo Membro da Equipe</h3>
+                                <p class="text-xs text-slate-400">Cadastre um operador ou administrador</p>
+                            </div>
+                        </div>
+
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Nome Completo</label>
+                                <input name="nome" required placeholder="Ex.: Maria Souza" class="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">E-mail</label>
+                                <input name="email" type="email" required placeholder="maria@empresa.com" class="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Usuário de Acesso</label>
+                                <input name="username" required placeholder="maria.souza" class="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Senha Inicial</label>
+                                <input name="password" type="password" minlength="6" required placeholder="Mínimo 6 dígitos" class="w-full rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Função / Nível de Acesso</label>
+                                <div class="flex gap-2.5 flex-wrap sm:flex-nowrap">
+                                    <select name="papel" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-sm text-white outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30">
+                                        <option value="operador">Operador (Atende chamados)</option>
+                                        <option value="tenant_admin">Administrador (Gerencia equipe e setores)</option>
+                                    </select>
+                                    <button type="submit" class="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 px-6 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-950/40 transition-all active:scale-95 shrink-0">Criar Usuário</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Lista de Usuários -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                                <span>👥</span> Membros Cadastrados
+                            </h3>
+                        </div>
+                        <div id="tenantUsuarios" class="space-y-3"></div>
+                    </div>
+                </div>
+
+                <!-- COLUNA 2: SETORES E VÍNCULOS -->
+                <div class="space-y-6">
+                    <form id="tenantSetor" class="rounded-2xl border border-white/10 bg-slate-950/50 p-6 shadow-xl space-y-4">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 border border-indigo-500/20 text-indigo-400">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-white text-base">Novo Setor</h3>
+                                <p class="text-xs text-slate-400">Cadastre departamentos para os chamados</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Nome do Setor</label>
+                            <div class="flex gap-2">
+                                <input name="nome" required placeholder="Ex.: Suporte Técnico, Comercial, Financeiro" class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/30">
+                                <button type="submit" class="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-indigo-950/40 transition-all active:scale-95 shrink-0">Adicionar</button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Lista de Setores -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                                <span>📁</span> Setores Ativos
+                            </h3>
+                        </div>
+                        <div id="tenantSetores" class="space-y-2.5"></div>
+                    </div>
+
+                    <!-- Vínculos de Atendente e WhatsApp -->
+                    <div class="rounded-2xl border border-white/10 bg-slate-950/50 p-6 shadow-xl space-y-6">
+                        <div class="border-b border-white/5 pb-3">
+                            <h3 class="font-bold text-white text-base flex items-center gap-2">
+                                <span>🔗</span> Regras de Distribuição
+                            </h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Defina quais atendentes e quais números pertencem a cada setor</p>
+                        </div>
+
+                        <!-- Vincular Usuário -->
+                        <form id="tenantVinculoUsuario" class="space-y-2">
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Vincular Atendente ao Setor</label>
+                            <div class="flex flex-wrap sm:flex-nowrap gap-2">
+                                <select id="tenantUserSelect" required class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400"></select>
+                                <select id="tenantUserSectorSelect" required class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-indigo-400"></select>
+                                <button type="submit" class="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-bold text-white shrink-0 transition-all active:scale-95">Vincular</button>
+                            </div>
+                        </form>
+
+                        <!-- Vincular WhatsApp -->
+                        <form id="tenantVinculoNumero" class="space-y-2 pt-4 border-t border-white/5">
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Vincular Linha WhatsApp ao Setor</label>
+                            <div class="flex flex-wrap sm:flex-nowrap gap-2">
+                                <select id="tenantInstanceSelect" required class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"></select>
+                                <select id="tenantInstanceSectorSelect" required class="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"></select>
+                                <button type="submit" class="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white shrink-0 transition-all active:scale-95">Vincular</button>
+                            </div>
+                            <div id="tenantInstanceSectorMessage" class="min-h-4 text-xs font-semibold text-amber-300"></div>
+                            <div id="tenantInstanceSectorLinks" class="text-xs text-slate-400"></div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </section>
         <script>
           (async function () {
@@ -46,7 +185,73 @@
             const show = (text, ok = true) => { msg.textContent = text; msg.className = `mt-4 rounded-xl border px-4 py-3 text-sm ${ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-300'}`; };
             const api = async (url, options) => { const r = await fetch(url, options); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.detail || 'Não foi possível concluir.'); return d; };
             let companyId, state;
-            async function load() { const context = await api('/api/atendimento/tenants/context'); companyId = context.selected || context.companies?.[0]?.id; if (!companyId) throw new Error('Nenhuma empresa selecionada.'); state = await api(`/api/atendimento/tenants/companies/${companyId}/management`); window.tenantUsersCache = Object.fromEntries((state.users || []).map(u => [u.id, u])); document.getElementById('empresaNome').textContent = state.company.nome; document.getElementById('tenantSetores').innerHTML = state.sectors.map(s => `<div class="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm"><span>${s.nome}</span><span class="flex gap-1"><button type="button" onclick="editarSetorTenant(${s.id}, '${String(s.nome).replace(/'/g, "\\'")}')" class="rounded bg-violet-500/15 px-2 py-1 text-[10px] text-violet-300">Editar</button><button type="button" onclick="removerSetorTenant(${s.id})" class="rounded bg-rose-500/15 px-2 py-1 text-[10px] text-rose-300">Excluir</button></span></div>`).join('') || '<p class="text-sm text-slate-500">Nenhum setor.</p>'; document.getElementById('tenantUsuarios').innerHTML = (state.users || []).filter(u => u.vinculo_ativo !== false).map(u => `<div class="rounded-lg border border-white/10 bg-slate-900/60 p-3"><div class="flex items-center justify-between gap-2"><div class="font-semibold">${u.nome || u.username} <span class="text-xs text-indigo-300">${u.papel}</span></div><button type="button" onclick="editarUsuarioTenant(${u.id})" class="rounded-lg bg-violet-500/15 px-2 py-1 text-[10px] font-bold text-violet-300">Editar</button></div><div class="text-xs text-slate-500">${u.email || u.username}</div><div class="mt-1 text-xs text-slate-400">${(u.setores || []).map(s => s.nome).join(', ') || 'Sem setor'}</div></div>`).join('') || '<p class="text-sm text-slate-500">Nenhum usuário.</p>'; }
+            async function load() {
+              const context = await api('/api/atendimento/tenants/context');
+              companyId = context.selected || context.companies?.[0]?.id;
+              if (!companyId) throw new Error('Nenhuma empresa selecionada.');
+              state = await api(`/api/atendimento/tenants/companies/${companyId}/management`);
+              window.tenantUsersCache = Object.fromEntries((state.users || []).map(u => [u.id, u]));
+              document.getElementById('empresaNome').textContent = state.company.nome;
+
+              const activeUsers = (state.users || []).filter(u => u.vinculo_ativo !== false);
+              const countUsersEl = document.getElementById('countUsers');
+              if (countUsersEl) countUsersEl.textContent = activeUsers.length;
+
+              const countSectorsEl = document.getElementById('countSectors');
+              if (countSectorsEl) countSectorsEl.textContent = (state.sectors || []).length;
+
+              document.getElementById('tenantSetores').innerHTML = state.sectors.map(s => `
+                <div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-slate-900/60 p-3.5 transition-all hover:border-white/10 hover:bg-slate-900/80">
+                  <div class="flex items-center gap-3 min-w-0">
+                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                    </span>
+                    <span class="font-bold text-sm text-white truncate">${s.nome}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="editarSetorTenant(${s.id}, '${String(s.nome).replace(/'/g, "\\'")}')" class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10 hover:text-white transition-all">Editar</button>
+                    <button type="button" onclick="removerSetorTenant(${s.id})" class="rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all">Excluir</button>
+                  </div>
+                </div>
+              `).join('') || '<div class="rounded-2xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500 font-medium">Nenhum setor cadastrado ainda.</div>';
+
+              document.getElementById('tenantUsuarios').innerHTML = activeUsers.map(u => {
+                const isAdmin = u.papel === 'tenant_admin';
+                const roleLabel = isAdmin ? 'Administrador' : 'Operador';
+                const roleBadgeClass = isAdmin
+                  ? 'border-indigo-400/25 bg-indigo-500/15 text-indigo-300'
+                  : 'border-emerald-400/25 bg-emerald-500/15 text-emerald-300';
+                const initials = (u.nome || u.username || 'U').substring(0, 2).toUpperCase();
+                const setoresList = (u.setores || []).map(s => `<span class="inline-flex items-center rounded-md border border-white/5 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-slate-300">${s.nome}</span>`).join('') || '<span class="text-[11px] text-slate-500 italic">Sem setor atribuído</span>';
+
+                return `
+                  <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-4 transition-all hover:border-white/15 hover:bg-slate-900/80">
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-3 min-w-0">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-emerald-500/20 border border-white/10 text-white font-black text-xs shadow-md">
+                          ${initials}
+                        </div>
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-sm text-white truncate">${u.nome || u.username}</span>
+                            <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${roleBadgeClass}">${roleLabel}</span>
+                          </div>
+                          <div class="text-xs text-slate-400 truncate mt-0.5">${u.email || u.username} · <span class="font-mono text-slate-500">@${u.username}</span></div>
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        <button type="button" onclick="editarUsuarioTenant(${u.id})" class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/10 hover:text-white transition-all">Editar</button>
+                        <button type="button" onclick="removerUsuarioTenant(${u.id})" class="tenant-remove-user rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all">Excluir</button>
+                      </div>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-white/5 flex items-center gap-2 flex-wrap">
+                      <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Setores:</span>
+                      <div class="flex items-center gap-1.5 flex-wrap">${setoresList}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('') || '<div class="rounded-2xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500 font-medium">Nenhum membro cadastrado nesta empresa.</div>';
+            }
             window.editarSetorTenant = async function (sectorId, currentName) { const nome = prompt('Nome do setor:', currentName); if (nome === null || !nome.trim()) return; const body = new FormData(); body.append('nome', nome.trim()); try { await api(`/api/atendimento/tenants/companies/${companyId}/sectors/${sectorId}/edit`, {method:'POST', body}); await load(); } catch (error) { show(error.message, false); } };
             window.removerSetorTenant = async function (sectorId) { if (!confirm('Excluir este setor e seus vínculos?')) return; try { await api(`/api/atendimento/tenants/companies/${companyId}/sectors/${sectorId}/remove`, {method:'POST'}); await load(); } catch (error) { show(error.message, false); } };
             window.editarUsuarioTenant = function (userId) { const user = window.tenantUsersCache?.[userId]; if (!user) return; if (!window.tenantEditBound) { document.getElementById('formEditarUsuario').addEventListener('submit', async e => { e.preventDefault(); const editingUserId = document.getElementById('editarUsuarioId').value; try { await api(`/api/atendimento/tenants/companies/${companyId}/users/${editingUserId}/edit`, {method:'POST', body:new FormData(e.target)}); document.getElementById('modalEditarUsuario').classList.add('hidden'); document.getElementById('modalEditarUsuario').classList.remove('flex'); await load(); } catch (error) { show(error.message, false); } }); window.tenantEditBound = true; } document.getElementById('editarEmpresaId').value = companyId; document.getElementById('editarUsuarioId').value = userId; document.getElementById('editarNome').value = user.nome || ''; document.getElementById('editarEmail').value = user.email || ''; document.getElementById('editarUsername').value = user.username || ''; document.getElementById('editarPapel').value = user.papel || 'operador'; document.getElementById('editarPassword').value = ''; document.getElementById('editarFoto').value = ''; document.getElementById('modalEditarUsuario').classList.remove('hidden'); document.getElementById('modalEditarUsuario').classList.add('flex'); };
@@ -181,19 +386,60 @@
         </section>
         {% endif %}
     </main>
-    <div id="modalEditarUsuario" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-        <div class="w-full max-w-lg rounded-2xl border border-violet-400/20 bg-slate-900 p-5 shadow-2xl">
-            <div class="flex items-center justify-between gap-3"><div><p class="text-[10px] font-black uppercase tracking-widest text-violet-300">Usuário do Atendimento</p><h2 class="mt-1 text-xl font-black">Editar usuário</h2></div><button type="button" onclick="fecharModalUsuario()" class="rounded-lg px-3 py-1 text-xl text-slate-400 hover:bg-white/10">×</button></div>
-            <form id="formEditarUsuario" class="mt-5 grid gap-3 sm:grid-cols-2" enctype="multipart/form-data">
-                <input type="hidden" id="editarEmpresaId"><input type="hidden" id="editarUsuarioId">
-                <input id="editarNome" name="nome" required placeholder="Nome" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm">
-                <input id="editarEmail" name="email" type="email" required placeholder="E-mail" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm">
-                <input id="editarUsername" name="username" required placeholder="Usuário de acesso" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm">
-                <select id="editarPapel" name="papel" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm"><option value="operador">Operador</option><option value="tenant_admin">Administrador da empresa</option></select>
-                <input id="editarPassword" name="password" type="password" minlength="6" placeholder="Nova senha (opcional)" class="rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-sm">
-                <label class="block"><span class="mb-1 block text-xs text-slate-400">Empresa</span><input id="editarEmpresaNome" type="text" readonly class="w-full rounded-lg border border-indigo-400/30 bg-slate-950 px-3 py-2.5 text-sm text-indigo-200" placeholder="Empresa do atendimento"></label>
-                <label class="sm:col-span-2"><span class="mb-1 block text-xs text-slate-400">Foto do usuário</span><input id="editarFoto" name="foto" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2.5 text-xs text-slate-300"></label>
-                <div class="flex justify-end gap-2 sm:col-span-2"><button type="button" onclick="fecharModalUsuario()" class="rounded-lg border border-white/10 px-4 py-2.5 text-sm text-slate-300">Cancelar</button><button class="rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-500">Salvar alterações</button></div>
+    <div id="modalEditarUsuario" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+        <div class="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900/95 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
+            <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-indigo-400">Usuário do Atendimento</p>
+                        <h2 class="text-xl font-black text-white">Editar Usuário</h2>
+                    </div>
+                </div>
+                <button type="button" onclick="fecharModalUsuario()" class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-xl text-slate-400 hover:bg-white/10 hover:text-white transition-all">×</button>
+            </div>
+            <form id="formEditarUsuario" class="mt-6 space-y-4" enctype="multipart/form-data">
+                <input type="hidden" id="editarEmpresaId">
+                <input type="hidden" id="editarUsuarioId">
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Nome Completo</label>
+                        <input id="editarNome" name="nome" required placeholder="Nome" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2.5 text-sm text-white outline-none focus:border-indigo-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">E-mail</label>
+                        <input id="editarEmail" name="email" type="email" required placeholder="E-mail" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2.5 text-sm text-white outline-none focus:border-indigo-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Usuário de Acesso</label>
+                        <input id="editarUsername" name="username" required placeholder="Usuário de acesso" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2.5 text-sm text-white outline-none focus:border-indigo-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Função</label>
+                        <select id="editarPapel" name="papel" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2.5 text-sm text-white outline-none focus:border-indigo-400 transition">
+                            <option value="operador">Operador</option>
+                            <option value="tenant_admin">Administrador da empresa</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Nova Senha (opcional)</label>
+                        <input id="editarPassword" name="password" type="password" minlength="6" placeholder="Deixar em branco para manter" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2.5 text-sm text-white outline-none focus:border-indigo-400 transition">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Empresa</label>
+                        <input id="editarEmpresaNome" type="text" readonly class="w-full rounded-xl border border-indigo-400/20 bg-slate-950/40 px-3.5 py-2.5 text-sm text-indigo-300 font-semibold cursor-not-allowed" placeholder="Empresa do atendimento">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Foto do Usuário (opcional)</label>
+                        <input id="editarFoto" name="foto" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3.5 py-2 text-xs text-slate-400 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-white/10 file:text-xs file:font-semibold file:text-white hover:file:bg-white/20">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2.5 pt-4 border-t border-white/10">
+                    <button type="button" onclick="fecharModalUsuario()" class="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-5 py-2.5 text-xs font-bold text-slate-300 transition-all">Cancelar</button>
+                    <button type="submit" class="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-indigo-950/40 transition-all active:scale-95">Salvar Alterações</button>
+                </div>
             </form>
         </div>
     </div>

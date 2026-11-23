@@ -262,15 +262,21 @@ async def finalizar_ticket(request: Request, background_tasks: BackgroundTasks):
             
         chamado.nota_tecnica = nota
         chamado.data_resolucao = datetime.now(timezone.utc)
-        session.commit()
-        session.refresh(chamado)
 
-        if chamado.origem == "WhatsApp" and chamado.whatsapp_cliente and send_msg:
+        # Captura os dados antes do commit para evitar consultas extras (lazy load)
+        chamado_origem = chamado.origem
+        chamado_whatsapp = chamado.whatsapp_cliente
+        chamado_instance = chamado.whatsapp_instance
+        chamado_id = chamado.id
+
+        session.commit()
+
+        if chamado_origem == "WhatsApp" and chamado_whatsapp and send_msg:
             from api_whatsapp import send_whatsapp_text
-            msg_resolucao = f"Seu chamado #{chamado.id} foi finalizado."
+            msg_resolucao = f"Seu chamado #{chamado_id} foi finalizado."
             if str(nota or '').strip():
                 msg_resolucao += f"\n\n*Nota Técnica:* {nota.strip()}"
-            background_tasks.add_task(send_whatsapp_text, chamado.whatsapp_cliente, msg_resolucao, chamado.whatsapp_instance)
+            background_tasks.add_task(send_whatsapp_text, chamado_whatsapp, msg_resolucao, chamado_instance)
 
     background_tasks.add_task(
         manager.broadcast,

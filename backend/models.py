@@ -18,6 +18,7 @@ class Usuario(SQLModel, table=True):
     foto_perfil_url: Optional[str] = None
     senha_temp: Optional[str] = None
     last_seen: Optional[datetime] = None
+    last_login: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
 class Impressora(SQLModel, table=True):

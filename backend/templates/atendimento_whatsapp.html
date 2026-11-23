@@ -769,7 +769,7 @@
     <div class="col-chat glass-panel rounded-[2.5rem] border border-white/5 bg-slate-900/40 overflow-hidden">
         
         <!-- Tela de Sem Chat Aberto -->
-        <div id="no-chat-screen" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-slate-950/20 z-10 transition-all duration-300">
+        <div id="no-chat-screen" class="absolute inset-0 flex flex-col items-center justify-center text-center p-8 bg-[#0b141a] z-20 transition-all duration-300">
             <div class="empty-chat-icon w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-400 border border-indigo-500/20 mb-5">
                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
             </div>
@@ -2353,8 +2353,13 @@
             mainHdr.style.setProperty('display', 'none', 'important');
         }
         document.getElementById('chat-transfer-bar')?.classList.add('hidden');
+        document.getElementById('header-btn-assumir')?.classList.add('hidden');
         document.getElementById('typing-indicator')?.classList.add('hidden');
-        fecharMenusMensagem();
+        document.getElementById('reply-preview')?.classList.add('hidden');
+        document.getElementById('message-selection-bar')?.classList.add('hidden');
+        document.getElementById('scroll-latest-button')?.classList.add('hidden');
+        try { clearAttachmentPreview(true); } catch (_) {}
+        try { fecharMenusMensagem(); } catch (_) {}
         document.querySelectorAll('body > .message-menu').forEach(m => m.remove());
         const timeline = document.getElementById('chat-timeline');
         if (timeline) timeline.innerHTML = '';
@@ -2364,6 +2369,18 @@
         if (send) send.disabled = true;
         const actions = document.getElementById('assumir-btn-area');
         if (actions) actions.innerHTML = '';
+        document.querySelectorAll('.chat-card').forEach(c => c.classList.remove('active'));
+
+        const contactName = document.getElementById('contact-name');
+        if (contactName) contactName.textContent = '--';
+        const contactPhone = document.getElementById('contact-phone');
+        if (contactPhone) contactPhone.textContent = '--';
+        const contactInstance = document.getElementById('contact-instance');
+        if (contactInstance) contactInstance.textContent = '--';
+        const contactStatus = document.getElementById('contact-status');
+        if (contactStatus) contactStatus.textContent = '--';
+        const contactAssigned = document.getElementById('contact-assigned');
+        if (contactAssigned) contactAssigned.textContent = '--';
     }
 
     function filterChatList() {
@@ -4136,38 +4153,41 @@
     }
 
     async function finalizarAtendimento(nota, sendMsg = true) {
+        if (!activeTicketId) return;
+        const ticketIdToFinalize = activeTicketId;
+
+        // Fecha o modal e atualiza a interface IMEDIATAMENTE (zero espera para o operador)
+        closeSolutionModal();
+
+        // Marca localmente como resolvido e limpa rascunhos
+        const finalizedChat = chatsData.find(chat => sameTicket(chat.id, ticketIdToFinalize));
+        if (finalizedChat) finalizedChat.status = 'Resolvido';
+        pendingMessageDrafts.delete(String(ticketIdToFinalize));
+        pendingAttachments.delete(String(ticketIdToFinalize));
+
+        // Limpa o chat ativo e atualiza a fila lateral na hora (instantâneo)
+        clearActiveConversation();
+        renderChatsList();
+        mostrarToast('Finalizando chamado...');
+
         try {
             const res = await fetch('/api/tickets/finalizar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({id: activeTicketId, nota_tecnica: nota, send_message: sendMsg})
+                body: JSON.stringify({id: ticketIdToFinalize, nota_tecnica: nota, send_message: sendMsg})
             });
             
             if (res.ok) {
                 mostrarToast('Chamado finalizado!');
-                closeSolutionModal();
-                
-                // Volta para o estado inicial
-                document.getElementById('no-chat-screen').classList.remove('opacity-0', 'pointer-events-none');
-                const finalizedChat = chatsData.find(chat => sameTicket(chat.id, activeTicketId));
-                if (finalizedChat) finalizedChat.status = 'Resolvido';
-                pendingMessageDrafts.delete(String(activeTicketId));
-                pendingAttachments.delete(String(activeTicketId));
-                activeTicketId = null;
-                const messageInput = document.getElementById('msg-input');
-                const sendButton = document.getElementById('send-message');
-                if (messageInput) { messageInput.disabled = true; messageInput.value = ''; messageInput.placeholder = 'Selecione uma conversa para responder'; }
-                if (sendButton) sendButton.disabled = true;
-                // Atualiza a lista local imediatamente; a sincronização completa
-                // continua em segundo plano sem travar a troca de tela.
-                renderChatsList();
                 loadChats();
             } else {
                 const data = await res.json().catch(() => ({}));
                 mostrarToast(data.detail || 'Falha ao encerrar chamado.');
+                loadChats();
             }
         } catch(e) {
-            mostrarToast('Erro de rede.');
+            mostrarToast('Erro de rede ao finalizar.');
+            loadChats();
         }
     }
 
@@ -4337,6 +4357,16 @@
                     if (activeTicketId === data.ticket_id) {
                         openChat(activeTicketId);
                     }
+                }
+                else if (data.event === "ticket_resolved") {
+                    const resolvedId = data.ticket_id;
+                    const c = chatsData.find(x => sameTicket(x.id, resolvedId));
+                    if (c) c.status = 'Resolvido';
+                    if (sameTicket(resolvedId, activeTicketId)) {
+                        clearActiveConversation();
+                    }
+                    renderChatsList();
+                    loadChats();
                 }
             } catch(e) {
                 console.error("Erro ao interpretar dados do WebSocket:", e);

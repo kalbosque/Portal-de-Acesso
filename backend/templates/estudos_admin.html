@@ -48,7 +48,7 @@
         <div class="divide-y divide-white/5">
         {% for usuario in usuarios %}
             <div class="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-                <div class="min-w-0"><div class="font-bold text-white">{{ usuario.nome or usuario.username }}</div><div class="mt-1 text-xs text-slate-400">{{ usuario.email }} · @{{ usuario.username }}</div></div>
+                <div class="min-w-0"><div class="font-bold text-white">{{ usuario.nome or usuario.username }}</div><div class="mt-1 text-xs text-slate-400">{{ usuario.email }} · @{{ usuario.username }}</div><div class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Entrou: {{ horarios_entrada.get(usuario.id, 'Ainda não entrou') }}</div></div>
                 <div class="flex items-center gap-3">
                     <span data-online-status="{{ usuario.id }}" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black uppercase {% if usuario.id in online_ids %}bg-emerald-500/15 text-emerald-300{% else %}bg-slate-500/15 text-slate-400{% endif %}"><span data-online-dot class="h-1.5 w-1.5 rounded-full {% if usuario.id in online_ids %}bg-emerald-400{% else %}bg-slate-500{% endif %}"></span><span data-online-label>{{ 'Online' if usuario.id in online_ids else 'Offline' }}</span></span>
                     <span class="rounded-full px-3 py-1 text-[10px] font-black uppercase {% if usuario.status_conta == 'bloqueado' %}bg-rose-500/15 text-rose-300{% elif usuario.status_conta == 'pendente' %}bg-amber-500/15 text-amber-300{% else %}bg-emerald-500/15 text-emerald-300{% endif %}">{{ 'Bloqueado' if usuario.status_conta == 'bloqueado' else ('Pendente' if usuario.status_conta == 'pendente' else 'Ativo') }}</span>

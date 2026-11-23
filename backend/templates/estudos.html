@@ -269,7 +269,7 @@
             overlay.style.opacity = '0';
             overlay.style.transition = 'opacity 0.25s ease';
             setTimeout(() => overlay.remove(), 250);
-        }, 2500);
+        }, 700);
     }
 
     mostrarBoasVindasEstudos();
@@ -520,19 +520,21 @@
                         </div>
                         <p id="cicloSubtitulo" class="mt-1 text-xs text-slate-400">Estude no seu ritmo, sem depender do dia da semana. Ao terminar, avance para a próxima.</p>
                     </div>
-                    <div class="flex items-center gap-2 md:flex-nowrap">
-                        <button type="button" id="cicloBtnIniciar" class="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-emerald-500 px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-slate-950 shadow-lg shadow-emerald-500/25 transition-all hover:bg-emerald-400 hover:scale-[1.02] active:scale-95 cursor-pointer">
+                    <div class="flex shrink-0 items-center gap-2 md:flex-nowrap">
+                        <button type="button" id="cicloBtnIniciar" class="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-xl bg-emerald-500 px-4 text-[11px] font-black uppercase tracking-[0.1em] text-slate-950 shadow-lg shadow-emerald-500/25 transition-all hover:bg-emerald-400 hover:scale-[1.02] active:scale-95 cursor-pointer">
                             <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/></svg>
                             Iniciar Estudo Agora
                         </button>
                         <button type="button" id="cicloBtnConcluir" class="hidden" aria-hidden="true">
                             ✓ Marcar como estudada
                         </button>
-                        <button type="button" id="cicloBtnAvancar" class="ciclo-btn-nav whitespace-nowrap rounded-xl border border-white/10 bg-slate-800/80 px-3.5 py-2.5 text-[11px] font-black uppercase tracking-[0.1em] text-slate-200 transition-all hover:bg-slate-700 cursor-pointer">
-                            Próxima Matéria ❯
+                        <button type="button" id="cicloBtnVoltar" class="ciclo-btn-nav inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-xl border border-white/10 bg-slate-800/80 px-3.5 text-[11px] font-black uppercase tracking-[0.1em] text-slate-200 transition-all hover:bg-slate-700 hover:text-white cursor-pointer" aria-label="Voltar para a matéria anterior">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m13 4-5 6 5 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            <span>Matéria anterior</span>
                         </button>
-                        <button type="button" id="cicloBtnVoltar" class="ciclo-btn-nav rounded-xl border border-white/10 bg-slate-800/80 px-3 py-2.5 text-xs font-black text-slate-400 transition-all hover:bg-slate-700 hover:text-white cursor-pointer" title="Voltar para a matéria anterior">
-                            ❮
+                        <button type="button" id="cicloBtnAvancar" class="ciclo-btn-nav inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-xl border border-white/10 bg-slate-800/80 px-3.5 text-[11px] font-black uppercase tracking-[0.1em] text-slate-200 transition-all hover:bg-slate-700 cursor-pointer" aria-label="Avançar para a próxima matéria">
+                            <span>Próxima Matéria</span>
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m7 4 5 6-5 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </button>
                     </div>
                 </div>
@@ -1234,9 +1236,10 @@
                     <label class="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-slate-400">Assunto / matéria</label>
                     <select id="registroAssunto" name="assunto" class="w-full rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none focus:border-emerald-500">
                         <option value="">Escolha a matéria do quadro</option>
+                        <option value="Simulados" {% if editar and editar.tipo_registro == 'simulado' and (not editar.assunto or editar.assunto|lower in ['geral', 'estudo', 'simulado', 'simulados']) %}selected{% endif %}>Simulados</option>
                         {% for materia in materias_grade %}
                         {% if materia|lower not in ['simulado', 'simulados'] %}
-                        <option value="{{ materia }}" {% if editar and editar.assunto == materia %}selected{% endif %}>{{ materia }}</option>
+                        <option value="{{ materia }}" {% if editar and editar.assunto == materia and not (editar.tipo_registro == 'simulado' and materia|lower in ['geral', 'estudo']) %}selected{% endif %}>{{ materia }}</option>
                         {% endif %}
                         {% endfor %}
                     </select>
@@ -1369,7 +1372,7 @@
             </div>
             {% else %}
             <div class="rounded-2xl border border-dashed border-white/10 bg-slate-950/40 p-10 text-center text-sm text-slate-400">
-                Nenhum estudo registrado ainda.
+                Selecione uma matéria ou informe um período para carregar o histórico.
             </div>
             {% endif %}
         </div>
@@ -1667,7 +1670,10 @@
                 // Avança o ciclo assim que a sessão termina. A pausa continua
                 // existindo, mas não deve manter a matéria concluída como atual.
                 document.dispatchEvent(new CustomEvent('estudos:cronometro-finalizado', {
-                    detail: { materia: state.materia || '' }
+                    detail: {
+                        materia: state.materia || '',
+                        tipoRegistro: state.tipoRegistro || ''
+                    }
                 }));
                 const breakState = { endsAt: Date.now() + 10 * 60 * 1000, remaining: 10 * 60, paused: false, finished: false, break: true, materia: '' };
                 setState(breakState);
@@ -1730,7 +1736,8 @@
             }
             if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
             const old = getState();
-            const state = old && old.paused && !old.finished ? { ...old, sessionId: old.sessionId || createSessionId(), durationSeconds: old.durationSeconds || old.remaining, paused: false, endsAt: Date.now() + old.remaining * 1000 } : { endsAt: Date.now() + selectedSeconds * 1000, remaining: selectedSeconds, paused: false, finished: false, materia: materia.value.trim(), startedAt: Date.now(), sessionId: createSessionId(), durationSeconds: selectedSeconds };
+            const tipoRegistroAtual = document.getElementById('tipoRegistro')?.value || 'estudo';
+            const state = old && old.paused && !old.finished ? { ...old, tipoRegistro: old.tipoRegistro || tipoRegistroAtual, sessionId: old.sessionId || createSessionId(), durationSeconds: old.durationSeconds || old.remaining, paused: false, endsAt: Date.now() + old.remaining * 1000 } : { endsAt: Date.now() + selectedSeconds * 1000, remaining: selectedSeconds, paused: false, finished: false, materia: materia.value.trim(), tipoRegistro: tipoRegistroAtual, startedAt: Date.now(), sessionId: createSessionId(), durationSeconds: selectedSeconds };
             syncRecordFields(state); setState(state); setActiveTimerButton('timerStart'); setTimerStatus(`Iniciando${state.materia ? ' · ' + state.materia : ''}`, 'text-amber-300'); startTicker();
             // Muda para aba "Registrar estudo" para mostrar o pré-cadastro com horário de início
             document.dispatchEvent(new CustomEvent('estudos:ir-para-registro'));
@@ -1839,7 +1846,7 @@
                     draftFields.forEach(name => {
                         if (draft[name] !== undefined) {
                             const el = form.querySelector(`[name="${name}"]`);
-                            if (el && (!el.value || el.value === '0' || name === 'observacao' || name === 'assunto' || name === 'quantidade_questoes')) {
+                            if (el && (!el.value || el.value === '0' || name === 'observacao' || name === 'assunto' || name === 'tipo_registro' || name === 'nome_simulado' || name === 'quantidade_questoes')) {
                                 el.value = draft[name];
                                 el.dispatchEvent(new Event('change'));
                             }
@@ -2731,6 +2738,7 @@
 
         document.addEventListener('estudos:cronometro-finalizado', (event) => {
             if (localStorage.getItem(KEY_MODO) !== 'ciclo') return;
+            if (String(event.detail?.tipoRegistro || '').toLowerCase() === 'simulado') return;
             const materias = getMateriasCiclo();
             if (!materias.length) return;
             const materiaConcluida = String(event.detail?.materia || '').trim().toLowerCase();

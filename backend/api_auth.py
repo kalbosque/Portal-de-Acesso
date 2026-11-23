@@ -196,7 +196,8 @@ async def login(
                 redirect = "/chamados"
 
             response = JSONResponse({"success": True, "redirect": redirect})
-            session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(timezone.utc), "user_id": user.id})
+            momento_login = datetime.now(timezone.utc)
+            session.execute(text("UPDATE usuarios SET last_seen = :last_seen, last_login = :last_login WHERE id = :user_id"), {"last_seen": momento_login, "last_login": momento_login, "user_id": user.id})
             session.commit()
             if desktop_mode:
                 response.set_cookie("central_atendimento_tauri", "1", path="/", httponly=False, samesite="Lax")
@@ -519,7 +520,8 @@ async def heartbeat(request: Request):
                 _clear_session_cookies(response)
                 return response
 
-            session.execute(text("UPDATE usuarios SET last_seen = :last_seen WHERE id = :user_id"), {"last_seen": datetime.now(timezone.utc), "user_id": user.id})
+            momento_login = datetime.now(timezone.utc)
+            session.execute(text("UPDATE usuarios SET last_seen = :last_seen, last_login = :last_login WHERE id = :user_id"), {"last_seen": momento_login, "last_login": momento_login, "user_id": user.id})
             session.commit()
             response = JSONResponse({"success": True})
             _set_session_cookies(response, user)
